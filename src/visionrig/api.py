@@ -1,6 +1,8 @@
 """HTTP surface for the standalone VisionRig service."""
 from __future__ import annotations
 
+from dataclasses import asdict
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -30,7 +32,7 @@ def create_app() -> FastAPI:
             "service": "visionrig",
             "schema": "visionrig/health/v1",
             "stages": pipeline.stages,
-            "capture_queue": runtime.stats().__dict__,
+            "capture_queue": asdict(runtime.stats()),
         }
 
     @app.get("/api/v1/capabilities")
@@ -39,7 +41,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/v1/capture/stats")
     def capture_stats() -> dict[str, int]:
-        return runtime.stats().__dict__
+        return asdict(runtime.stats())
 
     @app.post("/api/v1/perception/ingest", response_model=PerceptionEvent)
     def ingest(body: IngestBody) -> PerceptionEvent:
