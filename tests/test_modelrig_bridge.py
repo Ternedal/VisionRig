@@ -25,6 +25,7 @@ def event(
     sequence: int = 1,
     distance_m: float = 1.25,
     confidence: float = 0.95,
+    scene_label: str | None = None,
 ) -> PerceptionEvent:
     source = SourceDescriptor(
         source_id="kinect-v2-0",
@@ -49,6 +50,8 @@ def event(
                 ),
             ),
         ),
+        scene_label=scene_label,
+        scene_confidence=(0.9 if scene_label is not None else None),
         depth=(
             DepthObservation(
                 subject_entity_id=f"person-{sequence}",
@@ -242,3 +245,29 @@ def test_runtime_isolates_optional_sink_failure() -> None:
     assert stats.dispatched_total == 1
     assert stats.failed_total == 1
     assert sink.calls == 1
+
+
+def test_scene_change_is_semantically_published() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return receipt_for_request(request)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert publisher.publish(event(scene_label="mrvision-place:office")).status == "published"
+    assert (
+        publisher.publish(
+            event(
+                event_id="evt-room-change",
+                sequence=2,
+                scene_label="mrvision-place:kitchen",
+            )
+        ).status
+        == "published"
+    )
+    assert calls == 2
