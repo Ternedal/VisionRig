@@ -45,6 +45,7 @@ The publisher therefore fingerprints only bounded semantic state:
 
 - entity-kind counts;
 - non-OCR labels;
+- current scene/place label;
 - relation-predicate counts;
 - nearest metric depth in 25 cm buckets;
 - metric-depth count;
