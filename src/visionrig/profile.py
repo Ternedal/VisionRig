@@ -150,6 +150,20 @@ def create_profile(*, now: datetime | None = None) -> MrVisionProfile:
     )
 
 
+def _mutation_timestamp(
+    profile: MrVisionProfile,
+    now: datetime | None,
+    *,
+    operation: str,
+) -> datetime:
+    timestamp = now or datetime.now(timezone.utc)
+    if timestamp.tzinfo is None:
+        raise MrVisionError(f"{operation} timestamp must be timezone-aware")
+    if timestamp < profile.updated_at:
+        raise MrVisionError(f"{operation} timestamp cannot precede current revision")
+    return timestamp
+
+
 def enroll_embedding(
     profile: MrVisionProfile,
     *,
@@ -163,9 +177,7 @@ def enroll_embedding(
     now: datetime | None = None,
 ) -> MrVisionProfile:
     normalized = _normalize(vector)
-    timestamp = now or datetime.now(timezone.utc)
-    if timestamp.tzinfo is None:
-        raise MrVisionError("enrollment timestamp must be timezone-aware")
+    timestamp = _mutation_timestamp(profile, now, operation="enrollment")
 
     signature = hashlib.sha256(
         _canonical_json(
@@ -216,9 +228,9 @@ def revoke_enrollment(
     reason: str,
     now: datetime | None = None,
 ) -> MrVisionProfile:
-    timestamp = now or datetime.now(timezone.utc)
-    if timestamp.tzinfo is None:
-        raise MrVisionError("revocation timestamp must be timezone-aware")
+    if not isinstance(reason, str) or not reason.strip():
+        raise MrVisionError("revocation reason must not be empty")
+    timestamp = _mutation_timestamp(profile, now, operation="revocation")
 
     found = False
     changed = False

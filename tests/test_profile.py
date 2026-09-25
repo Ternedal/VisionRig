@@ -113,3 +113,30 @@ def test_tamper_fails_closed() -> None:
     blob[-8] ^= 1
     with pytest.raises(MrVisionError):
         open_profile(bytes(blob), key)
+
+
+def test_profile_mutations_reject_time_travel() -> None:
+    profile = enrolled()
+    earlier = datetime(2026, 9, 25, 11, 59, tzinfo=timezone.utc)
+    with pytest.raises(MrVisionError, match="cannot precede current revision"):
+        enroll_embedding(
+            profile,
+            kind="body",
+            label="other",
+            vector=[1.0, 0.0],
+            embedding_model_id="face-encoder/v1",
+            quality=0.8,
+            source_ref="enrollment:test:2",
+            now=earlier,
+        )
+
+
+def test_revocation_requires_reason() -> None:
+    profile = enrolled()
+    with pytest.raises(MrVisionError, match="reason must not be empty"):
+        revoke_enrollment(
+            profile,
+            profile.enrollments[0].enrollment_id,
+            reason="",
+            now=NOW,
+        )
