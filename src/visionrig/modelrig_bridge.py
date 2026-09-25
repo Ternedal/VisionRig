@@ -25,6 +25,10 @@ class ModelRigBridgeConfigError(ValueError):
     pass
 
 
+class ModelRigBridgeDeliveryError(RuntimeError):
+    pass
+
+
 class ModelRigBridgeReceipt(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -232,7 +236,7 @@ class ModelRigPerceptionPublisher:
                 json=event.model_dump(mode="json"),
                 timeout=self._timeout,
             )
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        except httpx.RequestError as exc:
             with self._lock:
                 self._retry_not_before = now + self._retry_after
             return self._record(
@@ -307,8 +311,12 @@ class ModelRigPerceptionPublisher:
         )
 
     def accept(self, event: PerceptionEvent) -> None:
-        """PerceptionEventSink-compatible best-effort delivery."""
-        self.publish(event)
+        """PerceptionEventSink-compatible delivery isolated by VisionRuntime."""
+        result = self.publish(event)
+        if result.status in {"unavailable", "rejected"}:
+            raise ModelRigBridgeDeliveryError(
+                result.reason or f"ModelRig bridge {result.status}"
+            )
 
     def close(self) -> None:
         if self._owns_client:
