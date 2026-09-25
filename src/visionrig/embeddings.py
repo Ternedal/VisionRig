@@ -1,13 +1,12 @@
 """Transient visual embeddings.
 
 Vectors are deliberately kept out of PerceptionEvent. They are sidecar features
-for future .mrvision recognition/indexing and are bounded in memory.
+for .mrvision recognition/indexing and are bounded in memory.
 """
 from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
-from math import sqrt
 from pathlib import Path
 from threading import RLock
 from typing import Any, Protocol
@@ -35,7 +34,10 @@ class EmbeddingStore:
         if capacity < 1:
             raise ValueError("capacity must be >= 1")
         self._capacity = capacity
-        self._records: OrderedDict[tuple[str, int, str | None, str], EmbeddingRecord] = OrderedDict()
+        self._records: OrderedDict[
+            tuple[str, int, str | None, str],
+            EmbeddingRecord,
+        ] = OrderedDict()
         self._lock = RLock()
 
     def put(self, record: EmbeddingRecord) -> None:
@@ -69,6 +71,8 @@ class EmbeddingStore:
 
 
 class EmbeddingStage:
+    """Encode the complete visual frame, e.g. for scene/place matching."""
+
     name = "visual_embeddings"
 
     def __init__(self, encoder: EmbeddingEncoder, store: EmbeddingStore) -> None:
@@ -86,6 +90,59 @@ class EmbeddingStage:
                 vector=vector,
             )
         )
+        return current
+
+
+class EntityEmbeddingStage:
+    """Encode bounded crops for entities produced by earlier perception stages."""
+
+    name = "entity_embeddings"
+
+    def __init__(
+        self,
+        encoder: EmbeddingEncoder,
+        store: EmbeddingStore,
+        *,
+        kinds: frozenset[str] | None = None,
+    ) -> None:
+        self._encoder = encoder
+        self._store = store
+        self._kinds = kinds or frozenset({"person", "face", "body", "object"})
+
+    def process(self, frame: Frame, current: StageResult) -> StageResult:
+        image = frame.payload
+        if not hasattr(image, "shape") or len(image.shape) < 2:
+            return current
+        height, width = int(image.shape[0]), int(image.shape[1])
+        if height < 1 or width < 1:
+            return current
+
+        for entity in current.entities:
+            if entity.kind not in self._kinds or entity.bbox is None:
+                continue
+            x1 = max(0, min(width - 1, int(entity.bbox.x * width)))
+            y1 = max(0, min(height - 1, int(entity.bbox.y * height)))
+            x2 = max(
+                x1 + 1,
+                min(width, int((entity.bbox.x + entity.bbox.width) * width)),
+            )
+            y2 = max(
+                y1 + 1,
+                min(height, int((entity.bbox.y + entity.bbox.height) * height)),
+            )
+            crop = image[y1:y2, x1:x2]
+            if getattr(crop, "size", 0) == 0:
+                continue
+            vector = self._encoder.encode(crop)
+            self._store.put(
+                EmbeddingRecord(
+                    source_id=frame.source.source_id,
+                    frame_sequence=frame.sequence,
+                    subject_entity_id=entity.entity_id,
+                    model_id=self._encoder.model_id,
+                    vector=vector,
+                )
+            )
         return current
 
 
@@ -135,7 +192,10 @@ class OnnxImageEmbeddingEncoder:
     def encode(self, image: Any) -> tuple[float, ...]:
         np = self._np
         rgb = self._cv2.cvtColor(image, self._cv2.COLOR_BGR2RGB)
-        resized = self._cv2.resize(rgb, (self._width, self._height)).astype(np.float32) / 255.0
+        resized = self._cv2.resize(
+            rgb,
+            (self._width, self._height),
+        ).astype(np.float32) / 255.0
         normalized = (resized - self._mean) / self._std
         tensor = normalized.transpose(2, 0, 1)[None, ...].astype(np.float32)
         outputs = self._session.run(None, {self._input_name: tensor})

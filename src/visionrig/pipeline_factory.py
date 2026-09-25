@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .depth_onnx import OnnxDepthStage
-from .embeddings import EmbeddingStage, EmbeddingStore, OnnxImageEmbeddingEncoder
+from .embeddings import (
+    EmbeddingStage,
+    EmbeddingStore,
+    EntityEmbeddingStage,
+    OnnxImageEmbeddingEncoder,
+)
 from .landmarks_mediapipe import MediaPipeLandmarkStage
 from .model_manifest import (
     DepthModelManifest,
@@ -17,6 +22,8 @@ from .model_manifest import (
 )
 from .ocr import TesseractOcrStage
 from .pipeline import PerceptionPipeline, Stage
+from .profile import MrVisionProfile
+from .recognition import ProfileRecognitionStage
 from .tracking import IoUTrackingStage
 from .yolo_onnx import YoloOnnxStage
 
@@ -51,6 +58,8 @@ def build_pipeline(
     yolo_manifest: str | Path | None = None,
     depth_manifest: str | Path | None = None,
     embedding_manifest: str | Path | None = None,
+    profile: MrVisionProfile | None = None,
+    recognition_threshold: float = 0.75,
     ocr: bool = False,
     landmarks: bool = False,
     prefer_cuda: bool = True,
@@ -95,6 +104,9 @@ def build_pipeline(
             )
         )
 
+    if profile is not None and embedding_manifest is None:
+        raise ValueError("profile recognition requires an embedding_manifest")
+
     if embedding_manifest is not None:
         verified = load_verified_embedding_model(embedding_manifest)
         manifest = verified.manifest
@@ -110,6 +122,16 @@ def build_pipeline(
             prefer_cuda=prefer_cuda,
         )
         stages.append(EmbeddingStage(encoder, store))
+        if profile is not None:
+            stages.append(EntityEmbeddingStage(encoder, store))
+            stages.append(
+                ProfileRecognitionStage(
+                    profile,
+                    store,
+                    embedding_model_id=manifest.model_id,
+                    threshold=recognition_threshold,
+                )
+            )
 
     return PipelineBundle(
         pipeline=PerceptionPipeline(tuple(stages)),
