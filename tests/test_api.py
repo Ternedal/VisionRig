@@ -9,6 +9,8 @@ def test_health_capabilities_ingest_and_event_journal() -> None:
     assert health.status_code == 200
     assert health.json()["capture_queue"]["capacity"] == 4
     assert health.json()["perception_schema"] == "visionrig/perception-event/v3"
+    assert health.json()["event_sinks"]["configured"] == 0
+    assert health.json()["modelrig_bridge"]["enabled"] is False
 
     capabilities = client.get("/api/v1/capabilities")
     assert capabilities.status_code == 200
