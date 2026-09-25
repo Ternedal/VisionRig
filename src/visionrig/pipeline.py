@@ -5,8 +5,8 @@ can be loaded by deployment-specific packages later.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Protocol
+from dataclasses import dataclass, field
+from typing import Any, Mapping, Protocol
 from uuid import uuid4
 
 from .contracts import (
