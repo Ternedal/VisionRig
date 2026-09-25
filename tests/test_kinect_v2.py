@@ -77,6 +77,7 @@ def test_kinect_depth_stage_emits_measured_relative_depth() -> None:
     assert len(result.depth) == 1
     assert result.depth[0].subject_entity_id == "person-1"
     assert result.depth[0].relative_depth == pytest.approx(0.5)
+    assert result.depth[0].distance_m == pytest.approx(2.5)
     assert result.depth[0].confidence == pytest.approx(1.0)
     assert result.depth[0].method == "kinect-v2-hardware-depth"
     assert len(sampler.calls) == 5
