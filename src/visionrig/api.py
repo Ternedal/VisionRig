@@ -19,6 +19,8 @@ from .runtime import VisionRuntime
 from .sensor_ingress import (
     SensorDecodeError,
     SensorFrameReceipt,
+    SensorHeartbeat,
+    SensorHeartbeatReceipt,
     SensorIngress,
     SensorIngressBusy,
     SensorMediaTypeError,
@@ -39,21 +41,21 @@ def create_app(
     pipeline: PerceptionPipeline | None = None,
     *,
     max_sensor_frame_bytes: int = 8 * 1024 * 1024,
+    sensor_stale_after_seconds: float = 15.0,
+    sensor_offline_after_seconds: float = 60.0,
     modelrig_publisher: ModelRigPerceptionPublisher | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
     runtime = VisionRuntime(
         selected_pipeline,
-        event_sinks=(
-            (modelrig_publisher,)
-            if modelrig_publisher is not None
-            else ()
-        ),
+        event_sinks=((modelrig_publisher,) if modelrig_publisher is not None else ()),
     )
     sensor_ingress = SensorIngress(
         runtime,
         max_payload_bytes=max_sensor_frame_bytes,
+        stale_after_seconds=sensor_stale_after_seconds,
+        offline_after_seconds=sensor_offline_after_seconds,
     )
 
     @app.get("/health")
@@ -61,7 +63,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v5",
+            "schema": "visionrig/health/v6",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -81,7 +83,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v1",
+                "schema": "visionrig/sensor-ingress/v2",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": ["image/jpeg", "image/png", "image/webp"],
                 "overload_policy": "reject",
@@ -99,8 +101,14 @@ def create_app(
 
     @app.get("/api/v1/sensors/status")
     def sensor_status() -> dict[str, object]:
-        """Operational status for remote camera/screen/VR sensor producers."""
         return asdict(sensor_ingress.stats())
+
+    @app.post("/api/v1/sensors/heartbeat", response_model=SensorHeartbeatReceipt)
+    def sensor_heartbeat(body: SensorHeartbeat) -> SensorHeartbeatReceipt:
+        try:
+            return sensor_ingress.heartbeat(body)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/api/v1/perception/ingest", response_model=PerceptionEvent)
     def ingest(body: IngestBody) -> PerceptionEvent:
@@ -126,10 +134,7 @@ def create_app(
         dropped_frames: int = Query(default=0, ge=0),
     ) -> SensorFrameReceipt:
         content_type = request.headers.get("content-type", "")
-        payload = await read_bounded_body(
-            request,
-            sensor_ingress.max_payload_bytes,
-        )
+        payload = await read_bounded_body(request, sensor_ingress.max_payload_bytes)
         try:
             return await run_in_threadpool(
                 sensor_ingress.process_encoded,
