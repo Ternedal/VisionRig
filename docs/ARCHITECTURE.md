@@ -28,8 +28,11 @@ Input adapters
           PerceptionEvent v3
    entities/landmarks/depth(m)
                     |
+          semantic change gate
+      raw frames never cross boundary
+                    |
                     v
-       ModelRig integration layer
+       ModelRig C20 evidence adapter
                     |
              semantic fusion
                     |
@@ -89,9 +92,11 @@ Hardware sensors can preserve measured distance in metres. Spatial fusion emits
 front/behind ordering only from metric depth and keeps monocular estimates
 explicitly relative.
 
-### V4 — ModelRig bridge
-Map PerceptionEvent v3 into ModelRig world observations and attention candidates,
-fail-closed on schema mismatch.
+### V4 — ModelRig bridge — implemented
+Publish only semantic PerceptionEvent v3 changes to a strict loopback ModelRig
+C20 adapter. Exact event refs are receipt-bound; OCR text, identity hints and
+raw frame modalities remain outside cognitive context. Delivery failure is
+isolated from local perception.
 
 ### V5 — Kaliv sensors
 Android camera, Windows screen/camera and Kaliv VR/passthrough producers.
