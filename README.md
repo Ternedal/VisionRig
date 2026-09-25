@@ -55,3 +55,4 @@ See:
 - docs/SENSOR_GATEWAY.md
 - docs/PRODUCER.md
 - docs/KINECT_V2.md
+- docs/PERCEPTION_V3.md
