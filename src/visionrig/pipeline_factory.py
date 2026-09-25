@@ -11,7 +11,8 @@ from .embeddings import (
     EntityEmbeddingStage,
     OnnxImageEmbeddingEncoder,
 )
-from .landmarks_mediapipe import MediaPipeLandmarkStage\nfrom .kinect_v2 import KinectV2DepthStage
+from .landmarks_mediapipe import MediaPipeLandmarkStage
+from .kinect_v2 import KinectV2DepthStage
 from .model_manifest import (
     DepthModelManifest,
     EmbeddingModelManifest,
