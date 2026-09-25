@@ -5,6 +5,7 @@ import argparse
 import time
 
 from .kinect_v2 import KinectV2Source
+from .modelrig_bridge import ModelRigPerceptionPublisher
 from .pipeline_factory import build_pipeline
 from .runtime import VisionRuntime
 from .sources import CameraSource, VideoFileSource
@@ -24,6 +25,13 @@ def main() -> None:
     parser.add_argument("--landmarks", action="store_true")
     parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--modelrig-worker-url",
+        help=(
+            "opt-in semantic perception publishing to ModelRig worker, "
+            "e.g. http://127.0.0.1:8099"
+        ),
+    )
     args = parser.parse_args()
 
     if args.kinect_v2:
@@ -41,7 +49,19 @@ def main() -> None:
         kinect_depth=args.kinect_v2,
         prefer_cuda=not args.cpu,
     )
-    runtime = VisionRuntime(bundle.pipeline)
+    modelrig_publisher = (
+        ModelRigPerceptionPublisher(args.modelrig_worker_url)
+        if args.modelrig_worker_url
+        else None
+    )
+    runtime = VisionRuntime(
+        bundle.pipeline,
+        event_sinks=(
+            (modelrig_publisher,)
+            if modelrig_publisher is not None
+            else ()
+        ),
+    )
 
     started = time.monotonic()
     processed = 0
@@ -65,6 +85,8 @@ def main() -> None:
                 )
     finally:
         source.close()
+        if modelrig_publisher is not None:
+            modelrig_publisher.close()
 
     elapsed = max(time.monotonic() - started, 1e-9)
     stats = runtime.stats()

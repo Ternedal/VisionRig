@@ -24,6 +24,7 @@ VisionRig includes:
 - encrypted, revisioned .mrvision profiles
 - **service-loaded face/body/object/place recognition hints**
 - bounded cursor event journal for ModelRig
+- opt-in semantic PerceptionEvent/v3 -> Consciousness Core bridge with change suppression
 - verified model manifests with checksum/provenance/license metadata
 
 ## Recognition flow
@@ -56,3 +57,4 @@ See:
 - docs/PRODUCER.md
 - docs/KINECT_V2.md
 - docs/PERCEPTION_V3.md
+- docs/MODELRIG_BRIDGE.md
