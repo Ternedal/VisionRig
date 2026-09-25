@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .producer import GatewayFrameProducer, ProducerError
+from .producer_state import ProducerStateError, ProducerStateStore
 from .screen_source import MssScreenSource
 from .sources import CameraSource, ImageFileSource
 
@@ -27,6 +28,13 @@ def _encode_jpeg(image: Any, quality: int) -> bytes:
     if not ok:
         raise RuntimeError("failed to JPEG-encode captured frame")
     return encoded.tobytes()
+
+
+def _default_state_path() -> Path:
+    configured = os.getenv("VISIONRIG_PRODUCER_STATE")
+    if configured:
+        return Path(configured)
+    return Path.home() / ".visionrig" / "producer-state.json"
 
 
 def main() -> None:
@@ -76,13 +84,18 @@ def main() -> None:
         source = ImageFileSource(path, source_id=source_id)
         source_type = "image"
 
-    producer = GatewayFrameProducer(
-        gateway_url=args.gateway_url,
-        token=token,
-        source_id=source_id,
-        source_type=source_type,
-        device=source.source.device,
-    )
+    try:
+        producer = GatewayFrameProducer(
+            gateway_url=args.gateway_url,
+            token=token,
+            source_id=source_id,
+            source_type=source_type,
+            device=source.source.device,
+            state_store=ProducerStateStore(_default_state_path()),
+        )
+    except ProducerStateError as exc:
+        source.close()
+        raise SystemExit(f"producer state unavailable: {exc}") from exc
 
     interval = 1.0 / args.fps
     deadline = time.monotonic()
@@ -114,7 +127,7 @@ def main() -> None:
                 time.sleep(delay)
             else:
                 deadline = time.monotonic()
-    except ProducerError as exc:
+    except (ProducerError, ProducerStateError) as exc:
         raise SystemExit(f"producer stopped: {exc}") from exc
     finally:
         source.close()
@@ -124,6 +137,7 @@ def main() -> None:
         f"captured={stats.captured} accepted={stats.accepted} "
         f"dropped_overload={stats.dropped_overload} "
         f"dropped_unavailable={stats.dropped_unavailable} "
+        f"pending_dropped={stats.pending_dropped_frames} "
         f"next_sequence={stats.next_sequence}"
     )
 

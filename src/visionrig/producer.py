@@ -7,6 +7,10 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .producer_state import (
+    ProducerStateStore,
+    producer_state_key,
+)
 from .sensor_ingress import SensorFrameReceipt
 
 
@@ -56,10 +60,8 @@ def _gateway_base_url(value: str) -> str:
 class GatewayFrameProducer:
     """Stateful producer with explicit sequence/drop semantics.
 
-    Every captured frame consumes a source sequence number. A 429/unavailable
-    frame is counted as dropped and the count is attached to the next accepted
-    frame. That keeps the downstream observation honest without retrying stale
-    imagery.
+    With a ProducerStateStore, frame reservation is persisted before network I/O.
+    A crash with an in-flight frame is recovered as one dropped frame on restart.
     """
 
     def __init__(
@@ -70,9 +72,10 @@ class GatewayFrameProducer:
         source_id: str,
         source_type: Literal["camera", "screen", "vr", "image"],
         device: str | None = None,
-        start_sequence: int = 0,
+        start_sequence: int | None = None,
         timeout_seconds: float = 5.0,
         client: httpx.Client | None = None,
+        state_store: ProducerStateStore | None = None,
     ) -> None:
         if len(token) < 32:
             raise ValueError("producer token must be at least 32 characters")
@@ -80,27 +83,51 @@ class GatewayFrameProducer:
             raise ValueError("source_id must contain 1..128 characters")
         if device is not None and len(device) > 256:
             raise ValueError("device must be <= 256 characters")
-        if start_sequence < 0:
+        if start_sequence is not None and start_sequence < 0:
             raise ValueError("start_sequence must be >= 0")
         if not 0.1 <= timeout_seconds <= 120:
             raise ValueError("timeout_seconds must be between 0.1 and 120")
+        if state_store is not None and start_sequence is not None:
+            raise ValueError(
+                "start_sequence cannot be combined with persistent producer state"
+            )
 
         self._base_url = _gateway_base_url(gateway_url)
         self._token = token
         self._source_id = source_id
         self._source_type = source_type
         self._device = device
-        self._next_sequence = start_sequence
         self._timeout = timeout_seconds
         self._client = client
+        self._state_store = state_store
+        self._state_key = producer_state_key(
+            gateway_url=self._base_url,
+            source_id=source_id,
+            source_type=source_type,
+        )
+
+        if state_store is not None:
+            recovered = state_store.recover(self._state_key)
+            self._next_sequence = recovered.next_sequence
+            self._pending_dropped = recovered.pending_dropped
+        else:
+            self._next_sequence = start_sequence if start_sequence is not None else 0
+            self._pending_dropped = 0
 
         self._captured = 0
         self._accepted = 0
         self._dropped_overload = 0
         self._dropped_unavailable = 0
-        self._pending_dropped = 0
+
+    def _sync_persistent_state(self) -> None:
+        if self._state_store is None:
+            return
+        state = self._state_store.snapshot(self._state_key)
+        self._next_sequence = state.next_sequence
+        self._pending_dropped = state.pending_dropped
 
     def stats(self) -> ProducerStats:
+        self._sync_persistent_state()
         return ProducerStats(
             captured=self._captured,
             accepted=self._accepted,
@@ -110,12 +137,43 @@ class GatewayFrameProducer:
             next_sequence=self._next_sequence,
         )
 
-    def _post(self, *, sequence: int, payload: bytes, content_type: str) -> httpx.Response:
+    def _reserve_frame(self) -> tuple[int, int]:
+        if self._state_store is None:
+            sequence = self._next_sequence
+            self._next_sequence += 1
+            return sequence, self._pending_dropped
+
+        sequence, pending = self._state_store.reserve(self._state_key)
+        self._sync_persistent_state()
+        return sequence, pending
+
+    def _mark_dropped(self, sequence: int) -> None:
+        if self._state_store is None:
+            self._pending_dropped += 1
+            return
+        self._state_store.mark_dropped(self._state_key, sequence)
+        self._sync_persistent_state()
+
+    def _mark_accepted(self, sequence: int) -> None:
+        if self._state_store is None:
+            self._pending_dropped = 0
+            return
+        self._state_store.mark_accepted(self._state_key, sequence)
+        self._sync_persistent_state()
+
+    def _post(
+        self,
+        *,
+        sequence: int,
+        pending_dropped: int,
+        payload: bytes,
+        content_type: str,
+    ) -> httpx.Response:
         params: dict[str, str | int] = {
             "source_id": self._source_id,
             "source_type": self._source_type,
             "frame_sequence": sequence,
-            "dropped_frames": self._pending_dropped,
+            "dropped_frames": pending_dropped,
         }
         if self._device is not None:
             params["device"] = self._device
@@ -144,18 +202,18 @@ class GatewayFrameProducer:
         if not payload:
             raise ValueError("frame payload must not be empty")
 
-        sequence = self._next_sequence
-        self._next_sequence += 1
+        sequence, pending_before_send = self._reserve_frame()
         self._captured += 1
 
         try:
             response = self._post(
                 sequence=sequence,
+                pending_dropped=pending_before_send,
                 payload=payload,
                 content_type=content_type,
             )
         except httpx.HTTPError:
-            self._pending_dropped += 1
+            self._mark_dropped(sequence)
             self._dropped_unavailable += 1
             return ProducerFrameResult(
                 status="dropped_unavailable",
@@ -164,7 +222,7 @@ class GatewayFrameProducer:
             )
 
         if response.status_code == 429:
-            self._pending_dropped += 1
+            self._mark_dropped(sequence)
             self._dropped_overload += 1
             return ProducerFrameResult(
                 status="dropped_overload",
@@ -173,11 +231,11 @@ class GatewayFrameProducer:
             )
 
         if response.status_code in {401, 403}:
-            self._pending_dropped += 1
+            self._mark_dropped(sequence)
             raise ProducerAuthError("VisionRig gateway rejected producer credentials")
 
         if response.status_code != 200:
-            self._pending_dropped += 1
+            self._mark_dropped(sequence)
             raise ProducerProtocolError(
                 f"VisionRig gateway returned HTTP {response.status_code}"
             )
@@ -185,7 +243,7 @@ class GatewayFrameProducer:
         try:
             receipt = SensorFrameReceipt.model_validate(response.json())
         except Exception as exc:
-            self._pending_dropped += 1
+            self._mark_dropped(sequence)
             raise ProducerProtocolError("invalid VisionRig sensor receipt") from exc
 
         if (
@@ -193,17 +251,16 @@ class GatewayFrameProducer:
             or receipt.source_type != self._source_type
             or receipt.frame_sequence != sequence
         ):
-            self._pending_dropped += 1
+            self._mark_dropped(sequence)
             raise ProducerProtocolError("VisionRig receipt does not match submitted frame")
 
-        expected_dropped = self._pending_dropped
-        if receipt.dropped_frames != expected_dropped:
-            self._pending_dropped += 1
+        if receipt.dropped_frames != pending_before_send:
+            self._mark_dropped(sequence)
             raise ProducerProtocolError(
                 "VisionRig receipt dropped-frame count does not match producer state"
             )
 
-        self._pending_dropped = 0
+        self._mark_accepted(sequence)
         self._accepted += 1
         return ProducerFrameResult(
             status="accepted",

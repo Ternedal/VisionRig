@@ -9,17 +9,22 @@ usable directly on Windows/Linux for webcam or desktop-screen input.
 pip install -e ".[producer]"
 ```
 
-The producer extra installs OpenCV, NumPy and MSS.
-
 ## Configure
 
-Do not put the gateway token on the command line; command-line arguments can be
-visible to other local processes.
+Do not put the gateway token on the command line.
 
 ```powershell
 $env:VISIONRIG_GATEWAY_URL="http://<Tailscale-IP>:8111"
 $env:VISIONRIG_PRODUCER_TOKEN="<same gateway token>"
 ```
+
+Optional producer-state location:
+
+```powershell
+$env:VISIONRIG_PRODUCER_STATE="D:\VisionRig\producer-state.json"
+```
+
+Default: `~/.visionrig/producer-state.json`.
 
 Webcam:
 
@@ -33,19 +38,9 @@ Desktop:
 visionrig-producer --screen 1 --source-id windows-screen --fps 3 --verbose
 ```
 
-One image:
-
-```powershell
-visionrig-producer --image .\test.jpg --source-id test-image
-```
-
-## Backpressure semantics
+## Backpressure and crash semantics
 
 A frame sequence represents **capture order**, not successful-delivery order.
-
-If sequence 11 is rejected with HTTP 429, sequence 11 is not retried. The next
-capture is sequence 12 and carries `dropped_frames=1`. Multiple consecutive
-drops accumulate until the next accepted frame.
 
 ```text
 capture seq 10 -> 200
@@ -54,22 +49,33 @@ capture seq 12 -> 429        (drop 2)
 capture seq 13 -> 200, dropped_frames=2
 ```
 
-Network-unavailable frames follow the same freshness rule. Authentication or
-protocol errors are different: the reference producer stops fail-closed instead
-of silently burning frames forever.
+The reference producer persists three pieces of state before/after network I/O:
+
+- next source sequence;
+- accumulated dropped frames;
+- currently in-flight sequence.
+
+Reservation is written **before** sending a frame. If the process or machine dies
+with an in-flight frame, the next process startup converts that unfinished frame
+into one explicit drop and continues with the next sequence.
+
+This prevents a producer restart from resetting to sequence 0 while VisionRig is
+still alive, and prevents a crash from silently hiding a lost visual frame.
+
+The file is updated through atomic replacement. Run only one active producer for
+a given gateway/source/type key; cross-process leader election is intentionally
+not part of the reference client.
 
 ## Client contract for Kaliv/Quest
 
-Native Android/Quest clients do not need this Python package. They should
-implement the same small contract:
+Native Android/Quest clients should implement the same durable state machine:
 
-1. increment the local sequence for every captured frame;
-2. send JPEG/PNG/WebP with bearer authentication;
-3. on 200, validate receipt source + sequence and clear accumulated drops;
-4. on 429, do not retry the frame; increment accumulated drops;
-5. on a network miss, drop the frame and continue with fresh imagery;
-6. on 401/403 or malformed receipt, stop/fail visibly;
+1. atomically reserve/increment a sequence before sending each captured frame;
+2. persist which sequence is in-flight;
+3. on 200, validate receipt and atomically clear pending drops + in-flight;
+4. on 429/network miss, atomically clear in-flight and increment pending drops;
+5. after process restart, convert any leftover in-flight frame into one drop;
+6. on 401/403 or malformed receipt, fail visibly;
 7. never treat a VisionRig recognition hint as identity authority.
 
-This makes the Python producer an executable reference implementation for the
-Kotlin/Quest producers.
+This makes the Python producer an executable reference for Kotlin/Quest clients.
