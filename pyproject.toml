@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionrig"
-version = "0.1.0"
+version = "0.2.0"
 description = "Visual perception subsystem for ModelRig / Kaliv"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,6 +14,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+capture = [
+  "opencv-python>=4.10,<5",
+]
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.3,<9",
@@ -21,6 +24,7 @@ dev = [
 
 [project.scripts]
 visionrig = "visionrig.__main__:main"
+visionrig-capture = "visionrig.capture_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

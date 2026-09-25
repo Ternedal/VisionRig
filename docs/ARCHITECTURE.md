@@ -2,17 +2,17 @@
 
 ## Authority boundary
 
-VisionRig is a perception authority only in the narrow sense that it owns the
-technical transformation from a visual input into a typed observation. It is
-**not** authoritative about identity, intent, emotion, durable memory, actions,
-or Consciousness Core state.
+VisionRig owns the technical transformation from visual inputs into typed
+observations. It is **not** authoritative about identity, intent, emotion,
+durable memory, actions, or Consciousness Core state.
 
 ```text
 Input adapters
  camera | screen | Kaliv VR | image/video
                     |
                     v
-              Capture Frame
+          BoundedFrameQueue
+     fresh frames > stale latency
                     |
                     v
        +-------------------------+
@@ -45,19 +45,22 @@ Input adapters
 5. VisionRig state is ephemeral by default; durable memory belongs to ModelRig.
 6. Recognition results are hints, never unquestioned identity truth.
 7. A model adapter cannot gain tool, body, voice, memory-write or action authority.
-8. Frame ingestion must remain bounded; future live adapters must use backpressure
-   and explicit dropped-frame accounting.
+8. Live capture is bounded. On overload, stale frames are dropped rather than
+   allowing unbounded visual latency.
+9. Dropped frames are counted and propagated into downstream observations.
+10. Optional capture/inference stacks are probed defensively and may fail closed
+    without preventing the core service from starting.
 
-## Planned slices
+## Slices
 
-### V0 — foundation (this commit)
+### V0 — foundation — complete
 Strict contracts, pipeline protocol, ephemeral world snapshot and local API.
 
-### V1 — real capture
-OpenCV/webcam adapter, image/video adapters, bounded async frame queue and runtime
-capability probing.
+### V1 — capture/runtime — complete
+Optional OpenCV webcam/image/video sources, bounded frame queue, freshness
+backpressure, dropped-frame accounting and runtime capability probing.
 
-### V2 — perception
+### V2 — perception — next
 ONNX/CUDA detector, tracking, OCR, pose/hands and depth behind independent
 capability adapters.
 

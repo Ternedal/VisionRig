@@ -4,9 +4,10 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
+from .capabilities import probe_capabilities
 from .contracts import PerceptionEvent, SourceDescriptor, WorldSnapshot
 from .pipeline import Frame, PassthroughStage, PerceptionPipeline
-from .world import VisualWorld
+from .runtime import VisionRuntime
 
 
 class IngestBody(BaseModel):
@@ -18,9 +19,9 @@ class IngestBody(BaseModel):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="VisionRig", version="0.1.0")
+    app = FastAPI(title="VisionRig", version="0.2.0")
     pipeline = PerceptionPipeline((PassthroughStage(),))
-    world = VisualWorld()
+    runtime = VisionRuntime(pipeline)
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -29,27 +30,34 @@ def create_app() -> FastAPI:
             "service": "visionrig",
             "schema": "visionrig/health/v1",
             "stages": pipeline.stages,
+            "capture_queue": runtime.stats().__dict__,
         }
+
+    @app.get("/api/v1/capabilities")
+    def capabilities() -> dict[str, object]:
+        return probe_capabilities()
+
+    @app.get("/api/v1/capture/stats")
+    def capture_stats() -> dict[str, int]:
+        return runtime.stats().__dict__
 
     @app.post("/api/v1/perception/ingest", response_model=PerceptionEvent)
     def ingest(body: IngestBody) -> PerceptionEvent:
-        event = pipeline.process(
-            Frame(
-                source=body.source,
-                sequence=body.frame_sequence,
-                payload=body.payload,
-                dropped_frames=body.dropped_frames,
-            )
-        )
         try:
-            world.apply(event)
+            return runtime.process_direct(
+                Frame(
+                    source=body.source,
+                    sequence=body.frame_sequence,
+                    payload=body.payload,
+                    dropped_frames=body.dropped_frames,
+                )
+            )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return event
 
     @app.get("/api/v1/world", response_model=WorldSnapshot)
     def get_world() -> WorldSnapshot:
-        return world.snapshot()
+        return runtime.snapshot()
 
     return app
 

@@ -3,9 +3,15 @@ from fastapi.testclient import TestClient
 from visionrig.api import create_app
 
 
-def test_health_and_ingest() -> None:
+def test_health_capabilities_and_ingest() -> None:
     client = TestClient(create_app())
-    assert client.get("/health").status_code == 200
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["capture_queue"]["capacity"] == 4
+
+    capabilities = client.get("/api/v1/capabilities")
+    assert capabilities.status_code == 200
+    assert capabilities.json()["schema"] == "visionrig/capabilities/v1"
 
     response = client.post(
         "/api/v1/perception/ingest",

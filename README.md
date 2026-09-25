@@ -4,16 +4,16 @@ VisionRig is Kaliv/ModelRig's dedicated visual-perception subsystem.
 
 **Boundary:** VisionRig owns pixels -> structured perception. ModelRig owns semantic interpretation, durable memory, cognition, and Consciousness Core world-state authority.
 
-## Current foundation
+## Current state — V1 capture foundation
 
 - strict, versioned perception contracts
-- pluggable frame sources and perception stages
-- bounded in-memory world snapshot
-- FastAPI service with health, ingest and world-state endpoints
-- synthetic source for deterministic development/tests
+- pluggable perception stages
+- bounded live-frame queue with explicit dropped-frame accounting
+- ephemeral visual world snapshot
+- FastAPI service with health, capabilities, ingest, queue stats and world state
+- optional OpenCV image/video/webcam sources
+- runtime capability probing for OpenCV, ONNX Runtime and CUDA provider presence
 - zero camera/CUDA dependency in the core package
-
-The first slice is deliberately model-agnostic. OpenCV, ONNX Runtime, YOLO/RT-DETR, face/body embeddings, OCR and depth can be added as optional adapters without contaminating the core contract.
 
 ## Quick start
 
@@ -24,18 +24,29 @@ pip install -e ".[dev]"
 python -m visionrig
 ```
 
-Then open `http://127.0.0.1:8110/docs`.
+For local camera/video capture support:
 
-## Contract
+```powershell
+pip install -e ".[capture,dev]"
+visionrig-capture --camera 0 --max-frames 100
+```
 
-VisionRig emits `PerceptionEvent` objects. Consumers should treat them as observations, not truth:
+The service listens on `http://127.0.0.1:8110`.
+
+## Runtime rule
+
+VisionRig emits `PerceptionEvent` observations. They are evidence with provenance
+and confidence — not semantic truth and not permission to act.
 
 ```text
 camera / screen / VR
         |
         v
+ bounded capture queue
+        |
+        v
     VisionRig
-  capture + perception
+  perception stages
         |
         v
  PerceptionEvent v1
