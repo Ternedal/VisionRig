@@ -2,7 +2,8 @@ import pytest
 
 from visionrig.contracts import BoundingBox, SourceDescriptor, VisualEntity
 from visionrig.kinect_v2 import KinectV2DepthStage, KinectV2FrameSet, KinectV2Source
-from visionrig.pipeline import Frame, StageResult\nfrom visionrig.pipeline_factory import build_pipeline
+from visionrig.pipeline import Frame, StageResult
+from visionrig.pipeline_factory import build_pipeline
 
 
 class _Sampler:
