@@ -2,20 +2,26 @@
 
 Remote producers submit one encoded image at a time. VisionRig admits at most one
 raw frame to the inference pipeline concurrently; overload is rejected instead
-of building unbounded visual latency.
+of building unbounded visual latency. Producers can also publish lightweight
+heartbeats so operator surfaces can distinguish online, stale and offline
+sensors without exposing raw image data.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Any, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .contracts import PerceptionEvent, SourceDescriptor
 from .pipeline import Frame
 from .runtime import VisionRuntime
+
+
+SensorSourceType = Literal["camera", "screen", "vr", "image"]
+SensorPresence = Literal["online", "stale", "offline"]
 
 
 class SensorIngressError(RuntimeError):
@@ -77,10 +83,34 @@ class SensorFrameReceipt(BaseModel):
     )
     status: Literal["processed"] = "processed"
     source_id: str = Field(min_length=1, max_length=128)
-    source_type: Literal["camera", "screen", "vr", "image"]
+    source_type: SensorSourceType
     frame_sequence: int = Field(ge=0)
     event_id: str = Field(min_length=1, max_length=128)
     dropped_frames: int = Field(ge=0)
+    production_authority: Literal[False] = False
+
+
+class SensorHeartbeat(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_id: Literal["visionrig/sensor-heartbeat/v1"] = (
+        "visionrig/sensor-heartbeat/v1"
+    )
+    source_id: str = Field(min_length=1, max_length=128)
+    source_type: SensorSourceType
+    device: str | None = Field(default=None, max_length=256)
+    capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
+
+
+class SensorHeartbeatReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_id: Literal["visionrig/sensor-heartbeat-receipt/v1"] = (
+        "visionrig/sensor-heartbeat-receipt/v1"
+    )
+    status: Literal["accepted"] = "accepted"
+    source_id: str = Field(min_length=1, max_length=128)
+    seen_utc: str
     production_authority: Literal[False] = False
 
 
@@ -89,8 +119,12 @@ class SensorSourceStats:
     source_id: str
     source_type: str
     device: str | None
-    last_sequence: int
+    capabilities: tuple[str, ...]
+    presence: SensorPresence
+    age_seconds: float
+    last_sequence: int | None
     accepted_frames: int
+    heartbeat_count: int
     dropped_frames_total: int
     last_seen_utc: str
 
@@ -98,7 +132,10 @@ class SensorSourceStats:
 @dataclass(frozen=True, slots=True)
 class SensorIngressStats:
     schema: str
+    stale_after_seconds: float
+    offline_after_seconds: float
     accepted_total: int
+    heartbeat_total: int
     rejected_busy_total: int
     rejected_sequence_total: int
     rejected_payload_total: int
@@ -112,10 +149,16 @@ class SensorIngressStats:
 class _MutableSourceStats:
     source_type: str
     device: str | None
-    last_sequence: int
+    capabilities: tuple[str, ...]
+    last_sequence: int | None
     accepted_frames: int
+    heartbeat_count: int
     dropped_frames_total: int
-    last_seen_utc: str
+    last_seen: datetime
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 class SensorIngress:
@@ -127,17 +170,28 @@ class SensorIngress:
         *,
         decoder: ImageDecoder | None = None,
         max_payload_bytes: int = 8 * 1024 * 1024,
+        stale_after_seconds: float = 15.0,
+        offline_after_seconds: float = 60.0,
+        clock: Callable[[], datetime] = _utcnow,
     ) -> None:
         if max_payload_bytes < 1024:
             raise ValueError("max_payload_bytes must be >= 1024")
+        if stale_after_seconds <= 0:
+            raise ValueError("stale_after_seconds must be > 0")
+        if offline_after_seconds <= stale_after_seconds:
+            raise ValueError("offline_after_seconds must exceed stale_after_seconds")
         self._runtime = runtime
         self._decoder = decoder or OpenCVImageDecoder()
         self._max_payload_bytes = max_payload_bytes
+        self._stale_after_seconds = float(stale_after_seconds)
+        self._offline_after_seconds = float(offline_after_seconds)
+        self._clock = clock
         self._processing = Lock()
         self._metrics_lock = Lock()
         self._last_sequence: dict[str, int] = {}
         self._sources: dict[str, _MutableSourceStats] = {}
         self._accepted_total = 0
+        self._heartbeat_total = 0
         self._rejected_busy_total = 0
         self._rejected_sequence_total = 0
         self._rejected_payload_total = 0
@@ -153,6 +207,46 @@ class SensorIngress:
             attribute = f"_rejected_{kind}_total"
             setattr(self, attribute, getattr(self, attribute) + 1)
 
+    @staticmethod
+    def _normalize_capabilities(values: tuple[str, ...]) -> tuple[str, ...]:
+        cleaned = []
+        for value in values:
+            item = value.strip().lower()
+            if not item or len(item) > 64:
+                raise ValueError("sensor capabilities must contain 1..64 characters")
+            if item not in cleaned:
+                cleaned.append(item)
+        return tuple(sorted(cleaned))
+
+    def heartbeat(self, heartbeat: SensorHeartbeat) -> SensorHeartbeatReceipt:
+        now = self._clock()
+        capabilities = self._normalize_capabilities(heartbeat.capabilities)
+        with self._metrics_lock:
+            self._heartbeat_total += 1
+            current = self._sources.get(heartbeat.source_id)
+            if current is None:
+                self._sources[heartbeat.source_id] = _MutableSourceStats(
+                    source_type=heartbeat.source_type,
+                    device=heartbeat.device,
+                    capabilities=capabilities,
+                    last_sequence=None,
+                    accepted_frames=0,
+                    heartbeat_count=1,
+                    dropped_frames_total=0,
+                    last_seen=now,
+                )
+            else:
+                current.source_type = heartbeat.source_type
+                current.device = heartbeat.device
+                current.capabilities = capabilities
+                current.heartbeat_count += 1
+                current.last_seen = now
+        return SensorHeartbeatReceipt(
+            source_id=heartbeat.source_id,
+            seen_utc=now.isoformat(),
+            production_authority=False,
+        )
+
     def _record_accept(
         self,
         *,
@@ -162,7 +256,7 @@ class SensorIngress:
         frame_sequence: int,
         dropped_frames: int,
     ) -> None:
-        now = datetime.now(timezone.utc).isoformat()
+        now = self._clock()
         with self._metrics_lock:
             self._accepted_total += 1
             current = self._sources.get(source_id)
@@ -170,10 +264,12 @@ class SensorIngress:
                 self._sources[source_id] = _MutableSourceStats(
                     source_type=source_type,
                     device=device,
+                    capabilities=(),
                     last_sequence=frame_sequence,
                     accepted_frames=1,
+                    heartbeat_count=0,
                     dropped_frames_total=dropped_frames,
-                    last_seen_utc=now,
+                    last_seen=now,
                 )
                 return
             current.source_type = source_type
@@ -181,25 +277,45 @@ class SensorIngress:
             current.last_sequence = frame_sequence
             current.accepted_frames += 1
             current.dropped_frames_total += dropped_frames
-            current.last_seen_utc = now
+            current.last_seen = now
+
+    def _presence(self, age_seconds: float) -> SensorPresence:
+        if age_seconds <= self._stale_after_seconds:
+            return "online"
+        if age_seconds <= self._offline_after_seconds:
+            return "stale"
+        return "offline"
 
     def stats(self) -> SensorIngressStats:
+        now = self._clock()
         with self._metrics_lock:
             sources = tuple(
                 SensorSourceStats(
                     source_id=source_id,
                     source_type=state.source_type,
                     device=state.device,
+                    capabilities=state.capabilities,
+                    presence=self._presence(
+                        max(0.0, (now - state.last_seen).total_seconds())
+                    ),
+                    age_seconds=round(
+                        max(0.0, (now - state.last_seen).total_seconds()),
+                        3,
+                    ),
                     last_sequence=state.last_sequence,
                     accepted_frames=state.accepted_frames,
+                    heartbeat_count=state.heartbeat_count,
                     dropped_frames_total=state.dropped_frames_total,
-                    last_seen_utc=state.last_seen_utc,
+                    last_seen_utc=state.last_seen.isoformat(),
                 )
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v1",
+                schema="visionrig/sensor-runtime-status/v2",
+                stale_after_seconds=self._stale_after_seconds,
+                offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
+                heartbeat_total=self._heartbeat_total,
                 rejected_busy_total=self._rejected_busy_total,
                 rejected_sequence_total=self._rejected_sequence_total,
                 rejected_payload_total=self._rejected_payload_total,
@@ -213,7 +329,7 @@ class SensorIngress:
         self,
         *,
         source_id: str,
-        source_type: Literal["camera", "screen", "vr", "image"],
+        source_type: SensorSourceType,
         frame_sequence: int,
         payload: bytes,
         content_type: str,
