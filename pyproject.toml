@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=75,<76"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visionrig"
+version = "0.5.0"
+description = "Visual perception subsystem for ModelRig / Kaliv"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+capture = [
+  "opencv-python>=4.10,<5",
+]
+inference = [
+  "numpy>=2.1,<3",
+  "onnxruntime>=1.20,<2",
+  "opencv-python>=4.10,<5",
+]
+ocr = [
+  "opencv-python>=4.10,<5",
+  "pytesseract>=0.3,<1",
+]
+landmarks = [
+  "mediapipe>=0.10,<1",
+  "opencv-python>=4.10,<5",
+]
+profile = [
+  "cryptography>=46,<51",
+]
+dev = [
+  "cryptography>=46,<51",
+  "httpx>=0.28,<1",
+  "numpy>=2.1,<3",
+  "pytest>=8.3,<9",
+]
+
+[project.scripts]
+visionrig = "visionrig.__main__:main"
+visionrig-capture = "visionrig.capture_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
