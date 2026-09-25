@@ -9,6 +9,11 @@ def test_service_config_reads_optional_pipeline_switches(monkeypatch) -> None:
     monkeypatch.setenv("VISIONRIG_SPATIAL_RELATIONS", "0")
     monkeypatch.setenv("VISIONRIG_FORCE_CPU", "yes")
     monkeypatch.setenv("VISIONRIG_MAX_SENSOR_FRAME_BYTES", "4096")
+    monkeypatch.setenv("VISIONRIG_MODELRIG_BRIDGE", "1")
+    monkeypatch.setenv(
+        "VISIONRIG_MODELRIG_WORKER_URL",
+        "http://127.0.0.1:8099",
+    )
 
     config = ServiceConfig.from_env()
     assert config.ocr is True
@@ -16,6 +21,11 @@ def test_service_config_reads_optional_pipeline_switches(monkeypatch) -> None:
     assert config.spatial_relations is False
     assert config.prefer_cuda is False
     assert config.max_sensor_frame_bytes == 4096
+    assert config.modelrig_bridge is True
+    assert config.modelrig_worker_url == "http://127.0.0.1:8099"
+    publisher = config.build_modelrig_publisher()
+    assert publisher is not None
+    publisher.close()
 
 
 def test_spatial_relations_default_on(monkeypatch) -> None:
@@ -33,3 +43,10 @@ def test_service_config_rejects_unbounded_frame_limit(monkeypatch) -> None:
     monkeypatch.setenv("VISIONRIG_MAX_SENSOR_FRAME_BYTES", str(128 * 1024 * 1024))
     with pytest.raises(ServiceConfigError):
         ServiceConfig.from_env()
+
+
+def test_modelrig_bridge_defaults_off(monkeypatch) -> None:
+    monkeypatch.delenv("VISIONRIG_MODELRIG_BRIDGE", raising=False)
+    config = ServiceConfig.from_env()
+    assert config.modelrig_bridge is False
+    assert config.build_modelrig_publisher() is None
