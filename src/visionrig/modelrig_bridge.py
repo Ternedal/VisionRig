@@ -101,6 +101,7 @@ class SemanticChangeGate:
         semantic = {
             "entity_kinds": sorted(kinds.items()),
             "labels": labels,
+            "scene_label": event.scene_label,
             "relations": sorted(predicates.items()),
             "nearest_metric_depth_bucket_m": nearest_bucket,
             "metric_depth_count": len(metric),
