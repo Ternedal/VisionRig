@@ -4,7 +4,8 @@ from __future__ import annotations
 import argparse
 import time
 
-from .kinect_v2 import KinectV2Source\nfrom .pipeline_factory import build_pipeline
+from .kinect_v2 import KinectV2Source
+from .pipeline_factory import build_pipeline
 from .runtime import VisionRuntime
 from .sources import CameraSource, VideoFileSource
 
