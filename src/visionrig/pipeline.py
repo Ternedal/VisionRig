@@ -25,6 +25,7 @@ class Frame:
     sequence: int
     payload: Any
     dropped_frames: int = 0
+    sensor_data: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
