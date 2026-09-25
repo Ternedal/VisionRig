@@ -24,6 +24,7 @@ from .ocr import TesseractOcrStage
 from .pipeline import PerceptionPipeline, Stage
 from .profile import MrVisionProfile
 from .recognition import ProfileRecognitionStage
+from .spatial import SpatialRelationStage
 from .tracking import IoUTrackingStage
 from .yolo_onnx import YoloOnnxStage
 
@@ -38,19 +39,26 @@ def build_yolo_pipeline(
     manifest_path: str | Path,
     *,
     prefer_cuda: bool = True,
+    spatial_relations: bool = True,
 ) -> PerceptionPipeline:
     verified = load_verified_yolo_model(manifest_path)
     manifest = verified.manifest
     assert isinstance(manifest, YoloModelManifest)
-    detector = YoloOnnxStage(
-        verified.artifact_path,
-        manifest.labels,
-        input_size=manifest.input_size,
-        confidence_threshold=manifest.confidence_threshold,
-        iou_threshold=manifest.iou_threshold,
-        prefer_cuda=prefer_cuda,
-    )
-    return PerceptionPipeline((detector, IoUTrackingStage()))
+    stages: list[Stage] = [
+        YoloOnnxStage(
+            verified.artifact_path,
+            manifest.labels,
+            label_kinds=manifest.label_kinds,
+            input_size=manifest.input_size,
+            confidence_threshold=manifest.confidence_threshold,
+            iou_threshold=manifest.iou_threshold,
+            prefer_cuda=prefer_cuda,
+        ),
+        IoUTrackingStage(),
+    ]
+    if spatial_relations:
+        stages.append(SpatialRelationStage())
+    return PerceptionPipeline(tuple(stages))
 
 
 def build_pipeline(
@@ -62,6 +70,7 @@ def build_pipeline(
     recognition_threshold: float = 0.75,
     ocr: bool = False,
     landmarks: bool = False,
+    spatial_relations: bool = True,
     prefer_cuda: bool = True,
 ) -> PipelineBundle:
     stages: list[Stage] = []
@@ -75,6 +84,7 @@ def build_pipeline(
             YoloOnnxStage(
                 verified.artifact_path,
                 manifest.labels,
+                label_kinds=manifest.label_kinds,
                 input_size=manifest.input_size,
                 confidence_threshold=manifest.confidence_threshold,
                 iou_threshold=manifest.iou_threshold,
@@ -132,6 +142,9 @@ def build_pipeline(
                     threshold=recognition_threshold,
                 )
             )
+
+    if spatial_relations:
+        stages.append(SpatialRelationStage())
 
     return PipelineBundle(
         pipeline=PerceptionPipeline(tuple(stages)),

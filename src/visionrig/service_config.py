@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
-from .pipeline import PerceptionPipeline
 from .pipeline_factory import PipelineBundle, build_pipeline
 
 
@@ -33,6 +32,7 @@ class ServiceConfig:
     embedding_manifest: str | None = None
     ocr: bool = False
     landmarks: bool = False
+    spatial_relations: bool = True
     prefer_cuda: bool = True
     max_sensor_frame_bytes: int = 8 * 1024 * 1024
 
@@ -56,6 +56,7 @@ class ServiceConfig:
             embedding_manifest=os.getenv("VISIONRIG_EMBEDDING_MANIFEST"),
             ocr=_flag("VISIONRIG_OCR"),
             landmarks=_flag("VISIONRIG_LANDMARKS"),
+            spatial_relations=_flag("VISIONRIG_SPATIAL_RELATIONS", True),
             prefer_cuda=not _flag("VISIONRIG_FORCE_CPU"),
             max_sensor_frame_bytes=limit,
         )
@@ -67,5 +68,6 @@ class ServiceConfig:
             embedding_manifest=self.embedding_manifest,
             ocr=self.ocr,
             landmarks=self.landmarks,
+            spatial_relations=self.spatial_relations,
             prefer_cuda=self.prefer_cuda,
         )

@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 from uuid import uuid4
 
-from .contracts import BoundingBox, VisualEntity
+from .contracts import BoundingBox, EntityKind, VisualEntity
 from .pipeline import Frame, StageResult
 
 
@@ -17,6 +17,17 @@ class InferenceContractError(RuntimeError):
     pass
 
 
+def entity_kind_for_label(
+    label: str,
+    label_kinds: Mapping[str, EntityKind] | None = None,
+) -> EntityKind:
+    if label_kinds and label in label_kinds:
+        return label_kinds[label]
+    if label == "person":
+        return "person"
+    return "object"
+
+
 class YoloOnnxStage:
     name = "yolo_onnx"
 
@@ -25,6 +36,7 @@ class YoloOnnxStage:
         model_path: str | Path,
         labels: tuple[str, ...],
         *,
+        label_kinds: Mapping[str, EntityKind] | None = None,
         input_size: int = 640,
         confidence_threshold: float = 0.25,
         iou_threshold: float = 0.45,
@@ -32,6 +44,9 @@ class YoloOnnxStage:
     ) -> None:
         if not labels:
             raise ValueError("labels must not be empty")
+        unknown_kind_labels = set(label_kinds or {}) - set(labels)
+        if unknown_kind_labels:
+            raise ValueError("label_kinds contains labels absent from labels")
         if input_size < 32:
             raise ValueError("input_size must be >= 32")
         if not 0.0 <= confidence_threshold <= 1.0:
@@ -63,6 +78,7 @@ class YoloOnnxStage:
             raise InferenceContractError("YOLO adapter requires exactly one model input")
         self._input_name = inputs[0].name
         self._labels = labels
+        self._label_kinds = dict(label_kinds or {})
         self._size = input_size
         self._confidence = confidence_threshold
         self._iou = iou_threshold
@@ -151,7 +167,10 @@ class YoloOnnxStage:
         detections = tuple(
             VisualEntity(
                 entity_id=f"det-{uuid4()}",
-                kind="person" if self._labels[class_ids[i]] == "person" else "object",
+                kind=entity_kind_for_label(
+                    self._labels[class_ids[i]],
+                    self._label_kinds,
+                ),
                 label=self._labels[class_ids[i]],
                 confidence=float(scores[i]),
                 bbox=normalized[i],
