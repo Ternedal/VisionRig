@@ -48,8 +48,8 @@ Input adapters
 8. Live capture is bounded. On overload, stale frames are dropped rather than
    allowing unbounded visual latency.
 9. Dropped frames are counted and propagated into downstream observations.
-10. Optional capture/inference stacks are probed defensively and may fail closed
-    without preventing the core service from starting.
+10. Tracking ids express short-term continuity only; they are explicitly not
+    durable identity.
 
 ## Slices
 
@@ -60,9 +60,16 @@ Strict contracts, pipeline protocol, ephemeral world snapshot and local API.
 Optional OpenCV webcam/image/video sources, bounded frame queue, freshness
 backpressure, dropped-frame accounting and runtime capability probing.
 
-### V2 — perception — next
-ONNX/CUDA detector, tracking, OCR, pose/hands and depth behind independent
-capability adapters.
+### V2A — object detection + tracking — implemented
+Optional YOLOv8-style ONNX adapter with CPU/CUDA provider selection, normalized
+bounding boxes and NMS, plus dependency-free per-source IoU tracking.
+
+A production model artifact is deliberately not bundled into the repository.
+Model provenance, checksum, licensing and acceptance thresholds must be explicit
+before a concrete model becomes authoritative deployment input.
+
+### V2B — perception expansion — next
+OCR, pose/hands, depth, scene embeddings and performance/load controls.
 
 ### V3 — recognition and .mrvision
 Local encrypted visual profile with face/body/object/place embeddings and explicit
