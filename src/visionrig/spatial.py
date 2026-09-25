@@ -1,4 +1,4 @@
-"""Bounded image-plane spatial relation inference."""
+"""Bounded image-plane and measured-depth spatial relation inference."""
 from __future__ import annotations
 
 from math import hypot
@@ -44,9 +44,11 @@ def _relation_confidence(
 
 
 class SpatialRelationStage:
-    """Infer conservative 2D relations from bounding-box geometry.
+    """Infer conservative 2D relations plus sensor-backed depth ordering.
 
-    These relations describe the image plane. They are not 3D/world-space truth.
+    Axis, near and containment relations describe the image plane. in_front_of
+    and behind are emitted only when metric depth observations exist for both
+    entities and their measured distance differs by a configured minimum gap.
     """
 
     name = "spatial_relations"
@@ -59,6 +61,7 @@ class SpatialRelationStage:
         near_distance: float = 0.25,
         min_axis_gap: float = 0.015,
         containment_tolerance: float = 0.005,
+        min_depth_gap_m: float = 0.20,
     ) -> None:
         if not 2 <= max_entities <= 128:
             raise ValueError("max_entities must be between 2 and 128")
@@ -70,12 +73,15 @@ class SpatialRelationStage:
             raise ValueError("min_axis_gap must be between 0 and 0.5")
         if not 0.0 <= containment_tolerance <= 0.1:
             raise ValueError("containment_tolerance must be between 0 and 0.1")
+        if not 0.01 <= min_depth_gap_m <= 5.0:
+            raise ValueError("min_depth_gap_m must be between 0.01 and 5")
 
         self._max_entities = max_entities
         self._max_relations = max_generated_relations
         self._near_distance = near_distance
         self._min_axis_gap = min_axis_gap
         self._containment_tolerance = containment_tolerance
+        self._min_depth_gap_m = min_depth_gap_m
 
     def _pair_relations(
         self,
@@ -213,6 +219,61 @@ class SpatialRelationStage:
 
         return relations
 
+    def _depth_relations(
+        self,
+        a: VisualEntity,
+        b: VisualEntity,
+        depth_by_entity: dict[str, tuple[float, float]],
+    ) -> list[VisualRelation]:
+        first = depth_by_entity.get(a.entity_id)
+        second = depth_by_entity.get(b.entity_id)
+        if first is None or second is None:
+            return []
+
+        first_distance, first_confidence = first
+        second_distance, second_confidence = second
+        gap = abs(first_distance - second_distance)
+        if gap < self._min_depth_gap_m:
+            return []
+
+        sensor_confidence = min(first_confidence, second_confidence)
+        geometric = min(1.0, 0.65 + gap / max(first_distance, second_distance, 1.0))
+        confidence = _relation_confidence(
+            a,
+            b,
+            sensor_confidence * geometric,
+        )
+
+        if first_distance < second_distance:
+            return [
+                VisualRelation(
+                    subject_id=a.entity_id,
+                    predicate="in_front_of",
+                    object_id=b.entity_id,
+                    confidence=confidence,
+                ),
+                VisualRelation(
+                    subject_id=b.entity_id,
+                    predicate="behind",
+                    object_id=a.entity_id,
+                    confidence=confidence,
+                ),
+            ]
+        return [
+            VisualRelation(
+                subject_id=b.entity_id,
+                predicate="in_front_of",
+                object_id=a.entity_id,
+                confidence=confidence,
+            ),
+            VisualRelation(
+                subject_id=a.entity_id,
+                predicate="behind",
+                object_id=b.entity_id,
+                confidence=confidence,
+            ),
+        ]
+
     def process(self, frame: Frame, current: StageResult) -> StageResult:
         candidates = [entity for entity in current.entities if entity.bbox is not None]
         candidates.sort(key=lambda item: (-item.confidence, item.entity_id))
@@ -223,10 +284,22 @@ class SpatialRelationStage:
             for relation in current.relations
         }
         generated: list[VisualRelation] = []
+        depth_by_entity = {
+            item.subject_entity_id: (
+                float(item.distance_m),
+                float(item.confidence if item.confidence is not None else 0.75),
+            )
+            for item in current.depth
+            if item.distance_m is not None
+        }
 
         for index, first in enumerate(candidates):
             for second in candidates[index + 1:]:
-                for relation in self._pair_relations(first, second):
+                pair_relations = self._pair_relations(first, second)
+                pair_relations.extend(
+                    self._depth_relations(first, second, depth_by_entity)
+                )
+                for relation in pair_relations:
                     key = (
                         relation.subject_id,
                         relation.predicate,

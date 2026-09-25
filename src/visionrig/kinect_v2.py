@@ -253,6 +253,7 @@ class KinectV2DepthStage:
                 DepthObservation(
                     subject_entity_id=entity.entity_id,
                     relative_depth=relative,
+                    distance_m=distance,
                     confidence=len(distances) / len(points),
                     method="kinect-v2-hardware-depth",
                 )

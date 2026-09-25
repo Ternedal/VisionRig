@@ -6,7 +6,7 @@ first-class camera sensor, not as a special perception pipeline.
 ## What enters VisionRig
 
 - RGB: primary image payload used by the existing detector/OCR/landmark/embedding stages.
-- Hardware depth: metric depth from Kinect's depth sensor, coordinate-mapped into color space and normalized into VisionRig's existing relative-depth v2 contract.
+- Hardware depth: metric depth from Kinect's depth sensor, coordinate-mapped into color space and emitted as both `distance_m` and normalized `relative_depth`.
 - Infrared: frame-local auxiliary sensor channel for future IR-aware stages.
 
 This keeps model stages camera-agnostic while allowing hardware depth to replace
@@ -43,13 +43,14 @@ The Kinect hardware-depth stage is enabled automatically by --kinect-v2.
 
 ## Contract boundary
 
-PerceptionEvent/v2 currently exposes relative depth rather than meters.
-VisionRig therefore normalizes Kinect's measured distance across a configurable
-0.5-4.5 m working range. The raw metric depth remains frame-local and does not
-cross the ModelRig / Consciousness Core authority boundary.
+PerceptionEvent/v3 exposes optional metric distance without forcing generic
+camera/model stages to become Kinect-specific. Kinect therefore emits
+`distance_m` from measured hardware depth and also keeps `relative_depth`
+normalized across a configurable 0.5-4.5 m working range.
 
-A future public-contract revision can expose metric distance explicitly without
-forcing the RGB pipeline to depend on Kinect-specific types.
+Raw depth and IR arrays remain frame-local. Only typed per-entity observations
+cross the VisionRig boundary. Spatial fusion may use metric distances to emit
+`in_front_of` / `behind` when the measured gap is large enough.
 
 ## Failure behavior
 

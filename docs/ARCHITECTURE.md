@@ -25,8 +25,8 @@ Input adapters
        | visual embeddings        |
        +------------+-------------+
                     |
-          PerceptionEvent v2
-       entities/landmarks/depth
+          PerceptionEvent v3
+   entities/landmarks/depth(m)
                     |
                     v
        ModelRig integration layer
@@ -80,13 +80,26 @@ Verified YOLO-style ONNX detector and per-source short-term IoU tracking.
 Tesseract OCR, MediaPipe landmarks, generic ONNX relative depth, bounded
 sidecar visual embeddings, v2 event contracts and CLI composition.
 
-### V3 — recognition and .mrvision — next
+### V3 — recognition and .mrvision — implemented
 Encrypted/local visual profile with face/body/object/place embeddings, explicit
 enrollment, revocation and revisioning. Global models remain shared.
 
+### V3B — metric depth + 3D ordering — implemented
+Hardware sensors can preserve measured distance in metres. Spatial fusion emits
+front/behind ordering only from metric depth and keeps monocular estimates
+explicitly relative.
+
 ### V4 — ModelRig bridge
-Map PerceptionEvent v2 into ModelRig world observations and attention candidates,
+Map PerceptionEvent v3 into ModelRig world observations and attention candidates,
 fail-closed on schema mismatch.
 
 ### V5 — Kaliv sensors
 Android camera, Windows screen/camera and Kaliv VR/passthrough producers.
+
+
+## Contract change: v2 -> v3
+
+V3 adds optional `distance_m` to each depth observation and adds
+`in_front_of` / `behind` relation predicates. The metric field is populated
+only by adapters with a calibrated/measured distance source. Relative monocular
+depth remains valid but cannot manufacture metric ordering.

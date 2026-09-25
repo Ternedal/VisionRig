@@ -1,7 +1,7 @@
 # Spatial semantics
 
-VisionRig now has a bounded geometry stage that converts flat entity detections
-into typed image-plane relations.
+VisionRig has a bounded spatial stage that combines flat entity detections with
+metric sensor depth when it is actually available.
 
 ## Supported geometric relations
 
@@ -12,15 +12,28 @@ The current deterministic stage may emit:
 - `near`;
 - `inside`.
 
-These are **2D image-plane observations**. They do not claim metric 3D truth.
+These four relation families are **2D image-plane observations**. They do not
+claim metric 3D truth.
 
 For example, `cup left_of person` means the cup bounding box is visually left
 of the person bounding box in the current frame. It does not by itself establish
 a stable real-world arrangement.
 
+## Metric depth ordering
+
+When both entities have a positive measured `distance_m`, the stage may also
+emit:
+
+- `in_front_of`;
+- `behind`.
+
+The default minimum separation is 0.20 m. These relations are never inferred
+from generic monocular relative depth, because a normalized model output is not
+a calibrated physical distance.
+
 ## Deliberate omissions
 
-The relation contract already has room for:
+The relation contract also has room for:
 
 - `looking_at`;
 - `holding`;

@@ -10,7 +10,7 @@ world-state authority.
 
 VisionRig includes:
 
-- typed PerceptionEvent/v2 observations
+- typed PerceptionEvent/v3 observations
 - local webcam/image/video capture
 - Kinect v2 RGB + hardware depth + infrared capture
 - bounded camera/screen/VR ingress
@@ -18,8 +18,8 @@ VisionRig includes:
 - crash-safe webcam/screen reference producer
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
-- OCR, pose/hands/face landmarks and relative depth adapters
-- bounded 2D spatial relations
+- OCR, pose/hands/face landmarks, relative depth and metric hardware depth
+- bounded 2D relations plus sensor-backed front/behind depth ordering
 - bounded full-frame/entity embedding sidecar
 - encrypted, revisioned .mrvision profiles
 - **service-loaded face/body/object/place recognition hints**
@@ -39,7 +39,7 @@ frame
 spatial relations
   |
   v
-PerceptionEvent v2
+PerceptionEvent v3
 ```
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
@@ -55,3 +55,4 @@ See:
 - docs/SENSOR_GATEWAY.md
 - docs/PRODUCER.md
 - docs/KINECT_V2.md
+- docs/PERCEPTION_V3.md
