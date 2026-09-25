@@ -23,7 +23,7 @@ from .model_manifest import (
 from .ocr import TesseractOcrStage
 from .pipeline import PerceptionPipeline, Stage
 from .profile import MrVisionProfile
-from .recognition import ProfileRecognitionStage
+from .recognition import PlaceRecognitionStage, ProfileRecognitionStage
 from .spatial import SpatialRelationStage
 from .tracking import IoUTrackingStage
 from .yolo_onnx import YoloOnnxStage
@@ -75,6 +75,9 @@ def build_pipeline(
 ) -> PipelineBundle:
     stages: list[Stage] = []
     store: EmbeddingStore | None = None
+
+    if not 0.0 <= recognition_threshold <= 1.0:
+        raise ValueError("recognition_threshold must be between 0 and 1")
 
     if yolo_manifest is not None:
         verified = load_verified_yolo_model(yolo_manifest)
@@ -133,6 +136,14 @@ def build_pipeline(
         )
         stages.append(EmbeddingStage(encoder, store))
         if profile is not None:
+            stages.append(
+                PlaceRecognitionStage(
+                    profile,
+                    store,
+                    embedding_model_id=manifest.model_id,
+                    threshold=recognition_threshold,
+                )
+            )
             stages.append(EntityEmbeddingStage(encoder, store))
             stages.append(
                 ProfileRecognitionStage(

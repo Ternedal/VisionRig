@@ -1,4 +1,4 @@
-"""Apply .mrvision recognition hints to already-observed entities."""
+"""Apply .mrvision recognition hints to already-observed entities and scenes."""
 from __future__ import annotations
 
 from .embeddings import EmbeddingStore
@@ -29,8 +29,8 @@ class ProfileRecognitionStage:
     ) -> None:
         if not isinstance(profile, MrVisionProfile):
             raise TypeError("profile must be MrVisionProfile")
-        if not -1.0 <= threshold <= 1.0:
-            raise ValueError("threshold must be between -1 and 1")
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("threshold must be between 0 and 1")
         self._profile = profile
         self._store = store
         self._model_id = embedding_model_id
@@ -78,4 +78,62 @@ class ProfileRecognitionStage:
             depth=current.depth,
             scene_label=current.scene_label,
             scene_confidence=current.scene_confidence,
+        )
+
+
+class PlaceRecognitionStage:
+    """Attach a non-authoritative place hint from the full-frame embedding."""
+
+    name = "mrvision_place_recognition"
+
+    def __init__(
+        self,
+        profile: MrVisionProfile,
+        store: EmbeddingStore,
+        *,
+        embedding_model_id: str,
+        threshold: float = 0.75,
+    ) -> None:
+        if not isinstance(profile, MrVisionProfile):
+            raise TypeError("profile must be MrVisionProfile")
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("threshold must be between 0 and 1")
+        self._profile = profile
+        self._store = store
+        self._model_id = embedding_model_id
+        self._threshold = threshold
+
+    def process(self, frame: Frame, current: StageResult) -> StageResult:
+        if current.scene_label is not None:
+            return current
+
+        record = self._store.get(
+            frame.source.source_id,
+            frame.sequence,
+            subject_entity_id=None,
+            model_id=self._model_id,
+        )
+        if record is None:
+            return current
+
+        matches = match_embedding(
+            self._profile,
+            vector=record.vector,
+            embedding_model_id=self._model_id,
+            kind="place",
+            threshold=self._threshold,
+            top_k=1,
+        )
+        if not matches:
+            return current
+
+        match = matches[0]
+        target = match.subject_ref or match.label
+        return StageResult(
+            entities=current.entities,
+            relations=current.relations,
+            landmarks=current.landmarks,
+            depth=current.depth,
+            scene_label=("mrvision-place:" + target)[:256],
+            scene_confidence=float(max(0.0, min(1.0, match.score))),
         )
