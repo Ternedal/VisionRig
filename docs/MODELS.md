@@ -15,12 +15,20 @@ The artifact must live inside the manifest directory; path traversal is rejected
   "sha256": "<64 lowercase hex>",
   "source": "provenance for this exact artifact",
   "artifact_license": "license for this exact artifact",
-  "labels": ["person", "bicycle", "car"],
+  "labels": ["person", "face", "cup"],
+  "label_kinds": {
+    "face": "face",
+    "cup": "object"
+  },
   "input_size": 640,
   "confidence_threshold": 0.25,
   "iou_threshold": 0.45
 }
 ```
+
+`label_kinds` is optional and must only reference labels present in the
+manifest. It lets model-specific classes such as `face`, `hand` or `body`
+feed the correct VisionRig entity kind without hard-coded label conventions.
 
 ## Relative depth
 

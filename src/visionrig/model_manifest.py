@@ -7,7 +7,9 @@ import json
 from pathlib import Path
 from typing import Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .contracts import EntityKind
 
 
 class ModelManifestError(RuntimeError):
@@ -25,9 +27,19 @@ class _ArtifactManifest(BaseModel):
 class YoloModelManifest(_ArtifactManifest):
     schema_id: Literal["visionrig/yolo-model-manifest/v1"] = "visionrig/yolo-model-manifest/v1"
     labels: tuple[str, ...] = Field(min_length=1)
+    label_kinds: dict[str, EntityKind] = Field(default_factory=dict)
     input_size: int = Field(default=640, ge=32, le=4096)
     confidence_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
     iou_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def validate_label_kinds(self) -> "YoloModelManifest":
+        unknown = sorted(set(self.label_kinds) - set(self.labels))
+        if unknown:
+            raise ValueError(
+                "label_kinds contains labels absent from labels: " + ", ".join(unknown)
+            )
+        return self
 
 
 class DepthModelManifest(_ArtifactManifest):

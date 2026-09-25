@@ -14,71 +14,53 @@ VisionRig now includes:
 - local webcam/image/video capture
 - bounded encoded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
-- **reference webcam/screen producer with correct drop/sequence semantics**
+- crash-safe webcam/screen reference producer
 - optional YOLO ONNX detection + short-term tracking
+- explicit detector label -> entity-kind mapping
 - optional OCR, pose/hands/face landmarks and relative depth
+- **bounded 2D spatial relations**
 - bounded visual embedding sidecar
 - encrypted, revisioned `.mrvision` profiles
 - non-authoritative runtime recognition hints
 - bounded cursor event journal for ModelRig
 - verified model manifests with checksum/provenance/license metadata
 
-## Processes
+## Perception flow
 
-Core perception service:
-
-```powershell
-python -m visionrig
+```text
+frame
+  |
+  v
+detector -> tracker -> OCR/landmarks/depth -> embeddings/recognition
+                                              |
+                                              v
+                                      spatial relations
+                                              |
+                                              v
+                                    PerceptionEvent v2
 ```
 
-Cross-device gateway:
+Spatial predicates currently express image-plane geometry only. VisionRig does
+not infer holding, gaze or motion from insufficient evidence.
 
-```powershell
-$env:VISIONRIG_GATEWAY_TOKEN="$(visionrig-gateway-token)"
-$env:VISIONRIG_GATEWAY_BIND_HOST="<explicit Tailscale/interface IP>"
-visionrig-gateway
-```
-
-Reference webcam/screen producer:
-
-```powershell
-pip install -e ".[producer]"
-$env:VISIONRIG_GATEWAY_URL="http://<Tailscale-IP>:8111"
-$env:VISIONRIG_PRODUCER_TOKEN="<gateway token>"
-visionrig-producer --screen 1 --source-id windows-screen --fps 3
-```
-
-## Data flow
+## Data path to cognition
 
 ```text
 Kaliv / Windows / VR
        |
-       +-- native producer
-       |        |
-       |        v
-       |   authenticated gateway
-       |        |
-       |        v
-       +--> loopback sensor ingress
-                 |
-                 v
- detector -> tracker -> OCR -> landmarks -> depth
-        |                              |
-        |                              +--> transient embedding sidecar
-        |                                         |
-        |                                    .mrvision match
-        v
- PerceptionEvent v2
-        |
-        v
- bounded event journal
-        |
-        v
-     ModelRig
- semantic/world integration
-        |
-        v
- Consciousness Core
+authenticated gateway / local capture
+       |
+       v
+VisionRig perception
+       |
+       v
+bounded event journal
+       |
+       v
+ModelRig semantic bridge
+       |
+       v
+Consciousness Core
 ```
 
 Raw pixels and embedding vectors do not enter Consciousness Core. Recognition
@@ -86,7 +68,9 @@ hints remain non-authoritative.
 
 See:
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/MODELS.md](docs/MODELS.md)
 - [docs/MRVISION.md](docs/MRVISION.md)
+- [docs/SPATIAL_SEMANTICS.md](docs/SPATIAL_SEMANTICS.md)
 - [docs/SENSOR_INGRESS.md](docs/SENSOR_INGRESS.md)
 - [docs/SENSOR_GATEWAY.md](docs/SENSOR_GATEWAY.md)
 - [docs/PRODUCER.md](docs/PRODUCER.md)

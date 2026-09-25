@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 UnitInterval = Annotated[float, Field(ge=0.0, le=1.0, strict=True, allow_inf_nan=False)]
 SignedUnit = Annotated[float, Field(ge=-1.0, le=1.0, strict=True, allow_inf_nan=False)]
+EntityKind = Literal["person", "face", "object", "text", "hand", "body", "unknown"]
 
 
 class BoundingBox(BaseModel):
@@ -25,7 +26,7 @@ class BoundingBox(BaseModel):
 class VisualEntity(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     entity_id: str = Field(min_length=1, max_length=128)
-    kind: Literal["person", "face", "object", "text", "hand", "body", "unknown"]
+    kind: EntityKind
     label: str = Field(min_length=1, max_length=512)
     confidence: UnitInterval
     bbox: BoundingBox | None = None
