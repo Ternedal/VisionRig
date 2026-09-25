@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from .capabilities import probe_capabilities
 from .contracts import PerceptionEvent, SourceDescriptor, WorldSnapshot
+from .http_io import read_bounded_body
 from .journal import EventBatch
 from .pipeline import Frame, PassthroughStage, PerceptionPipeline
 from .runtime import VisionRuntime
@@ -30,26 +31,6 @@ class IngestBody(BaseModel):
     frame_sequence: int = Field(ge=0)
     payload: dict
     dropped_frames: int = Field(default=0, ge=0)
-
-
-async def _bounded_request_body(request: Request, limit: int) -> bytes:
-    content_length = request.headers.get("content-length")
-    if content_length is not None:
-        try:
-            declared = int(content_length)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="invalid Content-Length") from exc
-        if declared < 0:
-            raise HTTPException(status_code=400, detail="invalid Content-Length")
-        if declared > limit:
-            raise HTTPException(status_code=413, detail="sensor frame payload too large")
-
-    body = bytearray()
-    async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body) > limit:
-            raise HTTPException(status_code=413, detail="sensor frame payload too large")
-    return bytes(body)
 
 
 def create_app(
@@ -114,7 +95,7 @@ def create_app(
         dropped_frames: int = Query(default=0, ge=0),
     ) -> SensorFrameReceipt:
         content_type = request.headers.get("content-type", "")
-        payload = await _bounded_request_body(
+        payload = await read_bounded_body(
             request,
             sensor_ingress.max_payload_bytes,
         )

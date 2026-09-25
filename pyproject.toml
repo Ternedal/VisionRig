@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionrig"
-version = "0.5.0"
+version = "0.6.0"
 description = "Visual perception subsystem for ModelRig / Kaliv"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
+  "httpx>=0.28,<1",
   "pydantic>=2.10,<3",
   "uvicorn>=0.34,<1",
 ]
@@ -35,17 +36,20 @@ profile = [
 ]
 dev = [
   "cryptography>=46,<51",
-  "httpx>=0.28,<1",
   "numpy>=2.1,<3",
   "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
 ]
 
 [project.scripts]
 visionrig = "visionrig.__main__:main"
 visionrig-capture = "visionrig.capture_cli:main"
+visionrig-gateway = "visionrig.gateway_main:main"
+visionrig-gateway-token = "visionrig.gateway_token:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
