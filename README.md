@@ -4,18 +4,19 @@ VisionRig is Kaliv/ModelRig's dedicated visual-perception subsystem.
 
 **Boundary:** VisionRig owns pixels -> structured perception. ModelRig owns semantic interpretation, durable memory, cognition, and Consciousness Core world-state authority.
 
-## Current state — V1 capture foundation
+## Current state
 
 - strict, versioned perception contracts
-- pluggable perception stages
 - bounded live-frame queue with explicit dropped-frame accounting
-- ephemeral visual world snapshot
-- FastAPI service with health, capabilities, ingest, queue stats and world state
 - optional OpenCV image/video/webcam sources
-- runtime capability probing for OpenCV, ONNX Runtime and CUDA provider presence
+- optional YOLOv8-style ONNX object detection
+- short-term per-source IoU tracking
+- checksum-verifiable model manifests with provenance/license metadata
+- runtime capability probing for OpenCV, ONNX Runtime and CUDA
+- FastAPI health/capabilities/world-state surface
 - zero camera/CUDA dependency in the core package
 
-## Quick start
+## Core service
 
 ```powershell
 python -m venv .venv
@@ -24,19 +25,31 @@ pip install -e ".[dev]"
 python -m visionrig
 ```
 
-For local camera/video capture support:
+The service listens on `http://127.0.0.1:8110`.
+
+## Camera/video
+
+Capture only:
 
 ```powershell
 pip install -e ".[capture,dev]"
 visionrig-capture --camera 0 --max-frames 100
 ```
 
-The service listens on `http://127.0.0.1:8110`.
+Object detection + tracking:
+
+```powershell
+pip install -e ".[inference,dev]"
+visionrig-capture --camera 0 --model-manifest .\models\detector.json --verbose
+```
+
+VisionRig deliberately does not download a detector automatically. See
+[docs/MODELS.md](docs/MODELS.md) for the verified artifact contract.
 
 ## Runtime rule
 
-VisionRig emits `PerceptionEvent` observations. They are evidence with provenance
-and confidence — not semantic truth and not permission to act.
+`PerceptionEvent` objects are observations with provenance and confidence.
+They are neither semantic truth nor permission to act.
 
 ```text
 camera / screen / VR
@@ -45,8 +58,7 @@ camera / screen / VR
  bounded capture queue
         |
         v
-    VisionRig
-  perception stages
+ detector -> tracker -> later OCR/pose/depth
         |
         v
  PerceptionEvent v1
