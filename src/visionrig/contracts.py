@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 UnitInterval = Annotated[float, Field(ge=0.0, le=1.0, strict=True, allow_inf_nan=False)]
 SignedUnit = Annotated[float, Field(ge=-1.0, le=1.0, strict=True, allow_inf_nan=False)]
+PositiveFinite = Annotated[float, Field(gt=0.0, strict=True, allow_inf_nan=False)]
 EntityKind = Literal["person", "face", "object", "text", "hand", "body", "unknown"]
 
 
@@ -39,7 +40,8 @@ class VisualRelation(BaseModel):
     subject_id: str = Field(min_length=1, max_length=128)
     predicate: Literal[
         "left_of", "right_of", "above", "below", "near", "inside",
-        "looking_at", "holding", "moving_towards", "moving_away"
+        "looking_at", "holding", "moving_towards", "moving_away",
+        "in_front_of", "behind"
     ]
     object_id: str = Field(min_length=1, max_length=128)
     confidence: UnitInterval
@@ -66,6 +68,7 @@ class DepthObservation(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     subject_entity_id: str = Field(min_length=1, max_length=128)
     relative_depth: UnitInterval
+    distance_m: PositiveFinite | None = None
     confidence: UnitInterval | None = None
     method: str = Field(min_length=1, max_length=128)
 
@@ -79,7 +82,7 @@ class SourceDescriptor(BaseModel):
 
 class PerceptionEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    schema_id: Literal["visionrig/perception-event/v2"] = "visionrig/perception-event/v2"
+    schema_id: Literal["visionrig/perception-event/v3"] = "visionrig/perception-event/v3"
     event_id: str = Field(min_length=1, max_length=128)
     observed_at: datetime
     source: SourceDescriptor
@@ -125,7 +128,7 @@ class PerceptionEvent(BaseModel):
 
 class WorldSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    schema_id: Literal["visionrig/world-snapshot/v2"] = "visionrig/world-snapshot/v2"
+    schema_id: Literal["visionrig/world-snapshot/v3"] = "visionrig/world-snapshot/v3"
     generated_at: datetime
     last_event_id: str | None = None
     source_id: str | None = None
