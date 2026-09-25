@@ -8,10 +8,11 @@ def test_health_capabilities_and_ingest() -> None:
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["capture_queue"]["capacity"] == 4
+    assert health.json()["perception_schema"] == "visionrig/perception-event/v2"
 
     capabilities = client.get("/api/v1/capabilities")
     assert capabilities.status_code == 200
-    assert capabilities.json()["schema"] == "visionrig/capabilities/v1"
+    assert capabilities.json()["schema"] == "visionrig/capabilities/v2"
 
     response = client.post(
         "/api/v1/perception/ingest",
@@ -24,10 +25,22 @@ def test_health_capabilities_and_ingest() -> None:
                     "kind": "person",
                     "label": "person",
                     "confidence": 0.99
+                }],
+                "landmarks": [{
+                    "observation_id": "pose-1",
+                    "group": "pose",
+                    "landmarks": [{
+                        "name": "nose",
+                        "x": 0.5,
+                        "y": 0.4,
+                        "z": 0.0,
+                        "confidence": 0.9
+                    }]
                 }]
             }
         },
     )
     assert response.status_code == 200
-    assert response.json()["schema_id"] == "visionrig/perception-event/v1"
+    assert response.json()["schema_id"] == "visionrig/perception-event/v2"
+    assert response.json()["landmarks"][0]["group"] == "pose"
     assert response.json()["production_authority"] is False

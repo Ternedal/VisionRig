@@ -1,8 +1,4 @@
-"""Optional YOLOv8-style ONNX object detector stage.
-
-The adapter is intentionally isolated from core. NumPy/OpenCV/ONNX Runtime are
-loaded only when this stage is constructed.
-"""
+"""Optional YOLOv8-style ONNX object detector stage."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -42,7 +38,6 @@ class YoloOnnxStage:
             raise ValueError("confidence_threshold must be between 0 and 1")
         if not 0.0 <= iou_threshold <= 1.0:
             raise ValueError("iou_threshold must be between 0 and 1")
-
         try:
             import cv2  # type: ignore[import-not-found]
             import numpy as np  # type: ignore[import-not-found]
@@ -55,7 +50,6 @@ class YoloOnnxStage:
         path = Path(model_path)
         if not path.is_file():
             raise FileNotFoundError(path)
-
         available = set(ort.get_available_providers())
         providers = ["CPUExecutionProvider"]
         if prefer_cuda and "CUDAExecutionProvider" in available:
@@ -77,7 +71,6 @@ class YoloOnnxStage:
     def _preprocess(self, image: Any) -> tuple[Any, float, int, int, int, int]:
         np = self._np
         cv2 = self._cv2
-
         if not hasattr(image, "shape") or len(image.shape) < 2:
             raise InferenceContractError("frame payload is not an image array")
         height, width = int(image.shape[0]), int(image.shape[1])
@@ -90,7 +83,6 @@ class YoloOnnxStage:
         resized = cv2.resize(image, (resized_w, resized_h))
         pad_x = (self._size - resized_w) // 2
         pad_y = (self._size - resized_h) // 2
-
         canvas = np.full((self._size, self._size, 3), 114, dtype=np.uint8)
         canvas[pad_y:pad_y + resized_h, pad_x:pad_x + resized_w] = resized
         rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
@@ -131,7 +123,6 @@ class YoloOnnxStage:
             confidence = float(class_scores[class_id])
             if confidence < self._confidence:
                 continue
-
             cx, cy, w, h = (float(v) for v in row[:4])
             x1 = (cx - w / 2.0 - pad_x) / scale
             y1 = (cy - h / 2.0 - pad_y) / scale
@@ -141,7 +132,6 @@ class YoloOnnxStage:
             x2, y2 = min(float(width), x2), min(float(height), y2)
             if x2 <= x1 or y2 <= y1:
                 continue
-
             boxes.append([round(x1), round(y1), round(x2 - x1), round(y2 - y1)])
             scores.append(confidence)
             class_ids.append(class_id)
@@ -156,15 +146,8 @@ class YoloOnnxStage:
 
         if not boxes:
             return current
-
-        selected = self._cv2.dnn.NMSBoxes(
-            boxes,
-            scores,
-            self._confidence,
-            self._iou,
-        )
+        selected = self._cv2.dnn.NMSBoxes(boxes, scores, self._confidence, self._iou)
         indices = [int(i) for i in self._np.asarray(selected).reshape(-1)]
-
         detections = tuple(
             VisualEntity(
                 entity_id=f"det-{uuid4()}",
@@ -178,6 +161,8 @@ class YoloOnnxStage:
         return StageResult(
             entities=current.entities + detections,
             relations=current.relations,
+            landmarks=current.landmarks,
+            depth=current.depth,
             scene_label=current.scene_label,
             scene_confidence=current.scene_confidence,
         )

@@ -2,19 +2,22 @@
 
 VisionRig is Kaliv/ModelRig's dedicated visual-perception subsystem.
 
-**Boundary:** VisionRig owns pixels -> structured perception. ModelRig owns semantic interpretation, durable memory, cognition, and Consciousness Core world-state authority.
+**Boundary:** VisionRig owns visual input -> structured perception. ModelRig owns
+semantic interpretation, durable memory, cognition and Consciousness Core
+world-state authority.
 
-## Current state
+## Current state — V2B
 
-- strict, versioned perception contracts
+- `PerceptionEvent/v2`: entities, relations, typed pose/hand/face landmarks and relative depth
 - bounded live-frame queue with explicit dropped-frame accounting
 - optional OpenCV image/video/webcam sources
-- optional YOLOv8-style ONNX object detection
-- short-term per-source IoU tracking
-- checksum-verifiable model manifests with provenance/license metadata
-- runtime capability probing for OpenCV, ONNX Runtime and CUDA
-- FastAPI health/capabilities/world-state surface
-- zero camera/CUDA dependency in the core package
+- checksum-verified YOLOv8-style ONNX object detection + short-term IoU tracking
+- optional Tesseract OCR
+- optional MediaPipe pose/hands/face landmarks
+- optional generic ONNX monocular depth
+- optional ONNX visual embeddings in a bounded **sidecar store** (vectors never enter PerceptionEvent)
+- runtime probing for capture, OCR, landmarks, ONNX Runtime and CUDA
+- no silent model downloads; YOLO/depth/embedding artifacts require verified manifests
 
 ## Core service
 
@@ -27,29 +30,28 @@ python -m visionrig
 
 The service listens on `http://127.0.0.1:8110`.
 
-## Camera/video
+## Camera/video perception
 
-Capture only:
-
-```powershell
-pip install -e ".[capture,dev]"
-visionrig-capture --camera 0 --max-frames 100
-```
-
-Object detection + tracking:
+Install the features you intend to run:
 
 ```powershell
-pip install -e ".[inference,dev]"
-visionrig-capture --camera 0 --model-manifest .\models\detector.json --verbose
+pip install -e ".[capture,inference,ocr,landmarks,dev]"
 ```
 
-VisionRig deliberately does not download a detector automatically. See
-[docs/MODELS.md](docs/MODELS.md) for the verified artifact contract.
+Example:
 
-## Runtime rule
+```powershell
+visionrig-capture --camera 0 \
+  --model-manifest .\models\detector.json \
+  --depth-manifest .\models\depth.json \
+  --embedding-manifest .\models\embedding.json \
+  --ocr --landmarks --verbose
+```
 
-`PerceptionEvent` objects are observations with provenance and confidence.
-They are neither semantic truth nor permission to act.
+Each ONNX artifact is admitted by a manifest that pins SHA-256, source and
+artifact license. See [docs/MODELS.md](docs/MODELS.md).
+
+## Data flow
 
 ```text
 camera / screen / VR
@@ -58,10 +60,11 @@ camera / screen / VR
  bounded capture queue
         |
         v
- detector -> tracker -> later OCR/pose/depth
-        |
+ detector -> tracker -> OCR -> landmarks -> depth
+        |                              |
+        |                              +--> transient embedding sidecar
         v
- PerceptionEvent v1
+ PerceptionEvent v2
         |
         v
      ModelRig
@@ -70,5 +73,8 @@ camera / screen / VR
         v
  Consciousness Core
 ```
+
+Embeddings deliberately stay outside `PerceptionEvent`; future `.mrvision`
+recognition can consume them without flooding cognition with vectors.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

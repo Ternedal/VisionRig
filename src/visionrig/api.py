@@ -21,7 +21,7 @@ class IngestBody(BaseModel):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="VisionRig", version="0.2.0")
+    app = FastAPI(title="VisionRig", version="0.4.0")
     pipeline = PerceptionPipeline((PassthroughStage(),))
     runtime = VisionRuntime(pipeline)
 
@@ -30,7 +30,8 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v1",
+            "schema": "visionrig/health/v2",
+            "perception_schema": "visionrig/perception-event/v2",
             "stages": pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
         }

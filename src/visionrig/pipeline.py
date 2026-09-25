@@ -9,7 +9,14 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from uuid import uuid4
 
-from .contracts import PerceptionEvent, SourceDescriptor, VisualEntity, VisualRelation
+from .contracts import (
+    DepthObservation,
+    LandmarkObservation,
+    PerceptionEvent,
+    SourceDescriptor,
+    VisualEntity,
+    VisualRelation,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +31,8 @@ class Frame:
 class StageResult:
     entities: tuple[VisualEntity, ...] = ()
     relations: tuple[VisualRelation, ...] = ()
+    landmarks: tuple[LandmarkObservation, ...] = ()
+    depth: tuple[DepthObservation, ...] = ()
     scene_label: str | None = None
     scene_confidence: float | None = None
 
@@ -56,6 +65,8 @@ class PerceptionPipeline:
             frame_sequence=frame.sequence,
             entities=result.entities,
             relations=result.relations,
+            landmarks=result.landmarks,
+            depth=result.depth,
             scene_label=result.scene_label,
             scene_confidence=result.scene_confidence,
             dropped_frames=frame.dropped_frames,
@@ -79,9 +90,19 @@ class PassthroughStage:
             item if isinstance(item, VisualRelation) else VisualRelation.model_validate(item)
             for item in frame.payload.get("relations", ())
         )
+        landmarks = tuple(
+            item if isinstance(item, LandmarkObservation) else LandmarkObservation.model_validate(item)
+            for item in frame.payload.get("landmarks", ())
+        )
+        depth = tuple(
+            item if isinstance(item, DepthObservation) else DepthObservation.model_validate(item)
+            for item in frame.payload.get("depth", ())
+        )
         return StageResult(
             entities=current.entities + entities,
             relations=current.relations + relations,
+            landmarks=current.landmarks + landmarks,
+            depth=current.depth + depth,
             scene_label=frame.payload.get("scene_label", current.scene_label),
             scene_confidence=frame.payload.get("scene_confidence", current.scene_confidence),
         )

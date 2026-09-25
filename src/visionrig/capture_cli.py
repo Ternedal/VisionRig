@@ -1,30 +1,26 @@
-"""Camera/video runner for VisionRig capture and optional real perception."""
+"""Camera/video runner for VisionRig perception."""
 from __future__ import annotations
 
 import argparse
 import time
 
-from .pipeline import PerceptionPipeline
-from .pipeline_factory import build_yolo_pipeline
+from .pipeline_factory import build_pipeline
 from .runtime import VisionRuntime
 from .sources import CameraSource, VideoFileSource
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run VisionRig capture transport")
+    parser = argparse.ArgumentParser(description="Run VisionRig capture/perception")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--camera", type=int)
     group.add_argument("--video")
     parser.add_argument("--max-frames", type=int, default=100)
-    parser.add_argument(
-        "--model-manifest",
-        help="Verified visionrig/yolo-model-manifest/v1 JSON file",
-    )
-    parser.add_argument(
-        "--cpu",
-        action="store_true",
-        help="Do not select CUDAExecutionProvider even when available",
-    )
+    parser.add_argument("--model-manifest", help="YOLO model manifest")
+    parser.add_argument("--depth-manifest", help="depth model manifest")
+    parser.add_argument("--embedding-manifest", help="embedding model manifest")
+    parser.add_argument("--ocr", action="store_true")
+    parser.add_argument("--landmarks", action="store_true")
+    parser.add_argument("--cpu", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -33,12 +29,15 @@ def main() -> None:
         if args.camera is not None
         else VideoFileSource(args.video)
     )
-    pipeline = (
-        build_yolo_pipeline(args.model_manifest, prefer_cuda=not args.cpu)
-        if args.model_manifest
-        else PerceptionPipeline()
+    bundle = build_pipeline(
+        yolo_manifest=args.model_manifest,
+        depth_manifest=args.depth_manifest,
+        embedding_manifest=args.embedding_manifest,
+        ocr=args.ocr,
+        landmarks=args.landmarks,
+        prefer_cuda=not args.cpu,
     )
-    runtime = VisionRuntime(pipeline)
+    runtime = VisionRuntime(bundle.pipeline)
 
     started = time.monotonic()
     processed = 0
@@ -57,6 +56,7 @@ def main() -> None:
             if args.verbose:
                 print(
                     f"frame={event.frame_sequence} entities={len(event.entities)} "
+                    f"landmarks={len(event.landmarks)} depth={len(event.depth)} "
                     f"dropped={event.dropped_frames}"
                 )
     finally:
@@ -65,9 +65,11 @@ def main() -> None:
     elapsed = max(time.monotonic() - started, 1e-9)
     stats = runtime.stats()
     entity_count = len(last_event.entities) if last_event is not None else 0
+    embeddings = len(bundle.embedding_store) if bundle.embedding_store is not None else 0
     print(
         f"processed={processed} fps={processed / elapsed:.2f} "
-        f"dropped={stats.dropped_total} last_entities={entity_count}"
+        f"dropped={stats.dropped_total} last_entities={entity_count} "
+        f"embeddings={embeddings}"
     )
 
 

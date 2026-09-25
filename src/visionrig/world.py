@@ -34,5 +34,7 @@ class VisualWorld:
                 source_id=event.source.source_id if event else None,
                 entities=event.entities if event else (),
                 relations=event.relations if event else (),
+                landmarks=event.landmarks if event else (),
+                depth=event.depth if event else (),
                 scene_label=event.scene_label if event else None,
             )

@@ -28,11 +28,7 @@ class _Track:
 
 
 class IoUTrackingStage:
-    """Greedy per-source tracker.
-
-    It gives observations short-lived continuity only. A track id is not a
-    person identity and must never be promoted to durable identity authority.
-    """
+    """Greedy per-source tracker; track ids are not durable identities."""
 
     name = "iou_tracking"
 
@@ -97,6 +93,8 @@ class IoUTrackingStage:
         return StageResult(
             entities=tuple(entities),
             relations=current.relations,
+            landmarks=current.landmarks,
+            depth=current.depth,
             scene_label=current.scene_label,
             scene_confidence=current.scene_confidence,
         )
