@@ -16,6 +16,7 @@ VisionRig includes:
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - crash-safe webcam/screen reference producer
+- **live sensor/runtime observability for ModelRig/Kaliv UI**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -46,6 +47,13 @@ PerceptionEvent v3
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.
 
+## Operational status
+
+`GET /api/v1/sensors/status` exposes bounded operational telemetry for remote
+camera, screen and VR producers: accepted/rejected totals, active processing,
+per-source sequence, accumulated producer drops, device identity and last-seen
+UTC. The same snapshot is embedded in `/health`.
+
 See:
 - docs/ARCHITECTURE.md
 - docs/MODELS.md
@@ -58,3 +66,4 @@ See:
 - docs/KINECT_V2.md
 - docs/PERCEPTION_V3.md
 - docs/MODELRIG_BRIDGE.md
+- docs/OBSERVABILITY.md
