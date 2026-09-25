@@ -70,6 +70,7 @@ def build_pipeline(
     recognition_threshold: float = 0.75,
     ocr: bool = False,
     landmarks: bool = False,
+    kinect_depth: bool = False,
     spatial_relations: bool = True,
     prefer_cuda: bool = True,
 ) -> PipelineBundle:
@@ -116,6 +117,9 @@ def build_pipeline(
                 prefer_cuda=prefer_cuda,
             )
         )
+
+    if kinect_depth:
+        stages.append(KinectV2DepthStage())
 
     if profile is not None and embedding_manifest is None:
         raise ValueError("profile recognition requires an embedding_manifest")
