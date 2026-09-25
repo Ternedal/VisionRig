@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionrig"
-version = "0.12.0"
+version = "0.13.0"
 description = "Visual perception subsystem for ModelRig / Kaliv"
 requires-python = ">=3.11"
 dependencies = [
@@ -56,6 +56,7 @@ visionrig-capture = "visionrig.capture_cli:main"
 visionrig-gateway = "visionrig.gateway_main:main"
 visionrig-gateway-token = "visionrig.gateway_token:main"
 visionrig-producer = "visionrig.producer_cli:main"
+visionrig-profile = "visionrig.profile_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
