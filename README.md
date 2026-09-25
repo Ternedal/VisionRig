@@ -11,7 +11,8 @@ world-state authority.
 VisionRig includes:
 
 - typed PerceptionEvent/v2 observations
-- local webcam/image/video capture\n- Kinect v2 RGB + hardware depth + infrared capture
+- local webcam/image/video capture
+- Kinect v2 RGB + hardware depth + infrared capture
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - crash-safe webcam/screen reference producer
@@ -52,4 +53,5 @@ See:
 - docs/SPATIAL_SEMANTICS.md
 - docs/SENSOR_INGRESS.md
 - docs/SENSOR_GATEWAY.md
-- docs/PRODUCER.md\n- docs/KINECT_V2.md
+- docs/PRODUCER.md
+- docs/KINECT_V2.md
