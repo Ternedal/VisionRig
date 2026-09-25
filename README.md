@@ -10,10 +10,11 @@ world-state authority.
 
 VisionRig now includes:
 
-- `PerceptionEvent/v2` typed observations
+- typed `PerceptionEvent/v2` observations
 - local webcam/image/video capture
-- bounded encoded sensor ingress for Kaliv camera/screen/VR
-- **separate authenticated cross-device sensor gateway**
+- bounded encoded camera/screen/VR ingress
+- authenticated cross-device sensor gateway
+- **reference webcam/screen producer with correct drop/sequence semantics**
 - optional YOLO ONNX detection + short-term tracking
 - optional OCR, pose/hands/face landmarks and relative depth
 - bounded visual embedding sidecar
@@ -24,41 +25,43 @@ VisionRig now includes:
 
 ## Processes
 
-Core service, loopback only:
+Core perception service:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e ".[capture,dev]"
 python -m visionrig
 ```
 
-Optional cross-device ingress gateway:
+Cross-device gateway:
 
 ```powershell
 $env:VISIONRIG_GATEWAY_TOKEN="$(visionrig-gateway-token)"
-$env:VISIONRIG_GATEWAY_BIND_HOST="<explicit interface IP>"
+$env:VISIONRIG_GATEWAY_BIND_HOST="<explicit Tailscale/interface IP>"
 visionrig-gateway
 ```
 
-The gateway exposes frame ingress only and forwards to the loopback core service.
+Reference webcam/screen producer:
+
+```powershell
+pip install -e ".[producer]"
+$env:VISIONRIG_GATEWAY_URL="http://<Tailscale-IP>:8111"
+$env:VISIONRIG_PRODUCER_TOKEN="<gateway token>"
+visionrig-producer --screen 1 --source-id windows-screen --fps 3
+```
 
 ## Data flow
 
 ```text
 Kaliv / Windows / VR
        |
-  local capture
-       |
-       +----------------------+
-       |                      |
-       | remote               v
-       +------------> authenticated gateway
-                              |
-                              v
-                    loopback sensor ingress
-                              |
-                              v
+       +-- native producer
+       |        |
+       |        v
+       |   authenticated gateway
+       |        |
+       |        v
+       +--> loopback sensor ingress
+                 |
+                 v
  detector -> tracker -> OCR -> landmarks -> depth
         |                              |
         |                              +--> transient embedding sidecar
@@ -86,3 +89,4 @@ See:
 - [docs/MRVISION.md](docs/MRVISION.md)
 - [docs/SENSOR_INGRESS.md](docs/SENSOR_INGRESS.md)
 - [docs/SENSOR_GATEWAY.md](docs/SENSOR_GATEWAY.md)
+- [docs/PRODUCER.md](docs/PRODUCER.md)
