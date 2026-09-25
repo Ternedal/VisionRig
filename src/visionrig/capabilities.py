@@ -31,6 +31,7 @@ def probe_capabilities() -> dict[str, Any]:
             "camera": opencv,
             "image": opencv,
             "video": opencv,
+            "kinect_v2": _module_available("kinect_next"),
         },
         "perception": {
             "tesseract_python": _module_available("pytesseract"),
