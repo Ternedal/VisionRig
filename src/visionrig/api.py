@@ -61,7 +61,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v4",
+            "schema": "visionrig/health/v5",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -85,6 +85,7 @@ def create_app(
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": ["image/jpeg", "image/png", "image/webp"],
                 "overload_policy": "reject",
+                "runtime": asdict(sensor_ingress.stats()),
             },
         }
 
@@ -95,6 +96,11 @@ def create_app(
     @app.get("/api/v1/capture/stats")
     def capture_stats() -> dict[str, int]:
         return asdict(runtime.stats())
+
+    @app.get("/api/v1/sensors/status")
+    def sensor_status() -> dict[str, object]:
+        """Operational status for remote camera/screen/VR sensor producers."""
+        return asdict(sensor_ingress.stats())
 
     @app.post("/api/v1/perception/ingest", response_model=PerceptionEvent)
     def ingest(body: IngestBody) -> PerceptionEvent:
