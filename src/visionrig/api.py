@@ -2,15 +2,26 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.concurrency import run_in_threadpool
 
 from .capabilities import probe_capabilities
 from .contracts import PerceptionEvent, SourceDescriptor, WorldSnapshot
 from .journal import EventBatch
 from .pipeline import Frame, PassthroughStage, PerceptionPipeline
 from .runtime import VisionRuntime
+from .sensor_ingress import (
+    SensorDecodeError,
+    SensorFrameReceipt,
+    SensorIngress,
+    SensorIngressBusy,
+    SensorMediaTypeError,
+    SensorPayloadTooLarge,
+    SensorSequenceError,
+)
 
 
 class IngestBody(BaseModel):
@@ -21,20 +32,54 @@ class IngestBody(BaseModel):
     dropped_frames: int = Field(default=0, ge=0)
 
 
-def create_app() -> FastAPI:
-    app = FastAPI(title="VisionRig", version="0.4.0")
-    pipeline = PerceptionPipeline((PassthroughStage(),))
-    runtime = VisionRuntime(pipeline)
+async def _bounded_request_body(request: Request, limit: int) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid Content-Length") from exc
+        if declared < 0:
+            raise HTTPException(status_code=400, detail="invalid Content-Length")
+        if declared > limit:
+            raise HTTPException(status_code=413, detail="sensor frame payload too large")
+
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > limit:
+            raise HTTPException(status_code=413, detail="sensor frame payload too large")
+    return bytes(body)
+
+
+def create_app(
+    pipeline: PerceptionPipeline | None = None,
+    *,
+    max_sensor_frame_bytes: int = 8 * 1024 * 1024,
+) -> FastAPI:
+    app = FastAPI(title="VisionRig", version="0.6.0")
+    selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
+    runtime = VisionRuntime(selected_pipeline)
+    sensor_ingress = SensorIngress(
+        runtime,
+        max_payload_bytes=max_sensor_frame_bytes,
+    )
 
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v2",
+            "schema": "visionrig/health/v3",
             "perception_schema": "visionrig/perception-event/v2",
-            "stages": pipeline.stages,
+            "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
+            "sensor_ingress": {
+                "schema": "visionrig/sensor-ingress/v1",
+                "max_frame_bytes": sensor_ingress.max_payload_bytes,
+                "media_types": ["image/jpeg", "image/png", "image/webp"],
+                "overload_policy": "reject",
+            },
         }
 
     @app.get("/api/v1/capabilities")
@@ -56,6 +101,44 @@ def create_app() -> FastAPI:
                     dropped_frames=body.dropped_frames,
                 )
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/v1/frames/ingest", response_model=SensorFrameReceipt)
+    async def ingest_sensor_frame(
+        request: Request,
+        source_id: str = Query(min_length=1, max_length=128),
+        source_type: Literal["camera", "screen", "vr", "image"] = Query(),
+        frame_sequence: int = Query(ge=0),
+        device: str | None = Query(default=None, max_length=256),
+        dropped_frames: int = Query(default=0, ge=0),
+    ) -> SensorFrameReceipt:
+        content_type = request.headers.get("content-type", "")
+        payload = await _bounded_request_body(
+            request,
+            sensor_ingress.max_payload_bytes,
+        )
+        try:
+            return await run_in_threadpool(
+                sensor_ingress.process_encoded,
+                source_id=source_id,
+                source_type=source_type,
+                frame_sequence=frame_sequence,
+                payload=payload,
+                content_type=content_type,
+                device=device,
+                dropped_frames=dropped_frames,
+            )
+        except SensorIngressBusy as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        except SensorSequenceError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SensorPayloadTooLarge as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except SensorMediaTypeError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        except SensorDecodeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
 
