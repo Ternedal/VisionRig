@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from . import __version__
 from .capabilities import probe_capabilities
 from .contracts import PerceptionEvent, SourceDescriptor, WorldSnapshot
 from .http_io import read_bounded_body
@@ -38,7 +39,7 @@ def create_app(
     *,
     max_sensor_frame_bytes: int = 8 * 1024 * 1024,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig", version="0.6.0")
+    app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
     runtime = VisionRuntime(selected_pipeline)
     sensor_ingress = SensorIngress(
