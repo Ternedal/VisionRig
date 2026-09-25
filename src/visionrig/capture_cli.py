@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import time
 
+from .kinect_v2 import KinectV2Source
 from .pipeline_factory import build_pipeline
 from .runtime import VisionRuntime
 from .sources import CameraSource, VideoFileSource
@@ -14,6 +15,7 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--camera", type=int)
     group.add_argument("--video")
+    group.add_argument("--kinect-v2", action="store_true")
     parser.add_argument("--max-frames", type=int, default=100)
     parser.add_argument("--model-manifest", help="YOLO model manifest")
     parser.add_argument("--depth-manifest", help="depth model manifest")
@@ -24,17 +26,19 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    source = (
-        CameraSource(args.camera)
-        if args.camera is not None
-        else VideoFileSource(args.video)
-    )
+    if args.kinect_v2:
+        source = KinectV2Source()
+    elif args.camera is not None:
+        source = CameraSource(args.camera)
+    else:
+        source = VideoFileSource(args.video)
     bundle = build_pipeline(
         yolo_manifest=args.model_manifest,
         depth_manifest=args.depth_manifest,
         embedding_manifest=args.embedding_manifest,
         ocr=args.ocr,
         landmarks=args.landmarks,
+        kinect_depth=args.kinect_v2,
         prefer_cuda=not args.cpu,
     )
     runtime = VisionRuntime(bundle.pipeline)

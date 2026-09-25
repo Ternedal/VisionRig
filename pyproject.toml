@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionrig"
-version = "0.9.0"
+version = "0.10.0"
 description = "Visual perception subsystem for ModelRig / Kaliv"
 requires-python = ">=3.11"
 dependencies = [
@@ -38,6 +38,10 @@ landmarks = [
 ]
 profile = [
   "cryptography>=46,<51",
+]
+kinect-v2 = [
+  "kinect-next>=2.0,<3",
+  "numpy>=2.1,<3",
 ]
 dev = [
   "cryptography>=46,<51",

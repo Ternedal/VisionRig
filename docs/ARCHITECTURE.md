@@ -8,7 +8,7 @@ emotion, memory, actions or Consciousness Core state.
 
 ```text
 Input adapters
- camera | screen | Kaliv VR | image/video
+ camera | Kinect v2 | screen | Kaliv VR | image/video
                     |
                     v
           BoundedFrameQueue
@@ -21,7 +21,7 @@ Input adapters
        | detect + track           |
        | OCR                      |
        | pose / hands / face      |
-       | relative depth           |
+       | monocular/hardware depth  |
        | visual embeddings        |
        +------------+-------------+
                     |
@@ -71,7 +71,7 @@ this the safe point for the breaking contract correction.
 Strict contracts, pipeline protocol, ephemeral world snapshot and local API.
 
 ### V1 — capture/runtime — complete
-Webcam/image/video sources, bounded frame queue, backpressure and capability probing.
+Webcam/image/video/Kinect v2 sources, bounded frame queue, backpressure and capability probing.
 
 ### V2A — detection/tracking — complete
 Verified YOLO-style ONNX detector and per-source short-term IoU tracking.
