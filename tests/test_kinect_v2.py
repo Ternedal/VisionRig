@@ -2,7 +2,7 @@ import pytest
 
 from visionrig.contracts import BoundingBox, SourceDescriptor, VisualEntity
 from visionrig.kinect_v2 import KinectV2DepthStage, KinectV2FrameSet, KinectV2Source
-from visionrig.pipeline import Frame, StageResult
+from visionrig.pipeline import Frame, StageResult\nfrom visionrig.pipeline_factory import build_pipeline
 
 
 class _Sampler:
@@ -94,3 +94,8 @@ def test_kinect_depth_stage_is_noop_without_sampler() -> None:
 def test_kinect_depth_range_must_be_valid() -> None:
     with pytest.raises(ValueError):
         KinectV2DepthStage(min_distance_m=2.0, max_distance_m=1.0)
+
+
+def test_pipeline_can_enable_kinect_hardware_depth() -> None:
+    bundle = build_pipeline(kinect_depth=True, spatial_relations=False)
+    assert "kinect_v2_depth" in bundle.pipeline.stages
