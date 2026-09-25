@@ -1,4 +1,4 @@
-from visionrig.contracts import BoundingBox, SourceDescriptor, VisualEntity
+from visionrig.contracts import BoundingBox, DepthObservation, SourceDescriptor, VisualEntity
 from visionrig.pipeline import Frame, StageResult
 from visionrig.spatial import SpatialRelationStage
 
@@ -96,3 +96,57 @@ def test_spatial_stage_is_bounded() -> None:
     stage = SpatialRelationStage(max_generated_relations=5)
     result = stage.process(FRAME, StageResult(entities=entities))
     assert len(result.relations) <= 5
+
+
+def test_spatial_stage_uses_metric_depth_for_front_behind() -> None:
+    front = entity("front", x=0.10, y=0.10, width=0.20, height=0.20, confidence=0.9)
+    back = entity("back", x=0.12, y=0.12, width=0.20, height=0.20, confidence=0.8)
+    depth = (
+        DepthObservation(
+            subject_entity_id="front",
+            relative_depth=0.2,
+            distance_m=1.25,
+            confidence=0.95,
+            method="hardware-depth",
+        ),
+        DepthObservation(
+            subject_entity_id="back",
+            relative_depth=0.7,
+            distance_m=2.10,
+            confidence=0.90,
+            method="hardware-depth",
+        ),
+    )
+
+    result = SpatialRelationStage(min_depth_gap_m=0.20).process(
+        FRAME,
+        StageResult(entities=(front, back), depth=depth),
+    )
+    keys = relation_keys(result)
+    assert ("front", "in_front_of", "back") in keys
+    assert ("back", "behind", "front") in keys
+
+
+def test_spatial_stage_does_not_infer_depth_order_from_relative_depth_only() -> None:
+    first = entity("first", x=0.10, y=0.10, width=0.20, height=0.20)
+    second = entity("second", x=0.12, y=0.12, width=0.20, height=0.20)
+    depth = (
+        DepthObservation(
+            subject_entity_id="first",
+            relative_depth=0.1,
+            method="onnx-monocular-relative",
+        ),
+        DepthObservation(
+            subject_entity_id="second",
+            relative_depth=0.9,
+            method="onnx-monocular-relative",
+        ),
+    )
+
+    result = SpatialRelationStage().process(
+        FRAME,
+        StageResult(entities=(first, second), depth=depth),
+    )
+    keys = relation_keys(result)
+    assert ("first", "in_front_of", "second") not in keys
+    assert ("second", "behind", "first") not in keys
