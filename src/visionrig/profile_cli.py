@@ -176,7 +176,7 @@ def main() -> None:
             return
 
         raise RuntimeError(f"unsupported command: {args.command}")
-    except (MrVisionError, ProfileLoadError, OSError, ValueError) as exc:
+    except (MrVisionError, ProfileLoadError, OSError, ValueError, RuntimeError) as exc:
         raise SystemExit(f"visionrig-profile: {exc}") from exc
 
 
