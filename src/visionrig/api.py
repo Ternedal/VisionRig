@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from .capabilities import probe_capabilities
 from .contracts import PerceptionEvent, SourceDescriptor, WorldSnapshot
+from .journal import EventBatch
 from .pipeline import Frame, PassthroughStage, PerceptionPipeline
 from .runtime import VisionRuntime
 
@@ -57,6 +58,13 @@ def create_app() -> FastAPI:
             )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/v1/perception/events", response_model=EventBatch)
+    def events(
+        after_cursor: int = Query(default=0, ge=0),
+        limit: int = Query(default=64, ge=1, le=256),
+    ) -> EventBatch:
+        return runtime.events(after_cursor=after_cursor, limit=limit)
 
     @app.get("/api/v1/world", response_model=WorldSnapshot)
     def get_world() -> WorldSnapshot:

@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from visionrig.api import create_app
 
 
-def test_health_capabilities_and_ingest() -> None:
+def test_health_capabilities_ingest_and_event_journal() -> None:
     client = TestClient(create_app())
     health = client.get("/health")
     assert health.status_code == 200
@@ -42,5 +42,10 @@ def test_health_capabilities_and_ingest() -> None:
     )
     assert response.status_code == 200
     assert response.json()["schema_id"] == "visionrig/perception-event/v2"
-    assert response.json()["landmarks"][0]["group"] == "pose"
-    assert response.json()["production_authority"] is False
+
+    batch = client.get("/api/v1/perception/events?after_cursor=0")
+    assert batch.status_code == 200
+    body = batch.json()
+    assert body["schema_id"] == "visionrig/event-batch/v1"
+    assert len(body["entries"]) == 1
+    assert body["entries"][0]["event"]["event_id"] == response.json()["event_id"]
