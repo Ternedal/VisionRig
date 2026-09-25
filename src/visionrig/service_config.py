@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 
+from .modelrig_bridge import ModelRigPerceptionPublisher
 from .pipeline_factory import PipelineBundle, build_pipeline
 from .profile import MrVisionProfile
 from .profile_io import load_encrypted_profile
@@ -53,6 +54,8 @@ class ServiceConfig:
     spatial_relations: bool = True
     prefer_cuda: bool = True
     max_sensor_frame_bytes: int = 8 * 1024 * 1024
+    modelrig_bridge: bool = False
+    modelrig_worker_url: str = "http://127.0.0.1:8099"
 
     @classmethod
     def from_env(cls) -> "ServiceConfig":
@@ -97,6 +100,11 @@ class ServiceConfig:
             spatial_relations=_flag("VISIONRIG_SPATIAL_RELATIONS", True),
             prefer_cuda=not _flag("VISIONRIG_FORCE_CPU"),
             max_sensor_frame_bytes=limit,
+            modelrig_bridge=_flag("VISIONRIG_MODELRIG_BRIDGE"),
+            modelrig_worker_url=os.getenv(
+                "VISIONRIG_MODELRIG_WORKER_URL",
+                "http://127.0.0.1:8099",
+            ),
         )
 
     def load_profile(self) -> MrVisionProfile | None:
@@ -120,3 +128,9 @@ class ServiceConfig:
             spatial_relations=self.spatial_relations,
             prefer_cuda=self.prefer_cuda,
         )
+
+
+    def build_modelrig_publisher(self) -> ModelRigPerceptionPublisher | None:
+        if not self.modelrig_bridge:
+            return None
+        return ModelRigPerceptionPublisher(self.modelrig_worker_url)
