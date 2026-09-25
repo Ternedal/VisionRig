@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionrig"
-version = "0.4.0"
+version = "0.5.0"
 description = "Visual perception subsystem for ModelRig / Kaliv"
 requires-python = ">=3.11"
 dependencies = [
@@ -30,7 +30,11 @@ landmarks = [
   "mediapipe>=0.10,<1",
   "opencv-python>=4.10,<5",
 ]
+profile = [
+  "cryptography>=46,<51",
+]
 dev = [
+  "cryptography>=46,<51",
   "httpx>=0.28,<1",
   "numpy>=2.1,<3",
   "pytest>=8.3,<9",
