@@ -6,65 +6,53 @@ VisionRig is Kaliv/ModelRig's dedicated visual-perception subsystem.
 semantic interpretation, durable memory, cognition and Consciousness Core
 world-state authority.
 
-## Current state — V2B
+## Current state — V3 + sensor ingress
 
 - `PerceptionEvent/v2`: entities, relations, typed pose/hand/face landmarks and relative depth
-- bounded live-frame queue with explicit dropped-frame accounting
-- optional OpenCV image/video/webcam sources
-- checksum-verified YOLOv8-style ONNX object detection + short-term IoU tracking
+- bounded live-frame transport with explicit dropped-frame accounting
+- local OpenCV image/video/webcam sources
+- **encoded sensor ingress for Kaliv camera/screen/VR producers**
+- optional YOLOv8-style ONNX object detection
+- short-term per-source IoU tracking
 - optional Tesseract OCR
 - optional MediaPipe pose/hands/face landmarks
 - optional generic ONNX monocular depth
-- optional ONNX visual embeddings in a bounded **sidecar store** (vectors never enter PerceptionEvent)
+- optional ONNX visual embeddings in a bounded sidecar store
+- encrypted revisioned `.mrvision` profiles and non-authoritative runtime recognition hints
 - runtime probing for capture, OCR, landmarks, ONNX Runtime and CUDA
-- no silent model downloads; YOLO/depth/embedding artifacts require verified manifests
+- no silent model downloads; ONNX artifacts require verified manifests
 
 ## Core service
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
+pip install -e ".[capture,dev]"
 python -m visionrig
 ```
 
 The service listens on `http://127.0.0.1:8110`.
 
-## Camera/video perception
-
-Install the features you intend to run:
-
-```powershell
-pip install -e ".[capture,inference,ocr,landmarks,dev]"
-```
-
-Example:
-
-```powershell
-visionrig-capture --camera 0 \
-  --model-manifest .\models\detector.json \
-  --depth-manifest .\models\depth.json \
-  --embedding-manifest .\models\embedding.json \
-  --ocr --landmarks --verbose
-```
-
-Each ONNX artifact is admitted by a manifest that pins SHA-256, source and
-artifact license. See [docs/MODELS.md](docs/MODELS.md).
+A production perception pipeline is configured through environment variables;
+see [docs/SENSOR_INGRESS.md](docs/SENSOR_INGRESS.md).
 
 ## Data flow
 
 ```text
-camera / screen / VR
+camera / screen / Kaliv VR
         |
-        v
- bounded capture queue
-        |
+        | local capture OR encoded frame ingress
         v
  detector -> tracker -> OCR -> landmarks -> depth
         |                              |
         |                              +--> transient embedding sidecar
+        |                                         |
+        |                                    .mrvision match
         v
  PerceptionEvent v2
+        |
+        v
+ bounded event journal
         |
         v
      ModelRig
@@ -74,7 +62,10 @@ camera / screen / VR
  Consciousness Core
 ```
 
-Embeddings deliberately stay outside `PerceptionEvent`; future `.mrvision`
-recognition can consume them without flooding cognition with vectors.
+Recognition hints remain non-authoritative. Raw pixels and embedding vectors do
+not enter Consciousness Core.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+See:
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/MRVISION.md](docs/MRVISION.md)
+- [docs/SENSOR_INGRESS.md](docs/SENSOR_INGRESS.md)
