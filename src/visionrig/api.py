@@ -13,6 +13,7 @@ from .capabilities import probe_capabilities
 from .contracts import PerceptionEvent, SourceDescriptor, WorldSnapshot
 from .http_io import read_bounded_body
 from .journal import EventBatch
+from .modelrig_bridge import ModelRigPerceptionPublisher
 from .pipeline import Frame, PassthroughStage, PerceptionPipeline
 from .runtime import VisionRuntime
 from .sensor_ingress import (
@@ -38,10 +39,18 @@ def create_app(
     pipeline: PerceptionPipeline | None = None,
     *,
     max_sensor_frame_bytes: int = 8 * 1024 * 1024,
+    modelrig_publisher: ModelRigPerceptionPublisher | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
-    runtime = VisionRuntime(selected_pipeline)
+    runtime = VisionRuntime(
+        selected_pipeline,
+        event_sinks=(
+            (modelrig_publisher,)
+            if modelrig_publisher is not None
+            else ()
+        ),
+    )
     sensor_ingress = SensorIngress(
         runtime,
         max_payload_bytes=max_sensor_frame_bytes,
@@ -56,6 +65,21 @@ def create_app(
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
+            "event_sinks": asdict(runtime.sink_stats()),
+            "modelrig_bridge": (
+                {
+                    "enabled": True,
+                    "endpoint": modelrig_publisher.endpoint,
+                    "stats": asdict(modelrig_publisher.stats()),
+                    "last_status": (
+                        modelrig_publisher.last_result.status
+                        if modelrig_publisher.last_result is not None
+                        else None
+                    ),
+                }
+                if modelrig_publisher is not None
+                else {"enabled": False}
+            ),
             "sensor_ingress": {
                 "schema": "visionrig/sensor-ingress/v1",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
@@ -134,6 +158,9 @@ def create_app(
     @app.get("/api/v1/world", response_model=WorldSnapshot)
     def get_world() -> WorldSnapshot:
         return runtime.snapshot()
+
+    if modelrig_publisher is not None:
+        app.add_event_handler("shutdown", modelrig_publisher.close)
 
     return app
 
