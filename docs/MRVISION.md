@@ -78,3 +78,64 @@ pip install -e ".[profile]"
 ```
 
 Do not commit `.mrvision` files or keys to Git.
+
+
+## Practical enrollment workflow
+
+VisionRig now exposes `visionrig-profile` as the operator-facing training
+surface. The word "training" here means deriving and storing enrollment
+embeddings; it does not fine-tune the shared detector or embedding model.
+
+Create a new encrypted profile and a separate local key file:
+
+~~~powershell
+visionrig-profile init `
+  --profile D:\VisionRig\profiles\person.mrvision `
+  --key-file D:\VisionRig\keys\person.key
+~~~
+
+Enroll one or more curated samples:
+
+~~~powershell
+visionrig-profile enroll `
+  --profile D:\VisionRig\profiles\person.mrvision `
+  --key-file D:\VisionRig\keys\person.key `
+  --embedding-manifest D:\VisionRig\models\embed.json `
+  --kind face `
+  --label "Anders" `
+  --subject-ref person:anders `
+  --image D:\Enrollment\front.jpg `
+  --image D:\Enrollment\side.jpg
+~~~
+
+For a sample that contains more than the intended subject, use an optional
+normalized crop:
+
+~~~text
+--crop X Y WIDTH HEIGHT
+~~~
+
+Each image becomes one revisioned enrollment sample. Its provenance is stored as
+an SHA-256 content reference; the local filesystem path and raw image bytes are
+not stored in the profile.
+
+Inspect metadata without exposing vectors:
+
+~~~powershell
+visionrig-profile inspect `
+  --profile D:\VisionRig\profiles\person.mrvision `
+  --key-file D:\VisionRig\keys\person.key
+~~~
+
+Revoke a bad/outdated sample:
+
+~~~powershell
+visionrig-profile revoke `
+  --profile D:\VisionRig\profiles\person.mrvision `
+  --key-file D:\VisionRig\keys\person.key `
+  --enrollment-id venr-... `
+  --reason "outdated sample"
+~~~
+
+The key is never accepted as a command-line value. Profile writes are atomic and
+initialization refuses to overwrite an existing profile or key.

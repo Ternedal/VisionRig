@@ -4,7 +4,13 @@ from __future__ import annotations
 import base64
 from pathlib import Path
 
-from .profile import MrVisionError, MrVisionProfile, open_profile
+from .profile import (
+    MrVisionError,
+    MrVisionProfile,
+    generate_profile_key,
+    open_profile,
+    seal_profile,
+)
 
 
 class ProfileLoadError(MrVisionError):
@@ -55,3 +61,78 @@ def load_encrypted_profile(
         raise ProfileLoadError(
             f"unable to authenticate/decrypt .mrvision profile: {profile_file}"
         ) from exc
+
+
+def write_profile_key(path: str | Path, key: bytes) -> None:
+    if not isinstance(key, bytes) or len(key) != 32:
+        raise ProfileLoadError("profile key must be exactly 32 bytes")
+    key_path = Path(path)
+    if key_path.exists():
+        raise ProfileLoadError(f"refusing to overwrite existing key file: {key_path}")
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = key_path.with_name(key_path.name + ".tmp")
+    try:
+        temporary.write_bytes(key)
+        try:
+            temporary.chmod(0o600)
+        except OSError:
+            pass
+        temporary.replace(key_path)
+    except OSError as exc:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise ProfileLoadError(f"unable to write .mrvision key file: {key_path}") from exc
+
+
+def save_encrypted_profile(
+    profile: MrVisionProfile,
+    profile_path: str | Path,
+    key_path: str | Path,
+) -> None:
+    if not isinstance(profile, MrVisionProfile):
+        raise TypeError("profile must be MrVisionProfile")
+    destination = Path(profile_path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    key = read_profile_key(key_path)
+    blob = seal_profile(profile, key)
+    temporary = destination.with_name(destination.name + ".tmp")
+    try:
+        temporary.write_bytes(blob)
+        temporary.replace(destination)
+    except OSError as exc:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise ProfileLoadError(
+            f"unable to write .mrvision profile: {destination}"
+        ) from exc
+
+
+def initialize_encrypted_profile(
+    profile: MrVisionProfile,
+    profile_path: str | Path,
+    key_path: str | Path,
+) -> None:
+    destination = Path(profile_path)
+    key_destination = Path(key_path)
+    if destination.exists():
+        raise ProfileLoadError(
+            f"refusing to overwrite existing .mrvision profile: {destination}"
+        )
+    key = generate_profile_key()
+    write_profile_key(key_destination, key)
+    try:
+        blob = seal_profile(profile, key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_name(destination.name + ".tmp")
+        temporary.write_bytes(blob)
+        temporary.replace(destination)
+    except Exception:
+        try:
+            key_destination.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise

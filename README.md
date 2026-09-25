@@ -21,7 +21,7 @@ VisionRig includes:
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
 - bounded 2D relations plus sensor-backed front/behind depth ordering
 - bounded full-frame/entity embedding sidecar
-- encrypted, revisioned .mrvision profiles
+- encrypted, revisioned .mrvision profiles + image enrollment/revocation CLI
 - **service-loaded face/body/object/place recognition hints**
 - bounded cursor event journal for ModelRig
 - opt-in semantic PerceptionEvent/v3 -> Consciousness Core bridge with change suppression
