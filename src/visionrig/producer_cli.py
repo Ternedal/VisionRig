@@ -20,6 +20,7 @@ class _ProducerClient(Protocol):
         *,
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
+        applied_revision: int | None = None,
     ): ...
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"): ...
     def stats(self): ...
@@ -95,6 +96,7 @@ def _run_controlled_capture(
                     producer.send_heartbeat(
                         capabilities=capabilities,
                         capture_active=False,
+                        applied_revision=desired.revision,
                     )
                     sleep(control_poll_seconds)
                     continue
@@ -108,6 +110,7 @@ def _run_controlled_capture(
                 producer.send_heartbeat(
                     capabilities=capabilities,
                     capture_active=True,
+                    applied_revision=desired.revision,
                 )
 
             if source is None:
