@@ -18,6 +18,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from .contracts import PerceptionEvent, SourceDescriptor
 from .pipeline import Frame
 from .runtime import VisionRuntime
+from .sensor_packet import (
+    ArrayMetricDepthSampler,
+    SENSOR_PACKET_MEDIA_TYPE,
+    SensorPacketError,
+    decode_sensor_packet,
+)
 
 
 SensorSourceType = Literal["camera", "screen", "vr", "image"]
@@ -345,6 +351,102 @@ class SensorIngress:
                 active_processing=self._processing.locked(),
                 sources=sources,
             )
+
+    def process_packet(
+        self,
+        *,
+        source_id: str,
+        source_type: SensorSourceType,
+        frame_sequence: int,
+        payload: bytes,
+        content_type: str,
+        device: str | None = None,
+        dropped_frames: int = 0,
+    ) -> SensorFrameReceipt:
+        if not payload:
+            self._increment_rejection("decode")
+            raise SensorDecodeError("sensor packet payload is empty")
+        if len(payload) > self._max_payload_bytes:
+            self._increment_rejection("payload")
+            raise SensorPayloadTooLarge(
+                f"sensor packet exceeds {self._max_payload_bytes} byte limit"
+            )
+        if frame_sequence < 0:
+            self._increment_rejection("sequence")
+            raise SensorSequenceError("frame_sequence must be >= 0")
+        if dropped_frames < 0:
+            self._increment_rejection("sequence")
+            raise SensorSequenceError("dropped_frames must be >= 0")
+
+        normalized_content_type = content_type.split(";", 1)[0].strip().lower()
+        if normalized_content_type != SENSOR_PACKET_MEDIA_TYPE:
+            self._increment_rejection("media_type")
+            raise SensorMediaTypeError(
+                f"multimodal sensor packets must use {SENSOR_PACKET_MEDIA_TYPE}"
+            )
+
+        if not self._processing.acquire(blocking=False):
+            self._increment_rejection("busy")
+            raise SensorIngressBusy("VisionRig sensor ingress is busy")
+
+        try:
+            previous = self._last_sequence.get(source_id)
+            if previous is not None and frame_sequence <= previous:
+                self._increment_rejection("sequence")
+                raise SensorSequenceError(
+                    "frame_sequence must increase monotonically per source"
+                )
+
+            try:
+                packet = decode_sensor_packet(payload)
+                image = self._decoder.decode(
+                    packet.rgb_payload,
+                    packet.rgb_content_type,
+                )
+            except (SensorPacketError, SensorDecodeError) as exc:
+                self._increment_rejection("decode")
+                raise SensorDecodeError(str(exc)) from exc
+
+            sensor_data: dict[str, Any] = {}
+            if packet.depth_mm is not None:
+                sensor_data["depth_mm"] = packet.depth_mm
+                sensor_data["metric_depth_sampler"] = ArrayMetricDepthSampler(
+                    packet.depth_mm
+                )
+            if packet.infrared is not None:
+                sensor_data["infrared"] = packet.infrared
+
+            event = self._runtime.process_direct(
+                Frame(
+                    source=SourceDescriptor(
+                        source_id=source_id,
+                        source_type=source_type,
+                        device=device,
+                    ),
+                    sequence=frame_sequence,
+                    payload=image,
+                    dropped_frames=dropped_frames,
+                    sensor_data=sensor_data,
+                )
+            )
+            self._last_sequence[source_id] = frame_sequence
+            self._record_accept(
+                source_id=source_id,
+                source_type=source_type,
+                device=device,
+                frame_sequence=event.frame_sequence,
+                dropped_frames=event.dropped_frames,
+            )
+            return SensorFrameReceipt(
+                source_id=source_id,
+                source_type=source_type,
+                frame_sequence=event.frame_sequence,
+                event_id=event.event_id,
+                dropped_frames=event.dropped_frames,
+                production_authority=False,
+            )
+        finally:
+            self._processing.release()
 
     def process_encoded(
         self,
