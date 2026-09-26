@@ -69,6 +69,19 @@ def create_app(
     registry = sensor_registry or SensorRegistry()
     sensor_changes = sensor_change_journal or SensorChangeJournal()
 
+    def append_sensor_change(
+        *,
+        kind,
+        source_id: str,
+        payload: dict[str, object] | None = None,
+    ):
+        return sensor_changes.append(
+            kind=kind,
+            source_id=source_id,
+            payload=payload,
+            state_revision=registry.state_revision,
+        )
+
     def runtime_source_for(source_id: str):
         return next(
             (
@@ -87,7 +100,7 @@ def create_app(
     ) -> None:
         current_discovery = registry.get_discovery(source_id)
         if not was_registered and registry.contains(source_id):
-            sensor_changes.append(
+            append_sensor_change(
                 kind="registered",
                 source_id=source_id,
                 payload={
@@ -107,7 +120,7 @@ def create_app(
                 or previous_discovery.capabilities != current_discovery.capabilities
             )
         ):
-            sensor_changes.append(
+            append_sensor_change(
                 kind="discovery_changed",
                 source_id=source_id,
                 payload={
@@ -124,7 +137,7 @@ def create_app(
             or previous_runtime.capture_active != current_runtime.capture_active
             or previous_runtime.applied_revision != current_runtime.applied_revision
         ):
-            sensor_changes.append(
+            append_sensor_change(
                 kind="runtime_changed",
                 source_id=source_id,
                 payload={
@@ -225,7 +238,8 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v1",
+            "schema": "visionrig/sensor-fleet-summary/v2",
+            "state_revision": registry.state_revision,
             "total": len(source_ids),
             "lifecycle": lifecycle_counts,
             "presence": presence_counts,
@@ -240,7 +254,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v22",
+            "schema": "visionrig/health/v23",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -267,7 +281,8 @@ def create_app(
                 "runtime": asdict(sensor_ingress.stats()),
             },
             "sensor_registry": {
-                "schema": "visionrig/sensor-registry/v6",
+                "schema": "visionrig/sensor-registry/v7",
+                "state_revision": registry.state_revision,
                 "entries": len(registry.list()),
                 "discovered": len(registry.list_discovery()),
                 "desired_state_schema": "visionrig/sensor-desired-state/v2",
@@ -282,7 +297,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v2",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v3",
             },
         }
 
@@ -400,7 +415,8 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v2",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v3",
+            "sensor_state_revision": registry.state_revision,
             "change_stream_id": sensor_changes.stream_id,
             "change_cursor": baseline_cursor,
             "catalog": sensor_catalog(),
@@ -428,7 +444,7 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if previous.retired_utc is None and metadata.retired_utc is not None:
             desired = registry.desired_state(source_id)
-            sensor_changes.append(
+            append_sensor_change(
                 kind="retired",
                 source_id=source_id,
                 payload={
@@ -452,7 +468,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if previous.retired_utc is not None and metadata.retired_utc is None:
-            sensor_changes.append(
+            append_sensor_change(
                 kind="restored",
                 source_id=source_id,
                 payload={"enabled": metadata.enabled},
@@ -497,7 +513,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         sensor_ingress.forget_source(source_id)
-        sensor_changes.append(
+        append_sensor_change(
             kind="forgotten",
             source_id=source_id,
         )
@@ -521,7 +537,7 @@ def create_app(
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         if not was_registered:
-            sensor_changes.append(
+            append_sensor_change(
                 kind="registered",
                 source_id=source_id,
                 payload={"metadata": asdict(metadata)},
@@ -533,7 +549,7 @@ def create_app(
             or previous.role != metadata.role
         )
         if metadata_fields_changed:
-            sensor_changes.append(
+            append_sensor_change(
                 kind="metadata_changed",
                 source_id=source_id,
                 payload={
@@ -548,7 +564,7 @@ def create_app(
             previous.enabled != metadata.enabled
             or previous_revision != current_revision
         ):
-            sensor_changes.append(
+            append_sensor_change(
                 kind="control_changed",
                 source_id=source_id,
                 payload={
