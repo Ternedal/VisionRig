@@ -156,9 +156,9 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v15"
+    assert health["schema"] == "visionrig/health/v16"
     assert health["sensor_registry"] == {
-        "schema": "visionrig/sensor-registry/v5",
+        "schema": "visionrig/sensor-registry/v6",
         "entries": 1,
         "discovered": 0,
         "desired_state_schema": "visionrig/sensor-desired-state/v2",
@@ -365,3 +365,70 @@ def test_retire_disables_sensor_with_revision_and_restore_stays_disabled() -> No
     )
     assert enabled.status_code == 200
     assert registry.desired_state("camera-retire").revision == 2
+
+
+def test_forget_requires_retired_and_offline_then_allows_fresh_registration() -> None:
+    registry = SensorRegistry()
+    registry.observe(
+        "forgotten-sensor",
+        source_type="camera",
+        device="old-camera",
+        capabilities=("rgb",),
+    )
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    not_retired = client.delete("/api/v1/sensors/forgotten-sensor")
+    assert not_retired.status_code == 409
+
+    retired = client.post("/api/v1/sensors/forgotten-sensor/retire")
+    assert retired.status_code == 200
+
+    forgotten = client.delete("/api/v1/sensors/forgotten-sensor")
+    assert forgotten.status_code == 200
+    assert forgotten.json() == {
+        "schema": "visionrig/sensor-forget/v1",
+        "status": "forgotten",
+        "source_id": "forgotten-sensor",
+    }
+    assert registry.contains("forgotten-sensor") is False
+    assert client.get("/api/v1/sensors/catalog").json()["sources"] == []
+
+    fresh = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "forgotten-sensor",
+            "source_type": "vr",
+            "device": "new-quest",
+            "capabilities": ["passthrough"],
+            "capture_active": True,
+            "applied_revision": 0,
+        },
+    )
+    assert fresh.status_code == 200
+    assert registry.get_discovery("forgotten-sensor").source_type == "vr"
+    assert registry.control_revision("forgotten-sensor") == 0
+    assert registry.get("forgotten-sensor").retired_utc is None
+
+
+def test_forget_rejects_retired_sensor_that_is_still_online() -> None:
+    registry = SensorRegistry()
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    heartbeat = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "online-camera",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+        },
+    )
+    assert heartbeat.status_code == 200
+    assert client.post("/api/v1/sensors/online-camera/retire").status_code == 200
+
+    forgotten = client.delete("/api/v1/sensors/online-camera")
+    assert forgotten.status_code == 409
+    assert "offline" in forgotten.json()["detail"]
+    assert registry.contains("online-camera") is True
