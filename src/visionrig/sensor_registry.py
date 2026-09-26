@@ -7,11 +7,12 @@ without allowing a sensor producer to grant itself authority.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 from threading import RLock
 import tempfile
-from typing import Literal
+from typing import Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -53,6 +54,9 @@ class SensorDiscovery:
     source_type: str
     device: str | None = None
     capabilities: tuple[str, ...] = ()
+    first_seen_utc: str | None = None
+    last_seen_utc: str | None = None
+    observation_count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +85,9 @@ class _StoredSensorDiscovery(BaseModel):
     source_type: str = Field(min_length=1, max_length=32)
     device: str | None = Field(default=None, max_length=256)
     capabilities: tuple[str, ...] = ()
+    first_seen_utc: str | None = None
+    last_seen_utc: str | None = None
+    observation_count: int = Field(default=0, ge=0)
 
 
 class _SensorRegistryFile(BaseModel):
@@ -93,12 +100,22 @@ class _SensorRegistryFile(BaseModel):
     discovery: tuple[_StoredSensorDiscovery, ...] = ()
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class SensorRegistry:
     """Thread-safe registry with optional crash-safe JSON persistence."""
 
-    def __init__(self, path: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path | None = None,
+        *,
+        clock: Callable[[], datetime] = _utcnow,
+    ) -> None:
         self._lock = RLock()
         self.path = Path(path).expanduser() if path is not None else None
+        self._clock = clock
         self._entries: dict[str, SensorMetadata] = {}
         self._discovery: dict[str, SensorDiscovery] = {}
         if self.path is not None:
@@ -143,6 +160,9 @@ class SensorRegistry:
                 source_type=item.source_type,
                 device=item.device,
                 capabilities=tuple(item.capabilities),
+                first_seen_utc=item.first_seen_utc,
+                last_seen_utc=item.last_seen_utc,
+                observation_count=item.observation_count,
             )
             for item in state.discovery
         }
@@ -168,6 +188,9 @@ class SensorRegistry:
                     source_type=item.source_type,
                     device=item.device,
                     capabilities=item.capabilities,
+                    first_seen_utc=item.first_seen_utc,
+                    last_seen_utc=item.last_seen_utc,
+                    observation_count=item.observation_count,
                 )
                 for item in self.list_discovery()
             ),
@@ -248,6 +271,7 @@ class SensorRegistry:
             for value in capabilities
             if value.strip()
         }))
+        now = self._clock().astimezone(timezone.utc).isoformat()
         with self._lock:
             current = self._discovery.get(source_id)
             if current is not None and current.source_type != cleaned_type:
@@ -265,6 +289,15 @@ class SensorRegistry:
                 ),
                 capabilities=cleaned_caps or (
                     current.capabilities if current is not None else ()
+                ),
+                first_seen_utc=(
+                    current.first_seen_utc
+                    if current is not None and current.first_seen_utc is not None
+                    else now
+                ),
+                last_seen_utc=now,
+                observation_count=(
+                    current.observation_count + 1 if current is not None else 1
                 ),
             )
             previous_discovery = current
