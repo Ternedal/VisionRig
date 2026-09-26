@@ -175,14 +175,52 @@ async def test_gateway_preserves_local_backpressure_status() -> None:
     assert response.status_code == 429
 
 
+@pytest.mark.asyncio
+async def test_gateway_forwards_desired_state_read_to_fixed_source_route() -> None:
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["url"] = str(request.url)
+        seen["authorization"] = request.headers.get("authorization")
+        return httpx.Response(
+            200,
+            json={
+                "schema_id": "visionrig/sensor-desired-state/v1",
+                "source_id": "quest",
+                "enabled": False,
+                "production_authority": False,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
+        app = create_gateway_app(GatewayConfig(token=TOKEN), client=upstream)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://gateway",
+        ) as caller:
+            response = await caller.get(
+                "/api/v1/sensors/quest/desired-state",
+                headers={"authorization": f"Bearer {TOKEN}"},
+            )
+
+    assert response.status_code == 200
+    assert seen["method"] == "GET"
+    assert seen["url"] == "http://127.0.0.1:8110/api/v1/sensors/quest/desired-state"
+    assert seen["authorization"] is None
+    assert response.json()["enabled"] is False
+    assert response.headers["x-visionrig-gateway"] == "1"
+
+
 def test_gateway_health_advertises_only_sensor_routes() -> None:
     app = create_gateway_app(GatewayConfig(token=TOKEN))
     with TestClient(app) as client:
         body = client.get("/health").json()
-    assert body["schema"] == "visionrig/sensor-gateway-health/v2"
+    assert body["schema"] == "visionrig/sensor-gateway-health/v3"
     assert body["routes"] == [
         "/api/v1/frames/ingest",
         "/api/v1/sensors/heartbeat",
+        "/api/v1/sensors/{source_id}/desired-state",
     ]
 
 
