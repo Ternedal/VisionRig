@@ -44,7 +44,7 @@ The producer polls desired state every two seconds by default. Override with
 ## Remote pause/resume semantics
 
 The reference producer checks
-`GET /api/v1/sensors/{source_id}/desired-state` **before opening capture**.
+`GET /api/v1/sensors/{source_id}/desired-state` **before opening capture**. The response includes a monotonically increasing control `revision`.
 
 When `enabled=false`:
 
@@ -56,7 +56,9 @@ When `enabled=false`:
 - the producer keeps polling until it sees `enabled=true`.
 
 When re-enabled, the capture source is reopened and sending resumes at the
-durable next sequence.
+durable next sequence. After applying either enabled or disabled state, the
+producer reports both `capture_active` and `applied_revision`. VisionRig only
+reports convergence when the acknowledged revision matches the current command.
 
 Desired-state lookup is fail-closed in the reference loop. If the control plane
 cannot be read or returns an invalid/mismatched response, the producer exits and
@@ -98,7 +100,9 @@ machine:
 
 1. authenticate and fetch desired state before opening camera/passthrough;
 2. while disabled, keep capture closed and publish heartbeat while polling;
-3. on enable, open capture and atomically reserve/increment a sequence before
+3. apply desired state and acknowledge that exact `revision` only after the
+   hardware/capture state reflects it;
+4. on enable, open capture and atomically reserve/increment a sequence before
    sending each captured frame;
 5. persist which sequence is in-flight;
 6. on 200, validate receipt and atomically clear pending drops + in-flight;
