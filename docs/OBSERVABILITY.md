@@ -136,8 +136,9 @@ being offline.
 ## Semantic sensor change feed
 
 `GET /api/v1/sensors/changes?after_cursor=<n>&limit=<n>` returns
-`visionrig/sensor-change-batch/v1`. The feed is bounded and process-local and
-uses the same cursor/gap recovery semantics as the perception journal.
+`visionrig/sensor-change-batch/v2`. The feed is bounded and process-local and
+uses the same cursor/gap recovery semantics as the perception journal plus an
+ephemeral `stream_id` that uniquely identifies the current process journal.
 
 Events are emitted only for semantic state changes:
 
@@ -156,14 +157,22 @@ for liveness transitions. A reported `gap=true` means the client fell behind
 the bounded journal and should refresh catalog/fleet before continuing from the
 returned cursor.
 
+Clients should send the current stream id back as
+`/api/v1/sensors/changes?after_cursor=<n>&stream_id=<id>`. If VisionRig has
+restarted, the journal has a new id and the response sets
+`stream_reset=true`, returns the new `stream_id`, and does not pretend the
+old cursor belongs to the new journal. The client should then fetch a fresh
+bootstrap snapshot.
+
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v1` with:
+`visionrig/sensor-bootstrap-snapshot/v2` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
-- `change_cursor`: the semantic change-feed cursor to continue from.
+- `change_cursor`: the semantic change-feed cursor to continue from;
+- `change_stream_id`: identity of the current process-local change journal.
 
 The cursor is sampled **before** catalog/fleet construction. If a semantic
 change races with snapshot construction, the client may see that state already
@@ -175,13 +184,14 @@ Recommended UI flow:
 
 1. fetch `/api/v1/sensors/bootstrap`;
 2. render catalog/fleet;
-3. poll `/api/v1/sensors/changes?after_cursor=<change_cursor>`;
-4. if `gap=true`, fetch a new bootstrap snapshot;
+3. poll
+   `/api/v1/sensors/changes?after_cursor=<change_cursor>&stream_id=<change_stream_id>`;
+4. if `gap=true` or `stream_reset=true`, fetch a new bootstrap snapshot;
 5. separately refresh fleet/status at a low cadence for time-derived liveness.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v19` and advertises the desired-state
+`GET /health` uses `visionrig/health/v20` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
 that already poll health. Health also advertises the process-local sensor change
