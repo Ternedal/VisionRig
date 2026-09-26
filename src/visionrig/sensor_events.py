@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime, timezone
-from threading import RLock
+from threading import Condition, RLock
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -73,6 +73,7 @@ class SensorChangeJournal:
         self._items: deque[SensorChangeEntry] = deque()
         self._next_cursor = 1
         self._lock = RLock()
+        self._condition = Condition(self._lock)
 
     @property
     def stream_id(self) -> str:
@@ -99,7 +100,40 @@ class SensorChangeJournal:
             self._items.append(entry)
             while len(self._items) > self._capacity:
                 self._items.popleft()
+            self._condition.notify_all()
             return entry
+
+    def wait_for_changes(
+        self,
+        *,
+        after_cursor: int = 0,
+        limit: int = 64,
+        expected_stream_id: str | None = None,
+        wait_seconds: float = 0.0,
+    ) -> SensorChangeBatch:
+        if wait_seconds < 0 or wait_seconds > 30:
+            raise ValueError("wait_seconds must be between 0 and 30")
+
+        with self._condition:
+            batch = self.read(
+                after_cursor=after_cursor,
+                limit=limit,
+                expected_stream_id=expected_stream_id,
+            )
+            if (
+                wait_seconds == 0
+                or batch.entries
+                or batch.gap
+                or batch.stream_reset
+            ):
+                return batch
+
+            self._condition.wait(timeout=wait_seconds)
+            return self.read(
+                after_cursor=after_cursor,
+                limit=limit,
+                expected_stream_id=expected_stream_id,
+            )
 
     def read(
         self,
