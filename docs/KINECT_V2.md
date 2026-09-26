@@ -33,13 +33,30 @@ Install:
 pip install -e ".[kinect-v2]"
 ~~~
 
-Run:
+Run unmanaged:
 
 ~~~powershell
 visionrig-capture --kinect-v2 --model-manifest .\models\yolo.json --landmarks --verbose
 ~~~
 
-The Kinect hardware-depth stage is enabled automatically by --kinect-v2.
+Run under the shared sensor control plane:
+
+~~~powershell
+$env:VISIONRIG_GATEWAY_URL="http://127.0.0.1:8111"
+$env:VISIONRIG_PRODUCER_TOKEN="<gateway token>"
+visionrig-capture --kinect-v2 --source-id kinect-living-room --control-gateway-url $env:VISIONRIG_GATEWAY_URL --model-manifest .\models\yolo.json --landmarks --verbose
+~~~
+
+In managed mode VisionRig checks desired state before the Kinect is opened. A
+disabled sensor stays physically closed while heartbeat reports
+`capture_active=false`. Re-enabling reopens the Kinect and local event
+`frame_sequence` remains monotonic across reopen cycles.
+
+RGB, hardware depth and IR remain local to the capture/perception process; they
+are not flattened into the remote JPEG producer protocol. Only heartbeat,
+capabilities and effective capture state cross the sensor gateway.
+
+The Kinect hardware-depth stage is enabled automatically by `--kinect-v2`.
 
 ## Contract boundary
 
