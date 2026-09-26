@@ -100,12 +100,12 @@ machine:
 2. while disabled, keep capture closed and publish heartbeat while polling;
 3. on enable, open capture and atomically reserve/increment a sequence before
    sending each captured frame;
-4. persist which sequence is in-flight;
-5. on 200, validate receipt and atomically clear pending drops + in-flight;
-6. on 429/network miss, atomically clear in-flight and increment pending drops;
-7. after process restart, convert any leftover in-flight frame into one drop;
-8. on 401/403, invalid desired state or malformed receipts, fail visibly and
+5. persist which sequence is in-flight;
+6. on 200, validate receipt and atomically clear pending drops + in-flight;
+7. on 429/network miss, atomically clear in-flight and increment pending drops;
+8. after process restart, convert any leftover in-flight frame into one drop;
+9. on 401/403, invalid desired state or malformed receipts, fail visibly and
    close capture;
-9. never treat a VisionRig recognition hint as identity authority.
+10. never treat a VisionRig recognition hint as identity authority.
 
 This makes the Python producer an executable reference for Kotlin/Quest clients.
