@@ -16,6 +16,7 @@ VisionRig includes:
 - **managed local webcam/Kinect capture through the shared desired/effective-state contract**
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
+- **bounded binary SensorPacket/v1 transport for RGB + color-aligned metric depth + infrared**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
@@ -151,6 +152,14 @@ to infer it from event history.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
+
+Multimodal producers can use
+`POST /api/v1/sensor-packets/ingest` with
+`application/vnd.visionrig.sensor-packet`. SensorPacket/v1 carries encoded RGB
+plus optional little-endian uint16 depth/IR planes without base64 expansion.
+Depth is required to be color-aligned and is exposed frame-locally as both
+`depth_mm` and a metric sampler; raw planes still do not cross into
+PerceptionEvent/Consciousness Core.
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.

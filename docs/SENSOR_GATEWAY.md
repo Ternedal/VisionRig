@@ -1,8 +1,8 @@
 # VisionRig sensor gateway
 
 The VisionRig core service stays on loopback. Cross-device clients use a
-separate, deliberately small gateway process that exposes only encoded frame
-ingress.
+separate, deliberately small gateway process that exposes only the explicit
+sensor transport/control routes needed by remote producers.
 
 ```text
 Kaliv Android / Kaliv VR / remote screen producer
@@ -26,11 +26,15 @@ Kaliv Android / Kaliv VR / remote screen producer
 
 Binding the core VisionRig API to LAN/Tailscale would also expose health details,
 event journal, world snapshot and other service routes. The gateway does not
-proxy those routes. It accepts only:
+proxy those routes. It accepts only this fixed allow-list:
 
-`POST /api/v1/frames/ingest`
+- `POST /api/v1/frames/ingest`;
+- `POST /api/v1/sensor-packets/ingest`;
+- `POST /api/v1/sensors/heartbeat`;
+- `GET /api/v1/sensors/{source_id}/desired-state`.
 
-and forwards it to the fixed loopback core endpoint.
+Each route forwards only to its matching fixed loopback core endpoint. There is
+no generic path proxy.
 
 ## Start
 
@@ -53,7 +57,9 @@ Default gateway port: `8111`.
 The gateway intentionally rejects wildcard binds such as `0.0.0.0` and `::`.
 Bind the exact Tailscale/LAN interface that should receive sensor traffic.
 
-## Client request
+## Client requests
+
+Encoded RGB:
 
 ```text
 POST /api/v1/frames/ingest?source_id=kaliv-vr&source_type=vr&frame_sequence=42
@@ -61,6 +67,16 @@ Authorization: Bearer <token>
 Content-Type: image/jpeg
 
 <encoded frame>
+```
+
+Multimodal RGB + optional depth/IR:
+
+```text
+POST /api/v1/sensor-packets/ingest?source_id=kinect-living-room&source_type=camera&frame_sequence=42
+Authorization: Bearer <token>
+Content-Type: application/vnd.visionrig.sensor-packet
+
+<SensorPacket/v1 bytes>
 ```
 
 The gateway never forwards the client's Authorization header to VisionRig core.
@@ -76,7 +92,8 @@ and Content-Type.
 - wildcard bind addresses are rejected;
 - payload size is bounded before forwarding;
 - upstream redirects are not followed;
-- only frame ingress is exposed;
+- only the documented frame, sensor-packet, heartbeat and per-source
+  desired-state routes are exposed;
 - replayed/stale frames are rejected downstream by per-source sequence checks;
 - no cognition, memory, identity or execution authority is added.
 

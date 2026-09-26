@@ -1,8 +1,8 @@
 # Sensor ingress
 
-VisionRig can receive encoded frames from Kaliv clients, Windows capture
-producers and VR/passthrough producers without giving those clients perception
-authority.
+VisionRig can receive encoded frames and bounded multimodal sensor packets from
+Kaliv clients, Windows capture producers and VR/passthrough producers without
+giving those clients perception authority.
 
 ## Endpoint
 
@@ -89,3 +89,53 @@ silently downloaded.
 The service remains bound to `127.0.0.1:8110` by default. Cross-device Kaliv
 transport should go through an explicitly designed authenticated boundary rather
 than making this raw service listen broadly.
+
+
+## Multimodal SensorPacket/v1
+
+`POST /api/v1/sensor-packets/ingest` uses the same source metadata,
+monotonic sequence checks, payload bound and single-slot overload policy as
+encoded frame ingress.
+
+Content-Type:
+
+`application/vnd.visionrig.sensor-packet`
+
+The v1 binary layout is:
+
+```text
+VRSP1\0
+uint32_be header_length
+UTF-8 JSON header
+encoded RGB bytes
+optional depth bytes
+optional infrared bytes
+```
+
+The header schema is `visionrig/sensor-packet/v1`. RGB remains JPEG, PNG or
+WebP. Depth and infrared planes are raw little-endian `uint16`. Depth values
+are millimeters and depth must be aligned to RGB/color coordinates. A 0 depth
+sample means no valid metric reading.
+
+VisionRig reconstructs the frame as:
+
+```text
+Frame.payload                  -> decoded RGB image
+Frame.sensor_data.depth_mm     -> uint16 color-aligned depth plane
+Frame.sensor_data.infrared     -> optional uint16 IR plane
+Frame.sensor_data.metric_depth_sampler -> normalized RGB coord -> meters
+```
+
+The raw planes are frame-local and are not serialized into
+`PerceptionEvent/v3`. Existing stages therefore remain camera-agnostic while
+hardware-depth-aware stages can consume the metric sampler.
+
+The authenticated gateway exposes only the fixed
+`/api/v1/sensor-packets/ingest` route in addition to its existing allow-list.
+It forwards the bounded body and whitelisted source query metadata to loopback
+VisionRig and never becomes an arbitrary proxy.
+
+SensorPacket/v1 intentionally does not define calibration transport or perform
+depth alignment server-side. Producers must send a color-aligned depth plane.
+This keeps Kinect/Quest vendor SDK objects outside the network contract and makes
+the server-side sampler deterministic.

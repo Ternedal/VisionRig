@@ -52,9 +52,16 @@ disabled sensor stays physically closed while heartbeat reports
 `capture_active=false`. Re-enabling reopens the Kinect and local event
 `frame_sequence` remains monotonic across reopen cycles.
 
-RGB, hardware depth and IR remain local to the capture/perception process; they
-are not flattened into the remote JPEG producer protocol. Only heartbeat,
-capabilities and effective capture state cross the sensor gateway.
+Local Kinect capture still passes RGB, hardware depth and IR directly as
+frame-local sensor data. For remote transport, VisionRig now supports
+SensorPacket/v1 through the authenticated gateway: encoded RGB plus optional
+color-aligned uint16 metric depth and uint16 IR. Raw planes remain frame-local
+after decode and are never exposed through PerceptionEvent.
+
+The transport contract is implemented in 0.38.0. A dedicated Kinect remote
+producer still needs to perform Kinect coordinate mapping on the producer side
+before sending the required color-aligned depth plane; the server deliberately
+does not depend on Kinect SDK calibration objects.
 
 The Kinect hardware-depth stage is enabled automatically by `--kinect-v2`.
 
