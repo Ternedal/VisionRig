@@ -240,7 +240,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v21",
+            "schema": "visionrig/health/v22",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -275,7 +275,9 @@ def create_app(
             "sensor_fleet": sensor_fleet_summary_payload(),
             "sensor_changes": {
                 "schema": "visionrig/sensor-change-batch/v2",
-                "durability": "process-local",
+                "durability": (
+                    "persistent" if sensor_changes.persistent else "process-local"
+                ),
                 "stream_id": sensor_changes.stream_id,
                 "max_wait_seconds": 30,
             },
