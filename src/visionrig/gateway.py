@@ -150,7 +150,7 @@ def create_gateway_app(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.3.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.4.0")
 
     async def request_upstream(method: str, path: str, **kwargs) -> httpx.Response:
         target = config.target_base_url + path
@@ -175,10 +175,11 @@ def create_gateway_app(
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v3",
+            "schema": "visionrig/sensor-gateway-health/v4",
             "target_scope": "loopback-only",
             "routes": [
                 "/api/v1/frames/ingest",
+                "/api/v1/sensor-packets/ingest",
                 "/api/v1/sensors/heartbeat",
                 "/api/v1/sensors/{source_id}/desired-state",
             ],
@@ -217,6 +218,37 @@ def create_gateway_app(
                 "capture_active": body.capture_active,
                 "applied_revision": body.applied_revision,
             },
+        )
+        return _relay(upstream)
+
+    @app.post("/api/v1/sensor-packets/ingest")
+    async def ingest_sensor_packet(
+        request: Request,
+        source_id: str = Query(min_length=1, max_length=128),
+        source_type: Literal["camera", "screen", "vr", "image"] = Query(),
+        frame_sequence: int = Query(ge=0),
+        device: str | None = Query(default=None, max_length=256),
+        dropped_frames: int = Query(default=0, ge=0),
+    ) -> Response:
+        _require_auth(request, config.token)
+
+        content_type = request.headers.get("content-type", "")
+        payload = await read_bounded_body(request, config.max_payload_bytes)
+        params: dict[str, str | int] = {
+            "source_id": source_id,
+            "source_type": source_type,
+            "frame_sequence": frame_sequence,
+            "dropped_frames": dropped_frames,
+        }
+        if device is not None:
+            params["device"] = device
+
+        upstream = await request_upstream(
+            "POST",
+            "/api/v1/sensor-packets/ingest",
+            params=params,
+            content=payload,
+            headers={"content-type": content_type},
         )
         return _relay(upstream)
 
