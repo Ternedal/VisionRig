@@ -18,6 +18,7 @@ VisionRig includes:
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
+- **operator-owned sensor catalog metadata for UI/control surfaces**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -29,12 +30,19 @@ VisionRig includes:
 - opt-in semantic PerceptionEvent/v3 -> Consciousness Core bridge with change suppression
 - verified model manifests with checksum/provenance/license metadata
 
-## Operational status
+## Operational status and catalog
 
-`GET /api/v1/sensors/status` exposes per-source liveness, age, sequence,
+`GET /api/v1/sensors/status` exposes runtime liveness, age, sequence,
 accepted frames, producer drops, heartbeat count, capabilities and device
-identity. Sources transition through `online`, `stale` and `offline`
-without deleting their diagnostic state.
+identity.
+
+`GET /api/v1/sensors/catalog` joins that runtime state with operator-owned
+metadata such as a friendly name, physical/logical location, role and desired
+enabled state. Metadata can be prepared before the sensor is online with
+`PATCH /api/v1/sensors/{source_id}/metadata`.
+
+The metadata `enabled` flag is deliberately a desired/control-plane value. It
+does not silently reject producer traffic or gain perception authority.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
