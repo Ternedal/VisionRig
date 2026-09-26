@@ -131,7 +131,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v7"
+    assert health["schema"] == "visionrig/health/v8"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v1",
         "entries": 1,
