@@ -39,6 +39,7 @@ VisionRig includes:
 - **restart-safe persistent semantic sensor change journal with atomic writes**
 - **persistent semantic sensor state revision for change-feed drift detection**
 - **optimistic concurrency guards for operator sensor writes**
+- **server-side registry/change-journal consistency status with persistent high-water tracking**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -141,6 +142,12 @@ revision is rejected with HTTP 409 and a structured
 Successful writes return the resulting `state_revision`. Existing clients may
 omit the precondition, but control UIs should send the revision from their
 latest bootstrap/fleet state.
+
+The change journal persists a `state_revision_high_water`. Fleet, bootstrap and
+health compare it with the registry revision and expose
+`synced`, `registry_ahead` or `journal_ahead`. This turns the cross-file
+crash window into explicit operational state instead of requiring each client
+to infer it from event history.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.

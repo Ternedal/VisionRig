@@ -152,9 +152,10 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v2` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v3` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
+- `change_consistency`: registry/journal revision comparison;
 - total known/runtime sensor count;
 - lifecycle counts for `active` and `retired`;
 - presence counts for `online`, `stale`, `offline` and `unknown`;
@@ -200,7 +201,8 @@ returned cursor.
 
 The service process persists the journal by default to
 `~/.visionrig/sensor-changes.json` with atomic replacement. The persisted
-state contains the bounded retained entries, next cursor and stream id. A normal
+state contains the bounded retained entries, next cursor, stream id and
+`state_revision_high_water`. A normal
 restart therefore restores the same stream and cursors. Configure
 `VISIONRIG_SENSOR_CHANGE_JOURNAL_FILE` to another path, or set it to an empty
 value to use process-local mode.
@@ -219,14 +221,36 @@ event wakes waiting clients immediately. Gap and stream-reset responses return
 without waiting. A timeout returns a normal empty batch with the current cursor,
 so clients can issue the next bounded long poll without special error handling.
 
+## Registry / change-journal consistency
+
+The semantic journal tracks a monotonic `state_revision_high_water`, the
+highest registry revision represented by any successfully persisted journal
+event. It is stored independently of the bounded retained event window, so
+event eviction does not erase the watermark.
+
+VisionRig compares that watermark with the current registry
+`state_revision` and exposes
+`visionrig/sensor-change-consistency/v1`:
+
+- `synced`: registry and journal high-water are equal;
+- `registry_ahead`: registry state is newer than the durable semantic journal;
+- `journal_ahead`: journal watermark is newer than the registry file.
+
+The status is included in fleet v3, bootstrap v4 and health. Health also exposes
+the raw journal `state_revision_high_water`. No automatic repair is performed:
+`registry_ahead` means clients should bootstrap from full state rather than
+trust incremental history, while `journal_ahead` indicates persistent files
+that should be investigated before treating incremental history as authoritative.
+
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v3` with:
+`visionrig/sensor-bootstrap-snapshot/v4` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
 - `sensor_state_revision`: current persisted semantic registry revision;
+- `change_consistency`: server-side registry/journal consistency status;
 - `change_cursor`: the semantic change-feed cursor to continue from;
 - `change_stream_id`: identity of the current retained change journal.
 
@@ -241,8 +265,8 @@ one cross-file transaction. To make that crash window observable, the registry
 persists a monotonic semantic `state_revision`. It advances on registration,
 device/capability changes, operator metadata/control changes, lifecycle changes
 and permanent forget, but not on last-seen or observation-count-only heartbeat
-refreshes. Fleet v2 and bootstrap v3 expose the current revision, while each
-change event carries the revision it reflects.
+refreshes. Fleet v3 and bootstrap v4 expose the current revision and consistency status,
+while each change event carries the revision it reflects.
 
 A client should track the highest event `state_revision` it has applied. If a
 later fleet/bootstrap reports a greater revision and the change feed has not
@@ -263,12 +287,12 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v24` and advertises the desired-state
+`GET /health` uses `visionrig/health/v25` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
 that already poll health. Health also advertises the process-local sensor change
-batch schema, durability, stream id and maximum wait under `sensor_changes`, and advertises the bootstrap snapshot
+batch schema, durability, stream id, revision high-water, consistency status and maximum wait under `sensor_changes`, and advertises the bootstrap snapshot
 schema under `sensor_bootstrap`.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and

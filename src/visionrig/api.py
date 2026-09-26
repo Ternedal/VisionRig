@@ -160,6 +160,22 @@ def create_app(
                 },
             )
 
+    def sensor_change_consistency_payload() -> dict[str, object]:
+        state_revision = registry.state_revision
+        journal_revision = sensor_changes.state_revision_high_water
+        if state_revision == journal_revision:
+            status = "synced"
+        elif state_revision > journal_revision:
+            status = "registry_ahead"
+        else:
+            status = "journal_ahead"
+        return {
+            "schema": "visionrig/sensor-change-consistency/v1",
+            "status": status,
+            "state_revision": state_revision,
+            "journal_state_revision": journal_revision,
+        }
+
     def sensor_fleet_summary_payload() -> dict[str, object]:
         runtime_status = sensor_ingress.stats()
         runtime_by_id = {
@@ -251,8 +267,9 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v2",
+            "schema": "visionrig/sensor-fleet-summary/v3",
             "state_revision": registry.state_revision,
+            "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
             "lifecycle": lifecycle_counts,
             "presence": presence_counts,
@@ -267,7 +284,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v24",
+            "schema": "visionrig/health/v25",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -307,10 +324,12 @@ def create_app(
                     "persistent" if sensor_changes.persistent else "process-local"
                 ),
                 "stream_id": sensor_changes.stream_id,
+                "state_revision_high_water": sensor_changes.state_revision_high_water,
+                "consistency": sensor_change_consistency_payload(),
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v3",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v4",
             },
         }
 
@@ -428,8 +447,9 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v3",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v4",
             "sensor_state_revision": registry.state_revision,
+            "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
             "change_cursor": baseline_cursor,
             "catalog": sensor_catalog(),
