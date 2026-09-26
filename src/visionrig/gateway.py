@@ -1,7 +1,8 @@
-"""Authenticated cross-device gateway for VisionRig sensor frames.
+"""Authenticated cross-device gateway for VisionRig sensor producers.
 
-The gateway exposes only frame ingress and forwards only to a loopback VisionRig
-core service. It does not proxy journal, world-state, model or profile APIs.
+The gateway exposes only frame ingress and sensor heartbeat, and forwards only
+to a loopback VisionRig core service. It does not proxy journal, world-state,
+model or profile APIs.
 """
 from __future__ import annotations
 
@@ -15,12 +16,21 @@ from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from pydantic import BaseModel, ConfigDict, Field
 
 from .http_io import read_bounded_body
 
 
 class GatewayConfigError(RuntimeError):
     pass
+
+
+class GatewayHeartbeat(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_id: str = Field(min_length=1, max_length=128)
+    source_type: Literal["camera", "screen", "vr", "image"]
+    device: str | None = Field(default=None, max_length=256)
+    capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
 
 
 def _validate_loopback_target(value: str) -> str:
@@ -114,22 +124,75 @@ def _has_valid_bearer(request: Request, token: str) -> bool:
     return hmac.compare_digest(supplied.encode("utf-8"), token.encode("utf-8"))
 
 
+def _require_auth(request: Request, token: str) -> None:
+    if not _has_valid_bearer(request, token):
+        raise HTTPException(
+            status_code=401,
+            detail="invalid gateway bearer token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
+def _relay(upstream: httpx.Response) -> Response:
+    media_type = upstream.headers.get("content-type", "application/json").split(";", 1)[0]
+    return Response(
+        content=upstream.content,
+        status_code=upstream.status_code,
+        media_type=media_type,
+        headers={"X-VisionRig-Gateway": "1"},
+    )
+
+
 def create_gateway_app(
     config: GatewayConfig,
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.1.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.2.0")
+
+    async def post_upstream(path: str, **kwargs) -> httpx.Response:
+        target = config.target_base_url + path
+        try:
+            if client is None:
+                async with httpx.AsyncClient(timeout=config.timeout_seconds) as local_client:
+                    return await local_client.post(target, **kwargs)
+            return await client.post(target, timeout=config.timeout_seconds, **kwargs)
+        except httpx.HTTPError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="VisionRig loopback ingress unavailable",
+            ) from exc
 
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v1",
+            "schema": "visionrig/sensor-gateway-health/v2",
             "target_scope": "loopback-only",
-            "routes": ["/api/v1/frames/ingest"],
+            "routes": [
+                "/api/v1/frames/ingest",
+                "/api/v1/sensors/heartbeat",
+            ],
         }
+
+    @app.post("/api/v1/sensors/heartbeat")
+    async def heartbeat(
+        request: Request,
+        body: GatewayHeartbeat,
+    ) -> Response:
+        _require_auth(request, config.token)
+        upstream = await post_upstream(
+            "/api/v1/sensors/heartbeat",
+            json={
+                "schema_id": "visionrig/sensor-heartbeat/v1",
+                "source_id": body.source_id,
+                "source_type": body.source_type,
+                "device": body.device,
+                "capabilities": list(body.capabilities),
+            },
+        )
+        return _relay(upstream)
 
     @app.post("/api/v1/frames/ingest")
     async def ingest(
@@ -140,12 +203,7 @@ def create_gateway_app(
         device: str | None = Query(default=None, max_length=256),
         dropped_frames: int = Query(default=0, ge=0),
     ) -> Response:
-        if not _has_valid_bearer(request, config.token):
-            raise HTTPException(
-                status_code=401,
-                detail="invalid gateway bearer token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+        _require_auth(request, config.token)
 
         content_type = request.headers.get("content-type", "")
         payload = await read_bounded_body(request, config.max_payload_bytes)
@@ -158,36 +216,12 @@ def create_gateway_app(
         if device is not None:
             params["device"] = device
 
-        target = config.target_base_url + "/api/v1/frames/ingest"
-        try:
-            if client is None:
-                async with httpx.AsyncClient(timeout=config.timeout_seconds) as local_client:
-                    upstream = await local_client.post(
-                        target,
-                        params=params,
-                        content=payload,
-                        headers={"content-type": content_type},
-                    )
-            else:
-                upstream = await client.post(
-                    target,
-                    params=params,
-                    content=payload,
-                    headers={"content-type": content_type},
-                    timeout=config.timeout_seconds,
-                )
-        except httpx.HTTPError as exc:
-            raise HTTPException(
-                status_code=502,
-                detail="VisionRig loopback ingress unavailable",
-            ) from exc
-
-        media_type = upstream.headers.get("content-type", "application/json").split(";", 1)[0]
-        return Response(
-            content=upstream.content,
-            status_code=upstream.status_code,
-            media_type=media_type,
-            headers={"X-VisionRig-Gateway": "1"},
+        upstream = await post_upstream(
+            "/api/v1/frames/ingest",
+            params=params,
+            content=payload,
+            headers={"content-type": content_type},
         )
+        return _relay(upstream)
 
     return app

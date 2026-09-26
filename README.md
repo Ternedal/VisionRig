@@ -16,7 +16,8 @@ VisionRig includes:
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - crash-safe webcam/screen reference producer
-- **live sensor/runtime observability for ModelRig/Kaliv UI**
+- **live sensor/runtime observability with online/stale/offline liveness**
+- authenticated producer heartbeat + declared sensor capabilities
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -28,31 +29,18 @@ VisionRig includes:
 - opt-in semantic PerceptionEvent/v3 -> Consciousness Core bridge with change suppression
 - verified model manifests with checksum/provenance/license metadata
 
-## Recognition flow
+## Operational status
 
-```text
-frame
-  |
-  +--> full-frame embedding --> .mrvision place match --> scene hint
-  |
-  +--> entities --> crop embeddings --> .mrvision face/body/object match
-  |
-  v
-spatial relations
-  |
-  v
-PerceptionEvent v3
-```
+`GET /api/v1/sensors/status` exposes per-source liveness, age, sequence,
+accepted frames, producer drops, heartbeat count, capabilities and device
+identity. Sources transition through `online`, `stale` and `offline`
+without deleting their diagnostic state.
+
+Remote producers can keep presence current independently of frame rate through
+the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.
-
-## Operational status
-
-`GET /api/v1/sensors/status` exposes bounded operational telemetry for remote
-camera, screen and VR producers: accepted/rejected totals, active processing,
-per-source sequence, accumulated producer drops, device identity and last-seen
-UTC. The same snapshot is embedded in `/health`.
 
 See:
 - docs/ARCHITECTURE.md

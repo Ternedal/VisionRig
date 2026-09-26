@@ -34,21 +34,13 @@ def test_gateway_rejects_missing_or_wrong_bearer() -> None:
     with TestClient(app) as client:
         missing = client.post(
             "/api/v1/frames/ingest",
-            params={
-                "source_id": "quest",
-                "source_type": "vr",
-                "frame_sequence": 1,
-            },
+            params={"source_id": "quest", "source_type": "vr", "frame_sequence": 1},
             content=b"x",
             headers={"content-type": "image/jpeg"},
         )
         wrong = client.post(
             "/api/v1/frames/ingest",
-            params={
-                "source_id": "quest",
-                "source_type": "vr",
-                "frame_sequence": 1,
-            },
+            params={"source_id": "quest", "source_type": "vr", "frame_sequence": 1},
             content=b"x",
             headers={
                 "content-type": "image/jpeg",
@@ -86,9 +78,8 @@ async def test_gateway_forwards_only_frame_route_and_whitelisted_metadata() -> N
     transport = httpx.MockTransport(handler)
     async with httpx.AsyncClient(transport=transport) as upstream:
         app = create_gateway_app(GatewayConfig(token=TOKEN), client=upstream)
-        transport_to_app = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(
-            transport=transport_to_app,
+            transport=httpx.ASGITransport(app=app),
             base_url="http://gateway",
         ) as caller:
             response = await caller.post(
@@ -108,14 +99,56 @@ async def test_gateway_forwards_only_frame_route_and_whitelisted_metadata() -> N
             )
 
     assert response.status_code == 200
-    assert seen["url"].startswith(
-        "http://127.0.0.1:8110/api/v1/frames/ingest?"
-    )
+    assert seen["url"].startswith("http://127.0.0.1:8110/api/v1/frames/ingest?")
     assert "source_id=quest" in seen["url"]
     assert "source_type=vr" in seen["url"]
     assert seen["authorization"] is None
     assert seen["content_type"] == "image/jpeg"
     assert seen["body"] == b"jpeg"
+    assert response.headers["x-visionrig-gateway"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_gateway_forwards_authenticated_heartbeat_only_to_fixed_route() -> None:
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["authorization"] = request.headers.get("authorization")
+        seen["json"] = __import__("json").loads((await request.aread()).decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "schema_id": "visionrig/sensor-heartbeat-receipt/v1",
+                "status": "accepted",
+                "source_id": "quest",
+                "seen_utc": "2026-09-25T21:00:00+00:00",
+                "production_authority": False,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
+        app = create_gateway_app(GatewayConfig(token=TOKEN), client=upstream)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://gateway",
+        ) as caller:
+            response = await caller.post(
+                "/api/v1/sensors/heartbeat",
+                json={
+                    "source_id": "quest",
+                    "source_type": "vr",
+                    "device": "quest-2",
+                    "capabilities": ["rgb", "passthrough"],
+                },
+                headers={"authorization": f"Bearer {TOKEN}"},
+            )
+
+    assert response.status_code == 200
+    assert seen["url"] == "http://127.0.0.1:8110/api/v1/sensors/heartbeat"
+    assert seen["authorization"] is None
+    assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v1"
+    assert seen["json"]["capabilities"] == ["rgb", "passthrough"]
     assert response.headers["x-visionrig-gateway"] == "1"
 
 
@@ -132,11 +165,7 @@ async def test_gateway_preserves_local_backpressure_status() -> None:
         ) as caller:
             response = await caller.post(
                 "/api/v1/frames/ingest",
-                params={
-                    "source_id": "screen",
-                    "source_type": "screen",
-                    "frame_sequence": 2,
-                },
+                params={"source_id": "screen", "source_type": "screen", "frame_sequence": 2},
                 content=b"jpeg",
                 headers={
                     "content-type": "image/jpeg",
@@ -144,6 +173,17 @@ async def test_gateway_preserves_local_backpressure_status() -> None:
                 },
             )
     assert response.status_code == 429
+
+
+def test_gateway_health_advertises_only_sensor_routes() -> None:
+    app = create_gateway_app(GatewayConfig(token=TOKEN))
+    with TestClient(app) as client:
+        body = client.get("/health").json()
+    assert body["schema"] == "visionrig/sensor-gateway-health/v2"
+    assert body["routes"] == [
+        "/api/v1/frames/ingest",
+        "/api/v1/sensors/heartbeat",
+    ]
 
 
 def test_gateway_env_requires_token(monkeypatch) -> None:
