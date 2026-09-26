@@ -32,6 +32,7 @@ class KinectV2FrameSet:
     color_bgr: Any
     depth_sampler: MetricDepthSampler | None = None
     depth_mm: Any | None = None
+    color_aligned_depth_mm: Any | None = None
     infrared: Any | None = None
 
 
@@ -86,6 +87,43 @@ class _KinectNextDepthSampler:
         return distance
 
 
+def align_depth_mm_to_color(
+    mapping: Any,
+    depth_mm: Any,
+    *,
+    color_width: int,
+    color_height: int,
+) -> Any:
+    """Project Kinect depth millimeters into a dense color-coordinate plane."""
+    try:
+        import numpy as np  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise KinectV2ReadError("Kinect color-depth alignment requires numpy") from exc
+
+    points = np.asarray(mapping)
+    if points.shape[:2] != (color_height, color_width) or points.shape[-1] < 2:
+        raise KinectV2ReadError("unexpected Kinect color-to-depth mapping shape")
+
+    depth = np.asarray(depth_mm, dtype=np.uint16)
+    if depth.ndim == 1:
+        if depth.size != 512 * 424:
+            raise KinectV2ReadError("unexpected Kinect depth plane size")
+        depth = depth.reshape(424, 512)
+    if depth.ndim != 2:
+        raise KinectV2ReadError("unexpected Kinect depth plane shape")
+
+    dx = points[..., 0]
+    dy = points[..., 1]
+    valid = np.isfinite(dx) & np.isfinite(dy)
+    ix = np.rint(np.where(valid, dx, 0)).astype(np.int32)
+    iy = np.rint(np.where(valid, dy, 0)).astype(np.int32)
+    valid &= (ix >= 0) & (iy >= 0) & (ix < depth.shape[1]) & (iy < depth.shape[0])
+
+    aligned = np.zeros((color_height, color_width), dtype=np.uint16)
+    aligned[valid] = depth[iy[valid], ix[valid]]
+    return aligned
+
+
 class KinectNextBackend:
     """kinect-next 2.x backend for Kinect for Windows / Xbox One v2 hardware."""
 
@@ -125,6 +163,7 @@ class KinectNextBackend:
         depth = getattr(frames, "depth", None)
         sampler: MetricDepthSampler | None = None
         depth_mm = None
+        color_aligned_depth_mm = None
         if depth is not None:
             sampler = _KinectNextDepthSampler(
                 self._sensor,
@@ -135,6 +174,13 @@ class KinectNextBackend:
             raw_depth = getattr(depth, "data", None)
             if raw_depth is not None:
                 depth_mm = raw_depth.copy()
+                mapping = self._sensor.mapper.map_color_frame_to_depth_space(depth)
+                color_aligned_depth_mm = align_depth_mm_to_color(
+                    mapping,
+                    depth_mm,
+                    color_width=width,
+                    color_height=height,
+                )
 
         infrared = None
         ir = getattr(frames, "infrared", None)
@@ -146,6 +192,7 @@ class KinectNextBackend:
             color_bgr=image,
             depth_sampler=sampler,
             depth_mm=depth_mm,
+            color_aligned_depth_mm=color_aligned_depth_mm,
             infrared=infrared,
         )
 
@@ -184,6 +231,8 @@ class KinectV2Source:
             sensor_data["metric_depth_sampler"] = frames.depth_sampler
         if frames.depth_mm is not None:
             sensor_data["depth_mm"] = frames.depth_mm
+        if frames.color_aligned_depth_mm is not None:
+            sensor_data["color_aligned_depth_mm"] = frames.color_aligned_depth_mm
         if frames.infrared is not None:
             sensor_data["infrared"] = frames.infrared
 
