@@ -71,6 +71,39 @@ discovery/history, control revision/timestamp state and process-local ingress
 sequence/runtime state. If that `source_id` appears again later, it is treated
 as a new registration. An active/stale/online producer cannot be forgotten.
 
+## Optimistic operator writes
+
+The operator mutation endpoints accept an optional
+`expected_state_revision=<n>` query parameter:
+
+- `PATCH /api/v1/sensors/{source_id}/metadata`;
+- `POST /api/v1/sensors/{source_id}/retire`;
+- `POST /api/v1/sensors/{source_id}/restore`;
+- `DELETE /api/v1/sensors/{source_id}`.
+
+The revision comparison is performed inside the registry lock together with the
+mutation. A mismatch returns HTTP 409 with:
+
+```json
+{
+  "detail": {
+    "code": "sensor_state_revision_conflict",
+    "expected": 12,
+    "current": 13
+  }
+}
+```
+
+The rejected mutation does not advance registry state or emit a semantic change
+event. Successful mutation responses expose the resulting `state_revision`;
+metadata uses `visionrig/sensor-metadata/v2`, lifecycle responses use
+`visionrig/sensor-lifecycle/v2`, and permanent forget uses
+`visionrig/sensor-forget/v2`.
+
+The precondition is optional for compatibility, but a UI that edits state
+should send the revision from its latest bootstrap/fleet state. On 409 it should
+refresh bootstrap before retrying instead of replaying the stale write.
+
 ## Desired-state control contract
 
 `GET /api/v1/sensors/{source_id}/desired-state` returns
@@ -220,7 +253,7 @@ pretend the two files are transactionally atomic.
 Recommended UI flow:
 
 1. fetch `/api/v1/sensors/bootstrap`;
-2. render catalog/fleet;
+2. render catalog/fleet and retain its `state_revision` for operator writes;
 3. poll
    `/api/v1/sensors/changes?after_cursor=<change_cursor>&stream_id=<change_stream_id>&wait_seconds=20`;
 4. track the highest applied event `state_revision`;
@@ -230,7 +263,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v23` and advertises the desired-state
+`GET /health` uses `visionrig/health/v24` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
