@@ -1,7 +1,8 @@
 # VisionRig reference producer
 
 The reference producer demonstrates the client side of the sensor protocol and is
-usable directly on Windows/Linux for webcam or desktop-screen input.
+usable directly on Windows/Linux for webcam, desktop-screen, image and Kinect v2
+input.
 
 ## Install
 
@@ -38,6 +39,18 @@ Desktop:
 visionrig-producer --screen 1 --source-id windows-screen --fps 3 --verbose
 ```
 
+Remote Kinect v2:
+
+```powershell
+pip install -e ".[producer,kinect-v2]"
+visionrig-producer --kinect-v2 --source-id kinect-living-room --fps 5 --verbose
+```
+
+Kinect mode JPEG-encodes RGB, color-aligns the hardware depth plane on the
+producer machine using the Kinect mapper, and sends RGB + aligned uint16 depth +
+uint16 IR as SensorPacket/v1. It uses the same persistent sequence/drop state,
+desired-state polling and heartbeat acknowledgement as the webcam producer.
+
 The producer polls desired state every two seconds by default. Override with
 `--control-poll-seconds` between 0.25 and 60 seconds.
 
@@ -48,7 +61,7 @@ The reference producer checks
 
 When `enabled=false`:
 
-- webcam/screen/image capture is not opened, or an existing source is closed;
+- webcam/screen/image/Kinect capture is not opened, or an existing source is closed;
 - no frame is captured or encoded;
 - no frame sequence is reserved/consumed;
 - heartbeat continues on each control poll so VisionRig can still report the

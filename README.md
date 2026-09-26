@@ -17,6 +17,7 @@ VisionRig includes:
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - **bounded binary SensorPacket/v1 transport for RGB + color-aligned metric depth + infrared**
+- **remote Kinect v2 producer with producer-side color/depth alignment**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
@@ -159,7 +160,9 @@ Multimodal producers can use
 plus optional little-endian uint16 depth/IR planes without base64 expansion.
 Depth is required to be color-aligned and is exposed frame-locally as both
 `depth_mm` and a metric sampler; raw planes still do not cross into
-PerceptionEvent/Consciousness Core.
+PerceptionEvent/Consciousness Core. `visionrig-producer --kinect-v2` now
+performs Kinect color/depth alignment on the producer host and sends the packet
+through the same durable sequence/backpressure state machine as normal frames.
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.

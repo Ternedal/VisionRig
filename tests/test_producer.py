@@ -164,3 +164,32 @@ def test_producer_sends_heartbeat_without_consuming_sequence() -> None:
     assert seen["json"]["applied_revision"] == 9
     assert stats.next_sequence == 0
     assert stats.captured == 0
+
+
+def test_producer_sends_sensor_packet_through_same_sequence_state_machine() -> None:
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        sequence = int(request.url.params["frame_sequence"])
+        dropped = int(request.url.params["dropped_frames"])
+        return httpx.Response(200, json=_receipt(sequence, dropped))
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="quest",
+            source_type="vr",
+            client=client,
+        )
+        result = producer.send_packet(b"sensor-packet")
+
+    assert result.status == "accepted"
+    assert result.frame_sequence == 0
+    assert seen[0].url.path == "/api/v1/sensor-packets/ingest"
+    assert seen[0].headers["content-type"] == (
+        "application/vnd.visionrig.sensor-packet"
+    )
+    assert seen[0].content == b"sensor-packet"
+    assert producer.stats().next_sequence == 1

@@ -248,6 +248,7 @@ class GatewayFrameProducer:
         pending_dropped: int,
         payload: bytes,
         content_type: str,
+        path: str = "/api/v1/frames/ingest",
     ) -> httpx.Response:
         params: dict[str, str | int] = {
             "source_id": self._source_id,
@@ -267,17 +268,18 @@ class GatewayFrameProducer:
             },
             "timeout": self._timeout,
         }
-        target = self._base_url + "/api/v1/frames/ingest"
+        target = self._base_url + path
         if self._client is not None:
             return self._client.post(target, **kwargs)
         with httpx.Client() as client:
             return client.post(target, **kwargs)
 
-    def send_encoded(
+    def _send_payload(
         self,
         payload: bytes,
         *,
-        content_type: Literal["image/jpeg", "image/png", "image/webp"] = "image/jpeg",
+        content_type: str,
+        path: str,
     ) -> ProducerFrameResult:
         if not payload:
             raise ValueError("frame payload must not be empty")
@@ -291,6 +293,7 @@ class GatewayFrameProducer:
                 pending_dropped=pending_before_send,
                 payload=payload,
                 content_type=content_type,
+                path=path,
             )
         except httpx.HTTPError:
             self._mark_dropped(sequence)
@@ -347,4 +350,23 @@ class GatewayFrameProducer:
             frame_sequence=sequence,
             pending_dropped_frames=0,
             event_id=receipt.event_id,
+        )
+
+    def send_packet(self, payload: bytes) -> ProducerFrameResult:
+        return self._send_payload(
+            payload,
+            content_type="application/vnd.visionrig.sensor-packet",
+            path="/api/v1/sensor-packets/ingest",
+        )
+
+    def send_encoded(
+        self,
+        payload: bytes,
+        *,
+        content_type: Literal["image/jpeg", "image/png", "image/webp"] = "image/jpeg",
+    ) -> ProducerFrameResult:
+        return self._send_payload(
+            payload,
+            content_type=content_type,
+            path="/api/v1/frames/ingest",
         )

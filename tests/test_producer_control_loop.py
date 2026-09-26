@@ -1,6 +1,11 @@
 from types import SimpleNamespace
 
-from visionrig.producer_cli import _run_controlled_capture
+import numpy as np
+
+from visionrig.contracts import SourceDescriptor
+from visionrig.pipeline import Frame
+from visionrig.producer_cli import _encode_kinect_packet, _run_controlled_capture
+from visionrig.sensor_packet import decode_sensor_packet
 
 
 class FakeClock:
@@ -34,6 +39,7 @@ class FakeProducer:
         self.state_index = 0
         self.heartbeats: list[tuple[tuple[str, ...], bool | None, int | None]] = []
         self.sent: list[bytes] = []
+        self.sent_packets: list[bytes] = []
 
     def fetch_desired_state(self):
         index = min(self.state_index, len(self.enabled_states) - 1)
@@ -56,6 +62,13 @@ class FakeProducer:
         return SimpleNamespace(
             status="accepted",
             frame_sequence=len(self.sent) - 1,
+        )
+
+    def send_packet(self, payload: bytes):
+        self.sent_packets.append(payload)
+        return SimpleNamespace(
+            status="accepted",
+            frame_sequence=len(self.sent_packets) - 1,
         )
 
     def stats(self):
@@ -162,3 +175,57 @@ def test_paused_control_does_not_consume_frame_budget() -> None:
     assert source.reads == 1
     assert len(producer.sent) == 1
     assert len(producer.heartbeats) == 3
+
+
+def test_controlled_capture_can_send_multimodal_packet() -> None:
+    clock = FakeClock()
+    producer = FakeProducer([True])
+    source = FakeSource("kinect")
+
+    frames = _run_controlled_capture(
+        producer=producer,
+        source_factory=lambda: source,
+        source_type="camera",
+        capabilities=("rgb", "depth", "infrared"),
+        fps=5.0,
+        jpeg_quality=80,
+        max_frames=1,
+        control_poll_seconds=1.0,
+        verbose=False,
+        encode_jpeg=lambda payload, _quality: b"jpeg:" + payload,
+        packet_encoder=lambda frame, jpeg: b"packet:" + jpeg,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+
+    assert frames == 1
+    assert producer.sent == []
+    assert producer.sent_packets == [b"packet:jpeg:frame-kinect-1"]
+    assert producer.heartbeats == [
+        (("rgb", "depth", "infrared"), True, 1),
+    ]
+
+
+def test_encode_kinect_packet_uses_aligned_depth_and_infrared() -> None:
+    depth = np.array([[1000, 1500], [2000, 2500]], dtype=np.uint16)
+    infrared = np.array([[10, 20], [30, 40]], dtype=np.uint16)
+    frame = Frame(
+        source=SourceDescriptor(
+            source_id="kinect",
+            source_type="camera",
+            device="kinect-v2",
+        ),
+        sequence=0,
+        payload=np.zeros((2, 2, 3), dtype=np.uint8),
+        sensor_data={
+            "color_aligned_depth_mm": depth,
+            "infrared": infrared,
+        },
+    )
+
+    packet = _encode_kinect_packet(frame, b"jpeg")
+    decoded = decode_sensor_packet(packet)
+
+    assert decoded.rgb_payload == b"jpeg"
+    assert np.array_equal(decoded.depth_mm, depth)
+    assert np.array_equal(decoded.infrared, infrared)

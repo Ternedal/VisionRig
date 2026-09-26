@@ -7,9 +7,11 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
+from .kinect_v2 import KinectV2Source
 from .producer import GatewayFrameProducer, ProducerError
 from .producer_state import ProducerStateError, ProducerStateStore
 from .screen_source import MssScreenSource
+from .sensor_packet import encode_sensor_packet
 from .sources import CameraSource, FrameSource, ImageFileSource
 
 
@@ -23,6 +25,7 @@ class _ProducerClient(Protocol):
         applied_revision: int | None = None,
     ): ...
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"): ...
+    def send_packet(self, payload: bytes): ...
     def stats(self): ...
 
 
@@ -41,6 +44,20 @@ def _encode_jpeg(image: Any, quality: int) -> bytes:
     if not ok:
         raise RuntimeError("failed to JPEG-encode captured frame")
     return encoded.tobytes()
+
+
+def _encode_kinect_packet(frame: Any, rgb_jpeg: bytes) -> bytes:
+    depth = frame.sensor_data.get("color_aligned_depth_mm")
+    if depth is None:
+        raise RuntimeError(
+            "Kinect remote producer requires color-aligned depth data"
+        )
+    return encode_sensor_packet(
+        rgb_payload=rgb_jpeg,
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        infrared=frame.sensor_data.get("infrared"),
+    )
 
 
 def _default_state_path() -> Path:
@@ -62,6 +79,7 @@ def _run_controlled_capture(
     control_poll_seconds: float,
     verbose: bool,
     encode_jpeg: Callable[[Any, int], bytes] = _encode_jpeg,
+    packet_encoder: Callable[[Any, bytes], bytes] | None = None,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
@@ -122,7 +140,10 @@ def _run_controlled_capture(
                 break
 
             payload = encode_jpeg(frame.payload, jpeg_quality)
-            result = producer.send_encoded(payload)
+            if packet_encoder is None:
+                result = producer.send_encoded(payload)
+            else:
+                result = producer.send_packet(packet_encoder(frame, payload))
             frames += 1
 
             if verbose or result.status != "accepted":
@@ -151,12 +172,13 @@ def _run_controlled_capture(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Send webcam/screen/image frames to VisionRig sensor gateway"
+        description="Send webcam/screen/image/Kinect data to VisionRig sensor gateway"
     )
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument("--camera", type=int)
     source_group.add_argument("--screen", type=int)
     source_group.add_argument("--image")
+    source_group.add_argument("--kinect-v2", action="store_true")
 
     parser.add_argument(
         "--gateway-url",
@@ -190,7 +212,15 @@ def main() -> None:
     if not 0.25 <= args.control_poll_seconds <= 60:
         parser.error("--control-poll-seconds must be between 0.25 and 60")
 
-    if args.camera is not None:
+    packet_encoder = None
+    if args.kinect_v2:
+        source_id = args.source_id or "kinect-v2-0"
+        source_type = "camera"
+        device = "kinect-v2"
+        capabilities = ("rgb", "depth", "infrared")
+        source_factory = lambda: KinectV2Source(source_id=source_id)
+        packet_encoder = _encode_kinect_packet
+    elif args.camera is not None:
         source_id = args.source_id or f"camera-{args.camera}"
         source_type = "camera"
         device = str(args.camera)
@@ -230,6 +260,7 @@ def main() -> None:
             max_frames=args.max_frames,
             control_poll_seconds=args.control_poll_seconds,
             verbose=args.verbose,
+            packet_encoder=packet_encoder,
         )
     except (ProducerError, ProducerStateError) as exc:
         raise SystemExit(f"producer stopped: {exc}") from exc

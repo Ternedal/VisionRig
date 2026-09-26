@@ -58,10 +58,22 @@ SensorPacket/v1 through the authenticated gateway: encoded RGB plus optional
 color-aligned uint16 metric depth and uint16 IR. Raw planes remain frame-local
 after decode and are never exposed through PerceptionEvent.
 
-The transport contract is implemented in 0.38.0. A dedicated Kinect remote
-producer still needs to perform Kinect coordinate mapping on the producer side
-before sending the required color-aligned depth plane; the server deliberately
-does not depend on Kinect SDK calibration objects.
+VisionRig 0.39.0 adds the dedicated remote producer path. The Kinect adapter
+uses the SDK mapper on the producer machine to build a dense color-aligned
+uint16 millimeter plane. `visionrig-producer --kinect-v2` JPEG-encodes RGB,
+packages aligned depth plus IR as SensorPacket/v1, and sends it through the
+authenticated gateway using the same durable sequence/drop state as other
+producers. The server deliberately remains independent of Kinect SDK calibration
+objects.
+
+Run remote producer mode:
+
+~~~powershell
+$env:VISIONRIG_GATEWAY_URL="http://<VisionRig-Tailscale-IP>:8111"
+$env:VISIONRIG_PRODUCER_TOKEN="<gateway token>"
+pip install -e ".[producer,kinect-v2]"
+visionrig-producer --kinect-v2 --source-id kinect-living-room --fps 5 --verbose
+~~~
 
 The Kinect hardware-depth stage is enabled automatically by `--kinect-v2`.
 
