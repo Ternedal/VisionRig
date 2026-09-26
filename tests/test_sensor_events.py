@@ -1,3 +1,6 @@
+import threading
+import time
+
 from fastapi.testclient import TestClient
 
 from visionrig.api import create_app
@@ -310,3 +313,68 @@ def test_sensor_change_endpoint_reports_stream_reset() -> None:
     assert body["entries"] == []
     assert body["next_cursor"] == 0
     assert body["newest_available_cursor"] == 1
+
+
+def test_sensor_change_long_poll_wakes_on_new_event() -> None:
+    journal = SensorChangeJournal(stream_id="long-poll")
+    result = {}
+
+    def reader() -> None:
+        result["batch"] = journal.wait_for_changes(
+            after_cursor=0,
+            expected_stream_id="long-poll",
+            wait_seconds=1.0,
+        )
+
+    thread = threading.Thread(target=reader)
+    thread.start()
+    time.sleep(0.05)
+    journal.append(kind="registered", source_id="camera-long-poll")
+    thread.join(timeout=2.0)
+
+    assert thread.is_alive() is False
+    batch = result["batch"]
+    assert [entry.event.kind for entry in batch.entries] == ["registered"]
+    assert batch.next_cursor == 1
+    assert batch.stream_reset is False
+
+
+def test_sensor_change_long_poll_times_out_cleanly() -> None:
+    journal = SensorChangeJournal(stream_id="timeout-stream")
+    started = time.monotonic()
+    batch = journal.wait_for_changes(
+        after_cursor=0,
+        expected_stream_id="timeout-stream",
+        wait_seconds=0.05,
+    )
+    elapsed = time.monotonic() - started
+
+    assert elapsed >= 0.04
+    assert batch.entries == ()
+    assert batch.next_cursor == 0
+    assert batch.stream_reset is False
+
+
+def test_sensor_change_endpoint_long_poll_returns_immediately_on_stream_reset() -> None:
+    journal = SensorChangeJournal(stream_id="current-stream")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_change_journal=journal,
+        )
+    )
+
+    started = time.monotonic()
+    response = client.get(
+        "/api/v1/sensors/changes",
+        params={
+            "after_cursor": 50,
+            "stream_id": "old-stream",
+            "wait_seconds": 1.0,
+        },
+    )
+    elapsed = time.monotonic() - started
+
+    assert response.status_code == 200
+    assert elapsed < 0.5
+    assert response.json()["stream_reset"] is True
