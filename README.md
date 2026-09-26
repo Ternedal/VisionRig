@@ -35,6 +35,7 @@ VisionRig includes:
 - **bounded cursor-based semantic sensor change feed for incremental UI updates**
 - **race-safe UI bootstrap snapshot with catalog, fleet and change cursor**
 - **restart-detectable sensor change streams with explicit stream identity**
+- **bounded long-poll sensor changes with event wake-up and timeout fallback**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -111,7 +112,9 @@ is sampled before the snapshot is built, so a concurrent change may be replayed
 once through the change feed but cannot be silently missed. Clients send the
 stream id back to `/changes`; after a service restart the new process returns
 `stream_reset=true` instead of silently accepting a cursor from the old
-journal.
+journal. Clients may add `wait_seconds` (0..30) to hold an empty change
+request until a semantic event arrives or the timeout expires; gap and
+stream-reset responses never wait.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
