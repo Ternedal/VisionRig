@@ -78,6 +78,28 @@ def _validate_plane_bytes(plane: SensorPacketPlane, payload: bytes, *, label: st
         raise SensorPacketError(f"{label} payload length does not match header")
 
 
+def inspect_sensor_packet(payload: bytes) -> SensorPacketHeader:
+    if len(payload) < len(_MAGIC) + _HEADER_LENGTH.size:
+        raise SensorPacketError("sensor packet is truncated")
+    if payload[: len(_MAGIC)] != _MAGIC:
+        raise SensorPacketError("sensor packet magic/version is invalid")
+    offset = len(_MAGIC)
+    (header_length,) = _HEADER_LENGTH.unpack(
+        payload[offset : offset + _HEADER_LENGTH.size]
+    )
+    offset += _HEADER_LENGTH.size
+    if header_length < 2 or header_length > 64 * 1024:
+        raise SensorPacketError("sensor packet header length is invalid")
+    if offset + header_length > len(payload):
+        raise SensorPacketError("sensor packet header is truncated")
+    try:
+        return SensorPacketHeader.model_validate_json(
+            payload[offset : offset + header_length]
+        )
+    except (ValidationError, ValueError) as exc:
+        raise SensorPacketError("sensor packet header is invalid") from exc
+
+
 def decode_sensor_packet(payload: bytes) -> DecodedSensorPacket:
     if len(payload) < len(_MAGIC) + _HEADER_LENGTH.size:
         raise SensorPacketError("sensor packet is truncated")
@@ -89,17 +111,8 @@ def decode_sensor_packet(payload: bytes) -> DecodedSensorPacket:
         payload[offset : offset + _HEADER_LENGTH.size]
     )
     offset += _HEADER_LENGTH.size
-    if header_length < 2 or header_length > 64 * 1024:
-        raise SensorPacketError("sensor packet header length is invalid")
-    if offset + header_length > len(payload):
-        raise SensorPacketError("sensor packet header is truncated")
-
-    header_bytes = payload[offset : offset + header_length]
+    header = inspect_sensor_packet(payload)
     offset += header_length
-    try:
-        header = SensorPacketHeader.model_validate_json(header_bytes)
-    except (ValidationError, ValueError) as exc:
-        raise SensorPacketError("sensor packet header is invalid") from exc
 
     rgb_type = header.rgb_content_type.split(";", 1)[0].strip().lower()
     if rgb_type not in {"image/jpeg", "image/png", "image/webp"}:
