@@ -67,10 +67,12 @@ def test_failed_persist_rolls_back_in_memory_state(tmp_path, monkeypatch) -> Non
 
     monkeypatch.setattr("visionrig.sensor_registry.os.replace", fail_replace)
 
+    previous_state_revision = registry.state_revision
     with pytest.raises(SensorRegistryError, match="unable to persist"):
         registry.patch("cam-a", SensorMetadataPatch(display_name="Broken update"))
 
     assert registry.get("cam-a").display_name == "Camera A"
+    assert registry.state_revision == previous_state_revision
 
 
 def test_first_seen_registration_is_persistent_and_idempotent(tmp_path) -> None:
@@ -275,3 +277,67 @@ def test_forget_removes_persisted_metadata_discovery_and_control(tmp_path) -> No
     assert payload["entries"] == []
     assert payload["discovery"] == []
     assert payload["control"] == []
+
+
+def test_sensor_state_revision_persists_and_ignores_liveness_only_observations(
+    tmp_path,
+) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0])
+
+    assert registry.state_revision == 0
+    registry.observe(
+        "camera-a",
+        source_type="camera",
+        device="usb-camera",
+        capabilities=("rgb",),
+    )
+    assert registry.state_revision == 1
+
+    now[0] = datetime(2026, 9, 26, 13, 1, tzinfo=timezone.utc)
+    registry.observe(
+        "camera-a",
+        source_type="camera",
+    )
+    assert registry.state_revision == 1
+
+    registry.observe(
+        "camera-a",
+        source_type="camera",
+        capabilities=("rgb", "depth"),
+    )
+    assert registry.state_revision == 2
+
+    registry.patch(
+        "camera-a",
+        SensorMetadataPatch(display_name="Camera A"),
+    )
+    assert registry.state_revision == 3
+
+    registry.patch(
+        "camera-a",
+        SensorMetadataPatch(display_name="Camera A"),
+    )
+    assert registry.state_revision == 3
+
+    restarted = SensorRegistry(path)
+    assert restarted.state_revision == 3
+
+
+def test_legacy_registry_without_state_revision_defaults_to_zero(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_id": "visionrig/sensor-registry-file/v1",
+                "entries": [{"source_id": "legacy-camera"}],
+                "discovery": [],
+                "control": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    registry = SensorRegistry(path)
+    assert registry.state_revision == 0
