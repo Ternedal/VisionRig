@@ -240,7 +240,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v18",
+            "schema": "visionrig/health/v19",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -276,6 +276,9 @@ def create_app(
             "sensor_changes": {
                 "schema": "visionrig/sensor-change-batch/v1",
                 "durability": "process-local",
+            },
+            "sensor_bootstrap": {
+                "schema": "visionrig/sensor-bootstrap-snapshot/v1",
             },
         }
 
@@ -380,6 +383,19 @@ def create_app(
         return {
             "schema": "visionrig/sensor-catalog/v7",
             "sources": sources,
+        }
+
+    @app.get("/api/v1/sensors/bootstrap")
+    def sensor_bootstrap_snapshot() -> dict[str, object]:
+        # Sample the change cursor before building state. Changes racing with
+        # snapshot construction may be replayed, but cannot be missed.
+        change_state = sensor_changes.read(after_cursor=0, limit=1)
+        baseline_cursor = change_state.newest_available_cursor or 0
+        return {
+            "schema": "visionrig/sensor-bootstrap-snapshot/v1",
+            "change_cursor": baseline_cursor,
+            "catalog": sensor_catalog(),
+            "fleet": sensor_fleet_summary_payload(),
         }
 
     @app.get(

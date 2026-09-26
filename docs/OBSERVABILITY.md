@@ -156,13 +156,37 @@ for liveness transitions. A reported `gap=true` means the client fell behind
 the bounded journal and should refresh catalog/fleet before continuing from the
 returned cursor.
 
+## UI bootstrap snapshot
+
+`GET /api/v1/sensors/bootstrap` returns
+`visionrig/sensor-bootstrap-snapshot/v1` with:
+
+- `catalog`: the current sensor catalog;
+- `fleet`: the current fleet summary;
+- `change_cursor`: the semantic change-feed cursor to continue from.
+
+The cursor is sampled **before** catalog/fleet construction. If a semantic
+change races with snapshot construction, the client may see that state already
+reflected in the snapshot and then receive the same change once from
+`/changes`; the change cannot be skipped by sampling a cursor after it happened.
+This intentionally favors harmless replay over missed control/lifecycle state.
+
+Recommended UI flow:
+
+1. fetch `/api/v1/sensors/bootstrap`;
+2. render catalog/fleet;
+3. poll `/api/v1/sensors/changes?after_cursor=<change_cursor>`;
+4. if `gap=true`, fetch a new bootstrap snapshot;
+5. separately refresh fleet/status at a low cadence for time-derived liveness.
+
 ## Health integration
 
-`GET /health` uses `visionrig/health/v18` and advertises the desired-state
+`GET /health` uses `visionrig/health/v19` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
 that already poll health. Health also advertises the process-local sensor change
-batch schema under `sensor_changes`.
+batch schema under `sensor_changes` and advertises the bootstrap snapshot
+schema under `sensor_bootstrap`.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
 embeddings are never returned by these surfaces.

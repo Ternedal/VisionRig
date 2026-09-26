@@ -33,6 +33,7 @@ VisionRig includes:
 - **guarded permanent forget for retired/offline sensors**
 - **bounded sensor fleet summary for UI and health surfaces**
 - **bounded cursor-based semantic sensor change feed for incremental UI updates**
+- **race-safe UI bootstrap snapshot with catalog, fleet and change cursor**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -102,6 +103,11 @@ retire/restore/forget and producer applied-state changes. Repeated heartbeats
 that only refresh liveness do not create events. Time-based transitions from
 online to stale/offline remain derived state in fleet/status and therefore still
 require periodic liveness polling.
+
+`GET /api/v1/sensors/bootstrap` gives UI clients their initial catalog + fleet
+state together with a safe `change_cursor`. The cursor is sampled before the
+snapshot is built, so a concurrent change may be replayed once through the
+change feed but cannot be silently missed.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
