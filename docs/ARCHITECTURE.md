@@ -100,7 +100,7 @@ isolated from local perception.
 
 ### V5 — sensor control and Kaliv ingress — implemented foundation
 Authenticated Windows/screen/camera and Kaliv VR/passthrough producer transport,
-persistent sensor catalog, desired-state control, effective-state convergence,
+persistent sensor catalog/discovery, stable source identity, desired-state control, effective-state convergence,
 and managed local webcam/Kinect control are implemented. Native Kaliv Android/
 Quest producer clients remain a separate client-delivery slice.
 
