@@ -19,6 +19,7 @@ VisionRig includes:
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
 - **operator-owned sensor catalog metadata for UI/control surfaces**
+- **restart-safe persistent sensor registry with atomic writes**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -40,6 +41,10 @@ identity.
 metadata such as a friendly name, physical/logical location, role and desired
 enabled state. Metadata can be prepared before the sensor is online with
 `PATCH /api/v1/sensors/{source_id}/metadata`.
+
+Registry metadata is persisted by default to
+`~/.visionrig/sensor-registry.json` using atomic replacement. Override with
+`VISIONRIG_SENSOR_REGISTRY_FILE`; set it to an empty value for ephemeral mode.
 
 The metadata `enabled` flag is deliberately a desired/control-plane value. It
 does not silently reject producer traffic or gain perception authority.
