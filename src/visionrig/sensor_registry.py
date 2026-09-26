@@ -40,11 +40,12 @@ class SensorMetadataPatch(BaseModel):
 class SensorDesiredState(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_id: Literal["visionrig/sensor-desired-state/v1"] = (
-        "visionrig/sensor-desired-state/v1"
+    schema_id: Literal["visionrig/sensor-desired-state/v2"] = (
+        "visionrig/sensor-desired-state/v2"
     )
     source_id: str = Field(min_length=1, max_length=128)
     enabled: bool
+    revision: int = Field(ge=0)
     production_authority: Literal[False] = False
 
 
@@ -90,6 +91,13 @@ class _StoredSensorDiscovery(BaseModel):
     observation_count: int = Field(default=0, ge=0)
 
 
+class _StoredSensorControl(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: str = Field(min_length=1, max_length=128)
+    revision: int = Field(default=0, ge=0)
+
+
 class _SensorRegistryFile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -98,6 +106,7 @@ class _SensorRegistryFile(BaseModel):
     )
     entries: tuple[_StoredSensorMetadata, ...] = ()
     discovery: tuple[_StoredSensorDiscovery, ...] = ()
+    control: tuple[_StoredSensorControl, ...] = ()
 
 
 def _utcnow() -> datetime:
@@ -118,6 +127,7 @@ class SensorRegistry:
         self._clock = clock
         self._entries: dict[str, SensorMetadata] = {}
         self._discovery: dict[str, SensorDiscovery] = {}
+        self._control_revisions: dict[str, int] = {}
         if self.path is not None:
             self._load()
 
@@ -166,6 +176,10 @@ class SensorRegistry:
             )
             for item in state.discovery
         }
+        self._control_revisions = {
+            item.source_id: item.revision
+            for item in state.control
+        }
 
     def _save(self) -> None:
         if self.path is None:
@@ -193,6 +207,14 @@ class SensorRegistry:
                     observation_count=item.observation_count,
                 )
                 for item in self.list_discovery()
+            ),
+            control=tuple(
+                _StoredSensorControl(
+                    source_id=source_id,
+                    revision=revision,
+                )
+                for source_id, revision in sorted(self._control_revisions.items())
+                if revision > 0
             ),
         )
         temp_name: str | None = None
@@ -317,11 +339,16 @@ class SensorRegistry:
                 raise
             return updated
 
+    def control_revision(self, source_id: str) -> int:
+        with self._lock:
+            return self._control_revisions.get(source_id, 0)
+
     def desired_state(self, source_id: str) -> SensorDesiredState:
         metadata = self.get(source_id)
         return SensorDesiredState(
             source_id=source_id,
             enabled=metadata.enabled,
+            revision=self.control_revision(source_id),
             production_authority=False,
         )
 
@@ -347,7 +374,13 @@ class SensorRegistry:
                 changes["enabled"] = patch.enabled
             updated = replace(current, **changes)
             previous = self._entries.get(source_id)
+            previous_revision = self._control_revisions.get(source_id, 0)
             self._entries[source_id] = updated
+            if (
+                "enabled" in patch.model_fields_set
+                and updated.enabled != current.enabled
+            ):
+                self._control_revisions[source_id] = previous_revision + 1
             try:
                 self._save()
             except Exception:
@@ -355,5 +388,9 @@ class SensorRegistry:
                     self._entries.pop(source_id, None)
                 else:
                     self._entries[source_id] = previous
+                if previous_revision == 0:
+                    self._control_revisions.pop(source_id, None)
+                else:
+                    self._control_revisions[source_id] = previous_revision
                 raise
             return updated
