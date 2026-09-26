@@ -388,7 +388,7 @@ def test_persistent_sensor_change_journal_survives_restart(tmp_path) -> None:
         stream_id="persistent-stream",
         path=path,
     )
-    for index in range(4):
+    for index in range(5):
         first.append(
             kind="metadata_changed",
             source_id=f"camera-{index}",
@@ -403,19 +403,19 @@ def test_persistent_sensor_change_journal_survives_restart(tmp_path) -> None:
     assert restarted.stream_id == "persistent-stream"
     batch = restarted.read(after_cursor=1, limit=10)
     assert batch.gap is True
-    assert [entry.cursor for entry in batch.entries] == [2, 3, 4]
-    assert [entry.event.payload["index"] for entry in batch.entries] == [1, 2, 3]
+    assert [entry.cursor for entry in batch.entries] == [3, 4, 5]
+    assert [entry.event.payload["index"] for entry in batch.entries] == [2, 3, 4]
 
     appended = restarted.append(
         kind="registered",
-        source_id="camera-4",
-        occurred_utc="2026-09-26T12:40:04+00:00",
+        source_id="camera-5",
+        occurred_utc="2026-09-26T12:40:05+00:00",
     )
-    assert appended.cursor == 5
+    assert appended.cursor == 6
 
     third = SensorChangeJournal(capacity=3, path=path)
-    latest = third.read(after_cursor=2, limit=10)
-    assert [entry.cursor for entry in latest.entries] == [3, 4, 5]
+    latest = third.read(after_cursor=3, limit=10)
+    assert [entry.cursor for entry in latest.entries] == [4, 5, 6]
     assert latest.stream_id == "persistent-stream"
 
 
