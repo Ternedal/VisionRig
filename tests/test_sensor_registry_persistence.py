@@ -100,3 +100,32 @@ def test_first_seen_registration_is_persistent_and_idempotent(tmp_path) -> None:
     restored = restarted.get("quest-living-room")
     assert restored.display_name == "Kaliv Quest"
     assert restored.enabled is False
+
+
+def test_discovery_survives_restart_and_preserves_capabilities(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    registry = SensorRegistry(path)
+
+    registry.observe(
+        "kinect-living-room",
+        source_type="camera",
+        device="kinect-v2",
+        capabilities=("RGB", "depth", "infrared", "depth"),
+    )
+
+    restarted = SensorRegistry(path)
+    discovery = restarted.get_discovery("kinect-living-room")
+    assert discovery is not None
+    assert discovery.source_type == "camera"
+    assert discovery.device == "kinect-v2"
+    assert discovery.capabilities == ("depth", "infrared", "rgb")
+
+
+def test_discovery_rejects_source_type_reuse(tmp_path) -> None:
+    from visionrig.sensor_registry import SensorIdentityConflict
+
+    registry = SensorRegistry(tmp_path / "sensor-registry.json")
+    registry.observe("shared-id", source_type="camera")
+
+    with pytest.raises(SensorIdentityConflict, match="already registered"):
+        registry.observe("shared-id", source_type="vr")
