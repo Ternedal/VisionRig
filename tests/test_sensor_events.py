@@ -209,14 +209,21 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v3"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v4"
     assert body["sensor_state_revision"] == 1
+    assert body["change_consistency"] == {
+        "schema": "visionrig/sensor-change-consistency/v1",
+        "status": "synced",
+        "state_revision": 1,
+        "journal_state_revision": 1,
+    }
     assert body["change_stream_id"] == "stream-live"
     assert body["change_cursor"] == 2
     assert body["catalog"]["schema"] == "visionrig/sensor-catalog/v7"
     assert body["catalog"]["sources"][0]["source_id"] == "camera-bootstrap"
-    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v2"
+    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v3"
     assert body["fleet"]["state_revision"] == 1
+    assert body["fleet"]["change_consistency"]["status"] == "synced"
     assert body["fleet"]["total"] == 1
 
     changed = client.patch(
@@ -251,8 +258,14 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v3"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v4"
     assert body["sensor_state_revision"] == 0
+    assert body["change_consistency"] == {
+        "schema": "visionrig/sensor-change-consistency/v1",
+        "status": "synced",
+        "state_revision": 0,
+        "journal_state_revision": 0,
+    }
     assert body["change_stream_id"] == "empty-stream"
     assert body["change_cursor"] == 0
     assert body["catalog"] == {
@@ -260,8 +273,14 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "sources": [],
     }
     assert body["fleet"] == {
-        "schema": "visionrig/sensor-fleet-summary/v2",
+        "schema": "visionrig/sensor-fleet-summary/v3",
         "state_revision": 0,
+        "change_consistency": {
+            "schema": "visionrig/sensor-change-consistency/v1",
+            "status": "synced",
+            "state_revision": 0,
+            "journal_state_revision": 0,
+        },
         "total": 0,
         "lifecycle": {"active": 0, "retired": 0},
         "presence": {
@@ -405,6 +424,7 @@ def test_persistent_sensor_change_journal_survives_restart(tmp_path) -> None:
             source_id=f"camera-{index}",
             payload={"index": index},
             occurred_utc=f"2026-09-26T12:40:0{index}+00:00",
+            state_revision=index,
         )
 
     assert first.persistent is True
@@ -412,6 +432,7 @@ def test_persistent_sensor_change_journal_survives_restart(tmp_path) -> None:
 
     restarted = SensorChangeJournal(capacity=3, path=path)
     assert restarted.stream_id == "persistent-stream"
+    assert restarted.state_revision_high_water == 4
     batch = restarted.read(after_cursor=1, limit=10)
     assert batch.gap is True
     assert [entry.cursor for entry in batch.entries] == [3, 4, 5]
@@ -421,13 +442,16 @@ def test_persistent_sensor_change_journal_survives_restart(tmp_path) -> None:
         kind="registered",
         source_id="camera-5",
         occurred_utc="2026-09-26T12:40:05+00:00",
+        state_revision=5,
     )
     assert appended.cursor == 6
+    assert restarted.state_revision_high_water == 5
 
     third = SensorChangeJournal(capacity=3, path=path)
     latest = third.read(after_cursor=3, limit=10)
     assert [entry.cursor for entry in latest.entries] == [4, 5, 6]
     assert latest.stream_id == "persistent-stream"
+    assert third.state_revision_high_water == 5
 
 
 def test_corrupt_sensor_change_journal_fails_closed(tmp_path) -> None:
@@ -453,8 +477,13 @@ def test_failed_sensor_change_persist_rolls_back_cursor_and_entries(
         stream_id="rollback-stream",
         path=path,
     )
-    first = journal.append(kind="registered", source_id="camera-a")
+    first = journal.append(
+        kind="registered",
+        source_id="camera-a",
+        state_revision=1,
+    )
     assert first.cursor == 1
+    assert journal.state_revision_high_water == 1
 
     def fail_replace(_source, _target):
         raise OSError("disk failure")
@@ -465,15 +494,25 @@ def test_failed_sensor_change_persist_rolls_back_cursor_and_entries(
         SensorChangeJournalError,
         match="unable to persist sensor change journal",
     ):
-        journal.append(kind="metadata_changed", source_id="camera-a")
+        journal.append(
+            kind="metadata_changed",
+            source_id="camera-a",
+            state_revision=2,
+        )
 
+    assert journal.state_revision_high_water == 1
     batch = journal.read(after_cursor=0)
     assert [entry.cursor for entry in batch.entries] == [1]
     assert batch.newest_available_cursor == 1
 
     monkeypatch.undo()
-    second = journal.append(kind="metadata_changed", source_id="camera-a")
+    second = journal.append(
+        kind="metadata_changed",
+        source_id="camera-a",
+        state_revision=2,
+    )
     assert second.cursor == 2
+    assert journal.state_revision_high_water == 2
 
 
 def test_persisted_stream_id_mismatch_fails_closed(tmp_path) -> None:
@@ -510,7 +549,7 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     )
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v24"
+    assert health["schema"] == "visionrig/health/v25"
     assert health["sensor_changes"]["durability"] == "persistent"
     assert health["sensor_changes"]["stream_id"] == "restored-stream"
 
@@ -551,7 +590,9 @@ def test_fleet_revision_exposes_change_feed_drift() -> None:
         entry["event"]["state_revision"]
         for entry in first_changes["entries"]
     ) == 1
-    assert client.get("/api/v1/sensors/fleet").json()["state_revision"] == 1
+    initial_fleet = client.get("/api/v1/sensors/fleet").json()
+    assert initial_fleet["state_revision"] == 1
+    assert initial_fleet["change_consistency"]["status"] == "synced"
 
     # Simulate a crash window where registry state persisted but the matching
     # semantic journal append never happened.
@@ -572,10 +613,16 @@ def test_fleet_revision_exposes_change_feed_drift() -> None:
 
     fleet = client.get("/api/v1/sensors/fleet").json()
     assert fleet["state_revision"] == 2
-    assert fleet["state_revision"] > 1
+    assert fleet["change_consistency"] == {
+        "schema": "visionrig/sensor-change-consistency/v1",
+        "status": "registry_ahead",
+        "state_revision": 2,
+        "journal_state_revision": 1,
+    }
 
     bootstrap = client.get("/api/v1/sensors/bootstrap").json()
     assert bootstrap["sensor_state_revision"] == 2
+    assert bootstrap["change_consistency"]["status"] == "registry_ahead"
     assert bootstrap["fleet"]["state_revision"] == 2
 
 
@@ -622,3 +669,32 @@ def test_stale_operator_write_emits_no_sensor_change_event() -> None:
     ).json()
     assert after["entries"] == []
     assert registry.state_revision == 2
+
+
+def test_change_consistency_reports_journal_ahead() -> None:
+    registry = SensorRegistry()
+    journal = SensorChangeJournal(stream_id="journal-ahead")
+    journal.append(
+        kind="metadata_changed",
+        source_id="ghost-camera",
+        state_revision=3,
+    )
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_registry=registry,
+            sensor_change_journal=journal,
+        )
+    )
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["change_consistency"] == {
+        "schema": "visionrig/sensor-change-consistency/v1",
+        "status": "journal_ahead",
+        "state_revision": 0,
+        "journal_state_revision": 3,
+    }
+
+    health = client.get("/health").json()
+    assert health["sensor_changes"]["state_revision_high_water"] == 3
+    assert health["sensor_changes"]["consistency"]["status"] == "journal_ahead"
