@@ -21,7 +21,7 @@ VisionRig includes:
 - **operator-owned sensor catalog metadata for UI/control surfaces**
 - **restart-safe persistent sensor registry with atomic writes**
 - **authenticated per-sensor desired-state control contract**
-- **reference producer that physically closes capture while disabled**
+- **reference producer that physically closes capture while disabled**\n- **closed-loop desired/effective sensor control convergence in the catalog**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
