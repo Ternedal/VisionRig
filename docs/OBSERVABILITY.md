@@ -64,6 +64,13 @@ The catalog exposes `lifecycle.status` as `active` or `retired` plus the
 retirement timestamp. Retirement is reversible and does not delete discovery
 history.
 
+`DELETE /api/v1/sensors/{source_id}` is the explicit permanent-forget action.
+It is rejected unless the sensor is retired and either absent from runtime or
+currently `offline`. Successful forget removes operator metadata, persistent
+discovery/history, control revision/timestamp state and process-local ingress
+sequence/runtime state. If that `source_id` appears again later, it is treated
+as a new registration. An active/stale/online producer cannot be forgotten.
+
 ## Desired-state control contract
 
 `GET /api/v1/sensors/{source_id}/desired-state` returns
@@ -111,7 +118,7 @@ world-state access.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v15` and advertises the desired-state
+`GET /health` uses `visionrig/health/v16` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
