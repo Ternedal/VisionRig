@@ -37,8 +37,7 @@ Typical capabilities include `rgb`, `depth`, `infrared`, `screen` and
 
 ## Operator sensor catalog
 
-`PATCH /api/v1/sensors/{source_id}/metadata` stores process-local,
-operator-owned metadata:
+`PATCH /api/v1/sensors/{source_id}/metadata` stores operator-owned metadata:
 
 - `display_name`
 - `location`
@@ -49,10 +48,15 @@ operator-owned metadata:
 state. This allows a UI to preconfigure a sensor that has not connected yet and
 keeps offline sensors visible.
 
+The registry is restart-safe by default. Service startup loads
+`VISIONRIG_SENSOR_REGISTRY_FILE`, defaulting to
+`~/.visionrig/sensor-registry.json`. Updates are written using fsync plus
+atomic file replacement. Invalid/corrupt registry content fails closed rather
+than being silently discarded. Set the environment value to empty for
+explicitly ephemeral operation.
+
 The `enabled` value is **not enforced by ingress** in this slice. It is an
-explicit operator intention for a later actuator/control contract. Keeping it
-non-enforcing prevents a metadata endpoint from silently acquiring producer
-shutdown authority.
+explicit operator intention for a later actuator/control contract.
 
 ## Health integration
 
@@ -60,6 +64,4 @@ shutdown authority.
 reports the number of configured registry entries.
 
 Only operational metadata is exposed. Raw images, depth arrays and embeddings
-are never returned by these surfaces. Runtime counters, liveness and registry
-metadata are currently process-local; durable configuration belongs in the
-higher-level control plane.
+are never returned by these surfaces.
