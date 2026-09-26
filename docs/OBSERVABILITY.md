@@ -1,10 +1,11 @@
-# VisionRig observability
+# VisionRig observability and sensor control
 
-VisionRig separates three concepts that a control surface must not blur:
+VisionRig separates four concepts that a control surface must not blur:
 
 1. **runtime sensor state** — what VisionRig has actually seen;
 2. **producer declaration** — capabilities/device reported by the producer;
-3. **operator metadata** — names, placement, role and desired enable state.
+3. **operator metadata** — names, placement, role and desired enable state;
+4. **producer desired state** — the minimal command surface a producer may read.
 
 None of these is perception identity authority.
 
@@ -16,52 +17,49 @@ Schema: `visionrig/sensor-runtime-status/v2`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
-`last_seen_utc`, `age_seconds` and a derived presence state:
-
-- `online`: seen within 15 seconds by default;
-- `stale`: not fresh, but seen within 60 seconds by default;
-- `offline`: older than 60 seconds.
-
-An accepted frame refreshes presence, so high-rate producers do not require
-separate heartbeats.
+`last_seen_utc`, `age_seconds` and derived `online/stale/offline` presence.
 
 ## Heartbeat
 
 `POST /api/v1/sensors/heartbeat` accepts
-`visionrig/sensor-heartbeat/v1` with source id/type, optional device and a
-bounded capability list. Cross-device clients use the same route through the
-authenticated sensor gateway.
-
-Typical capabilities include `rgb`, `depth`, `infrared`, `screen` and
-`passthrough`. They are descriptive telemetry only.
+`visionrig/sensor-heartbeat/v1`. Cross-device clients use the same route
+through the authenticated sensor gateway.
 
 ## Operator sensor catalog
 
 `PATCH /api/v1/sensors/{source_id}/metadata` stores operator-owned metadata:
-
-- `display_name`
-- `location`
-- `role`: `ambient`, `primary`, `tracking`, `screen`, `vr` or `other`
-- `enabled`: desired control-plane state
+`display_name`, `location`, `role` and `enabled`.
 
 `GET /api/v1/sensors/catalog` joins registry metadata with current runtime
-state. This allows a UI to preconfigure a sensor that has not connected yet and
-keeps offline sensors visible.
+state. The registry is restart-safe by default at
+`~/.visionrig/sensor-registry.json` and uses fsync plus atomic replacement.
 
-The registry is restart-safe by default. Service startup loads
-`VISIONRIG_SENSOR_REGISTRY_FILE`, defaulting to
-`~/.visionrig/sensor-registry.json`. Updates are written using fsync plus
-atomic file replacement. Invalid/corrupt registry content fails closed rather
-than being silently discarded. Set the environment value to empty for
-explicitly ephemeral operation.
+## Desired-state control contract
 
-The `enabled` value is **not enforced by ingress** in this slice. It is an
-explicit operator intention for a later actuator/control contract.
+`GET /api/v1/sensors/{source_id}/desired-state` returns
+`visionrig/sensor-desired-state/v1`:
+
+- `source_id`
+- `enabled`
+- `production_authority=false`
+
+The authenticated cross-device gateway exposes the same exact GET route and
+forwards it only to the loopback core service. It does not expose the sensor
+catalog, world state, journal, profiles, models or other control-plane data.
+
+Unknown/unconfigured sensor ids default to `enabled=true`, matching registry
+metadata defaults. Operators can preconfigure `enabled=false` before a device
+ever connects.
+
+The reference producer validates schema + source id through
+`fetch_desired_state()`. This slice provides the transport/contract; automatic
+capture-loop pausing can be layered on top without giving the producer broader
+authority.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v7`, embeds sensor runtime status and
-reports the number of configured registry entries.
+`GET /health` uses `visionrig/health/v8` and advertises the desired-state
+schema under the sensor registry section.
 
-Only operational metadata is exposed. Raw images, depth arrays and embeddings
-are never returned by these surfaces.
+Only operational/control metadata is exposed. Raw images, depth arrays and
+embeddings are never returned by these surfaces.
