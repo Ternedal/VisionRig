@@ -1,10 +1,14 @@
 # VisionRig observability
 
-VisionRig exposes operational telemetry separately from semantic perception.
-This keeps health/UI concerns out of PerceptionEvent while making sensor
-failures, overload, availability and stale producers visible to ModelRig/Kaliv.
+VisionRig separates three concepts that a control surface must not blur:
 
-## Sensor status endpoint
+1. **runtime sensor state** — what VisionRig has actually seen;
+2. **producer declaration** — capabilities/device reported by the producer;
+3. **operator metadata** — names, placement, role and desired enable state.
+
+None of these is perception identity authority.
+
+## Sensor runtime status
 
 `GET /api/v1/sensors/status`
 
@@ -18,28 +22,44 @@ sequence, accepted frames, producer-reported drops, heartbeat count,
 - `stale`: not fresh, but seen within 60 seconds by default;
 - `offline`: older than 60 seconds.
 
-A successfully accepted frame also refreshes presence, so high-rate producers do
-not require separate heartbeats.
+An accepted frame refreshes presence, so high-rate producers do not require
+separate heartbeats.
 
 ## Heartbeat
 
 `POST /api/v1/sensors/heartbeat` accepts
 `visionrig/sensor-heartbeat/v1` with source id/type, optional device and a
-bounded capability list. It returns
-`visionrig/sensor-heartbeat-receipt/v1`.
-
-Cross-device clients use the same route through the authenticated sensor
-gateway. The gateway remains allow-list based: only frame ingress and heartbeat
-are proxied to the loopback core service.
+bounded capability list. Cross-device clients use the same route through the
+authenticated sensor gateway.
 
 Typical capabilities include `rgb`, `depth`, `infrared`, `screen` and
-`passthrough`. They are descriptive telemetry only and do not grant authority.
+`passthrough`. They are descriptive telemetry only.
+
+## Operator sensor catalog
+
+`PATCH /api/v1/sensors/{source_id}/metadata` stores process-local,
+operator-owned metadata:
+
+- `display_name`
+- `location`
+- `role`: `ambient`, `primary`, `tracking`, `screen`, `vr` or `other`
+- `enabled`: desired control-plane state
+
+`GET /api/v1/sensors/catalog` joins registry metadata with current runtime
+state. This allows a UI to preconfigure a sensor that has not connected yet and
+keeps offline sensors visible.
+
+The `enabled` value is **not enforced by ingress** in this slice. It is an
+explicit operator intention for a later actuator/control contract. Keeping it
+non-enforcing prevents a metadata endpoint from silently acquiring producer
+shutdown authority.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v6` and embeds the same runtime snapshot
-under `sensor_ingress.runtime`.
+`GET /health` uses `visionrig/health/v7`, embeds sensor runtime status and
+reports the number of configured registry entries.
 
 Only operational metadata is exposed. Raw images, depth arrays and embeddings
-are never returned by the status/heartbeat surfaces. Counters and presence
-history are process-local; durable history belongs outside VisionRig.
+are never returned by these surfaces. Runtime counters, liveness and registry
+metadata are currently process-local; durable configuration belongs in the
+higher-level control plane.
