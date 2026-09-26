@@ -29,6 +29,7 @@ VisionRig includes:
 - **closed-loop desired/effective sensor control convergence in the catalog**
 - **revisioned sensor commands with explicit producer acknowledgement**
 - **persistent command timestamps and measurable pending control age**
+- **reversible sensor retirement that preserves discovery/history**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -57,6 +58,13 @@ so an offline sensor is still identifiable after restart.
 Registry metadata is persisted by default to
 `~/.visionrig/sensor-registry.json` using atomic replacement. Override with
 `VISIONRIG_SENSOR_REGISTRY_FILE`; set it to an empty value for ephemeral mode.
+
+Operators can retire a sensor with
+`POST /api/v1/sensors/{source_id}/retire`. Retirement preserves metadata and
+discovery history, records `retired_utc`, and drives desired state to disabled
+through the normal revisioned control path. `restore` removes the retirement
+marker but deliberately leaves the sensor disabled until it is explicitly
+enabled again.
 
 A producer can fetch only its bounded desired state through
 `GET /api/v1/sensors/{source_id}/desired-state`. Cross-device reads pass
