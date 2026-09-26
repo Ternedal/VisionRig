@@ -235,90 +235,79 @@ def create_app(
             "attention_truncated": attention_total > len(attention),
         }
 
-    def sensor_catalog_payload() -> dict[str, object]:
-        runtime_status = sensor_ingress.stats()
-        runtime_by_id = {
-            source.source_id: source
-            for source in runtime_status.sources
-        }
-        metadata_by_id = {
-            entry.source_id: entry
-            for entry in registry.list()
-        }
-        source_ids = sorted(set(runtime_by_id) | set(metadata_by_id))
-        sources = []
-        for source_id in source_ids:
-            runtime_source = runtime_by_id.get(source_id)
-            metadata = registry.get(source_id)
-            effective = (
-                runtime_source.capture_active
-                if runtime_source is not None
-                else None
-            )
-            applied_revision = (
-                runtime_source.applied_revision
-                if runtime_source is not None
-                else None
-            )
-            control_state = registry.control_state(source_id)
-            desired_revision = control_state.revision
-            if effective is None or applied_revision is None:
-                control_status = "unknown"
-            elif (
-                applied_revision == desired_revision
-                and effective == metadata.enabled
-            ):
-                control_status = "converged"
-            else:
-                control_status = "pending"
-            discovery = registry.get_discovery(source_id)
-            sources.append(
-                {
-                    "source_id": source_id,
-                    "runtime": (
-                        asdict(runtime_source)
-                        if runtime_source is not None
-                        else None
-                    ),
-                    "metadata": asdict(metadata),
-                    "lifecycle": {
-                        "status": (
-                            "retired"
-                            if metadata.retired_utc is not None
-                            else "active"
-                        ),
-                        "retired_utc": metadata.retired_utc,
-                    },
-                    "discovery": (
-                        asdict(discovery)
-                        if discovery is not None
-                        else None
-                    ),
-                    "control": {
-                        "desired_enabled": metadata.enabled,
-                        "desired_revision": desired_revision,
-                        "desired_changed_utc": control_state.changed_utc,
-                        "effective_capture_active": effective,
-                        "applied_revision": applied_revision,
-                        "pending_seconds": (
-                            registry.control_pending_seconds(source_id)
-    @app.get("/api/v1/sensors/catalog")
-    def sensor_catalog() -> dict[str, object]:
-        return sensor_catalog_payload()
-
-    @app.get("/api/v1/sensors/bootstrap")
-    def sensor_bootstrap_snapshot() -> dict[str, object]:
-        # Sample the change cursor before building state. Changes racing with
-        # snapshot construction may be replayed, but cannot be missed.
-        change_state = sensor_changes.read(after_cursor=0, limit=1)
-        baseline_cursor = change_state.newest_available_cursor or 0
+    @app.get("/health")
+    def health() -> dict[str, object]:
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v1",
-            "change_cursor": baseline_cursor,
-            "catalog": sensor_catalog_payload(),
-            "fleet": sensor_fleet_summary_payload(),
+            "status": "ok",
+            "service": "visionrig",
+            "schema": "visionrig/health/v19",
+            "perception_schema": "visionrig/perception-event/v3",
+            "stages": selected_pipeline.stages,
+            "capture_queue": asdict(runtime.stats()),
+            "event_sinks": asdict(runtime.sink_stats()),
+            "modelrig_bridge": (
+                {
+                    "enabled": True,
+                    "endpoint": modelrig_publisher.endpoint,
+                    "stats": asdict(modelrig_publisher.stats()),
+                    "last_status": (
+                        modelrig_publisher.last_result.status
+                        if modelrig_publisher.last_result is not None
+                        else None
+                    ),
+                }
+                if modelrig_publisher is not None
+                else {"enabled": False}
+            ),
+            "sensor_ingress": {
+                "schema": "visionrig/sensor-ingress/v2",
+                "max_frame_bytes": sensor_ingress.max_payload_bytes,
+                "media_types": ["image/jpeg", "image/png", "image/webp"],
+                "overload_policy": "reject",
+                "runtime": asdict(sensor_ingress.stats()),
+            },
+            "sensor_registry": {
+                "schema": "visionrig/sensor-registry/v6",
+                "entries": len(registry.list()),
+                "discovered": len(registry.list_discovery()),
+                "desired_state_schema": "visionrig/sensor-desired-state/v2",
+            },
+            "sensor_fleet": sensor_fleet_summary_payload(),
+            "sensor_changes": {
+                "schema": "visionrig/sensor-change-batch/v1",
+                "durability": "process-local",
+            },
+            "sensor_bootstrap": {
+                "schema": "visionrig/sensor-bootstrap-snapshot/v1",
+            },
         }
 
+    @app.get("/api/v1/capabilities")
+    def capabilities() -> dict[str, object]:
+        return probe_capabilities()
+
+    @app.get("/api/v1/capture/stats")
+    def capture_stats() -> dict[str, int]:
+        return asdict(runtime.stats())
+
+    @app.get("/api/v1/sensors/status")
+    def sensor_status() -> dict[str, object]:
+        return asdict(sensor_ingress.stats())
+
+    @app.get("/api/v1/sensors/fleet")
+    def sensor_fleet_summary() -> dict[str, object]:
+        return sensor_fleet_summary_payload()
+
+    @app.get(
+        "/api/v1/sensors/changes",
+        response_model=SensorChangeBatch,
+    )
+    def sensor_change_feed(
+        after_cursor: int = Query(default=0, ge=0),
+        limit: int = Query(default=64, ge=1, le=256),
+    ) -> SensorChangeBatch:
+        return sensor_changes.read(
+            after_cursor=after_cursor,
             limit=limit,
         )
 
@@ -394,6 +383,19 @@ def create_app(
         return {
             "schema": "visionrig/sensor-catalog/v7",
             "sources": sources,
+        }
+
+    @app.get("/api/v1/sensors/bootstrap")
+    def sensor_bootstrap_snapshot() -> dict[str, object]:
+        # Sample the change cursor before building state. Changes racing with
+        # snapshot construction may be replayed, but cannot be missed.
+        change_state = sensor_changes.read(after_cursor=0, limit=1)
+        baseline_cursor = change_state.newest_available_cursor or 0
+        return {
+            "schema": "visionrig/sensor-bootstrap-snapshot/v1",
+            "change_cursor": baseline_cursor,
+            "catalog": sensor_catalog(),
+            "fleet": sensor_fleet_summary_payload(),
         }
 
     @app.get(
