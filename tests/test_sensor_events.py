@@ -283,3 +283,30 @@ def test_sensor_change_feed_detects_stream_restart() -> None:
     assert reset.entries == ()
     assert reset.next_cursor == 0
     assert reset.newest_available_cursor == 1
+
+
+def test_sensor_change_endpoint_reports_stream_reset() -> None:
+    journal = SensorChangeJournal(stream_id="current-stream")
+    journal.append(kind="registered", source_id="camera-a")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_change_journal=journal,
+        )
+    )
+
+    response = client.get(
+        "/api/v1/sensors/changes",
+        params={
+            "after_cursor": 99,
+            "stream_id": "previous-process-stream",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_id"] == "visionrig/sensor-change-batch/v2"
+    assert body["stream_id"] == "current-stream"
+    assert body["stream_reset"] is True
+    assert body["entries"] == []
+    assert body["next_cursor"] == 0
+    assert body["newest_available_cursor"] == 1
