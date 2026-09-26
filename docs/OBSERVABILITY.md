@@ -55,6 +55,7 @@ first and most recently observed.
 
 - `source_id`
 - `enabled`
+- `revision`
 - `production_authority=false`
 
 The authenticated cross-device gateway exposes the same exact GET route and
@@ -75,13 +76,17 @@ The reference producer validates schema + source id through
 `visionrig/sensor-catalog/v5` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
+- `desired_revision`: revision of the current enabled command;
 - `effective_capture_active`: producer acknowledgement when available;
+- `applied_revision`: exact command revision applied by the producer;
 - `status`: `converged`, `pending` or `unknown`.
 
-A mismatch is reported as `pending`; VisionRig does not pretend the command has
-taken effect until the producer reports it. A source without an effective-state
-heartbeat remains `unknown`. The producer still receives only its own minimal
-desired-state response and never gains catalog or world-state access.
+A sensor is `converged` only when both effective capture state and acknowledged
+revision match the current desired state. A stale acknowledgement therefore
+remains `pending` even if its boolean value happens to match. Missing effective
+state or revision acknowledgement remains `unknown`. The producer still
+receives only its own minimal desired-state response and never gains catalog or
+world-state access.
 
 ## Health integration
 
