@@ -71,7 +71,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v14",
+            "schema": "visionrig/health/v15",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -98,7 +98,7 @@ def create_app(
                 "runtime": asdict(sensor_ingress.stats()),
             },
             "sensor_registry": {
-                "schema": "visionrig/sensor-registry/v4",
+                "schema": "visionrig/sensor-registry/v5",
                 "entries": len(registry.list()),
                 "discovered": len(registry.list_discovery()),
                 "desired_state_schema": "visionrig/sensor-desired-state/v2",
@@ -158,6 +158,14 @@ def create_app(
                         else None
                     ),
                     "metadata": asdict(metadata),
+                    "lifecycle": {
+                        "status": (
+                            "retired"
+                            if metadata.retired_utc is not None
+                            else "active"
+                        ),
+                        "retired_utc": metadata.retired_utc,
+                    },
                     "discovery": (
                         asdict(discovery)
                         if discovery is not None
@@ -179,7 +187,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v6",
+            "schema": "visionrig/sensor-catalog/v7",
             "sources": sources,
         }
 
@@ -194,6 +202,32 @@ def create_app(
                 detail="source_id must contain 1..128 characters",
             )
         return registry.desired_state(source_id)
+
+    @app.post("/api/v1/sensors/{source_id}/retire")
+    def retire_sensor(source_id: str) -> dict[str, object]:
+        try:
+            metadata = registry.retire(source_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "schema": "visionrig/sensor-lifecycle/v1",
+            "status": "retired",
+            "metadata": asdict(metadata),
+            "desired_state": registry.desired_state(source_id).model_dump(),
+        }
+
+    @app.post("/api/v1/sensors/{source_id}/restore")
+    def restore_sensor(source_id: str) -> dict[str, object]:
+        try:
+            metadata = registry.restore(source_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "schema": "visionrig/sensor-lifecycle/v1",
+            "status": "active",
+            "metadata": asdict(metadata),
+            "desired_state": registry.desired_state(source_id).model_dump(),
+        }
 
     @app.patch("/api/v1/sensors/{source_id}/metadata")
     def patch_sensor_metadata(
