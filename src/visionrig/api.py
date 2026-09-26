@@ -240,7 +240,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v20",
+            "schema": "visionrig/health/v21",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -277,6 +277,7 @@ def create_app(
                 "schema": "visionrig/sensor-change-batch/v2",
                 "durability": "process-local",
                 "stream_id": sensor_changes.stream_id,
+                "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
                 "schema": "visionrig/sensor-bootstrap-snapshot/v2",
@@ -307,11 +308,13 @@ def create_app(
         after_cursor: int = Query(default=0, ge=0),
         limit: int = Query(default=64, ge=1, le=256),
         stream_id: str | None = Query(default=None, min_length=1, max_length=128),
+        wait_seconds: float = Query(default=0.0, ge=0.0, le=30.0),
     ) -> SensorChangeBatch:
-        return sensor_changes.read(
+        return sensor_changes.wait_for_changes(
             after_cursor=after_cursor,
             limit=limit,
             expected_stream_id=stream_id,
+            wait_seconds=wait_seconds,
         )
 
     @app.get("/api/v1/sensors/catalog")
