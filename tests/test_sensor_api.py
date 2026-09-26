@@ -62,7 +62,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v18"
+    assert health["schema"] == "visionrig/health/v19"
     assert health["sensor_ingress"]["runtime"]["accepted_total"] == 2
 
 
