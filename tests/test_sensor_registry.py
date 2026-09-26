@@ -510,4 +510,33 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
 
     health = client.get("/health").json()
     assert health["schema"] == "visionrig/health/v17"
-    assert health["sensor_fleet"] == fleet
+    health_fleet = health["sensor_fleet"]
+    assert health_fleet["schema"] == fleet["schema"]
+    assert health_fleet["total"] == fleet["total"]
+    assert health_fleet["lifecycle"] == fleet["lifecycle"]
+    assert health_fleet["presence"] == fleet["presence"]
+    assert health_fleet["control"] == fleet["control"]
+    assert health_fleet["attention_total"] == fleet["attention_total"]
+    assert [
+        item["source_id"] for item in health_fleet["attention"]
+    ] == [
+        item["source_id"] for item in fleet["attention"]
+    ]
+
+
+def test_sensor_fleet_attention_is_bounded() -> None:
+    registry = SensorRegistry()
+    for index in range(40):
+        registry.patch(
+            f"offline-{index:02d}",
+            SensorMetadataPatch(display_name=f"Camera {index:02d}"),
+        )
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["total"] == 40
+    assert fleet["attention_total"] == 40
+    assert len(fleet["attention"]) == 32
+    assert fleet["attention_truncated"] is True
+    assert fleet["attention"][0]["source_id"] == "offline-00"
+    assert fleet["attention"][-1]["source_id"] == "offline-31"
