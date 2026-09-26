@@ -242,3 +242,37 @@ def test_sensor_type_reuse_is_rejected_without_overwriting_discovery() -> None:
     assert discovery.source_type == "camera"
     assert discovery.device == "usb-camera"
     assert discovery.capabilities == ("rgb",)
+
+
+def test_catalog_keeps_discovery_after_service_restart(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    first = SensorRegistry(path)
+    first.observe(
+        "kinect-room",
+        source_type="camera",
+        device="kinect-v2",
+        capabilities=("rgb", "depth", "infrared"),
+    )
+    first.patch(
+        "kinect-room",
+        SensorMetadataPatch(display_name="Room Kinect", enabled=False),
+    )
+
+    restarted = SensorRegistry(path)
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=restarted))
+    source = client.get("/api/v1/sensors/catalog").json()["sources"][0]
+
+    assert source["runtime"] is None
+    assert source["metadata"]["display_name"] == "Room Kinect"
+    assert source["metadata"]["enabled"] is False
+    assert source["discovery"] == {
+        "source_id": "kinect-room",
+        "source_type": "camera",
+        "device": "kinect-v2",
+        "capabilities": ["depth", "infrared", "rgb"],
+    }
+    assert source["control"] == {
+        "desired_enabled": False,
+        "effective_capture_active": None,
+        "status": "unknown",
+    }
