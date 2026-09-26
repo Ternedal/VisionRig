@@ -48,7 +48,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v2"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v3"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -62,7 +62,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v8"
+    assert health["schema"] == "visionrig/health/v9"
     assert health["sensor_ingress"]["runtime"]["accepted_total"] == 2
 
 
