@@ -75,21 +75,22 @@ class FakeControl:
     def __init__(self, enabled_states: list[bool]) -> None:
         self.enabled_states = enabled_states
         self.index = 0
-        self.heartbeats: list[tuple[tuple[str, ...], bool | None]] = []
+        self.heartbeats: list[tuple[tuple[str, ...], bool | None, int | None]] = []
 
     def fetch_desired_state(self):
         index = min(self.index, len(self.enabled_states) - 1)
         enabled = self.enabled_states[index]
         self.index += 1
-        return SimpleNamespace(enabled=enabled)
+        return SimpleNamespace(enabled=enabled, revision=self.index)
 
     def send_heartbeat(
         self,
         *,
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
+        applied_revision: int | None = None,
     ):
-        self.heartbeats.append((capabilities, capture_active))
+        self.heartbeats.append((capabilities, capture_active, applied_revision))
         return SimpleNamespace(source_id="kinect-v2-0")
 
 
@@ -120,8 +121,8 @@ def test_managed_capture_does_not_open_kinect_while_disabled() -> None:
     assert len(sources) == 1
     assert sources[0].closed is True
     assert control.heartbeats == [
-        (("rgb", "depth", "infrared"), False),
-        (("rgb", "depth", "infrared"), True),
+        (("rgb", "depth", "infrared"), False, 1),
+        (("rgb", "depth", "infrared"), True, 2),
     ]
 
 
@@ -154,9 +155,9 @@ def test_managed_capture_reopens_source_and_keeps_logical_sequence_monotonic() -
     assert runtime.sequences == [0, 1]
     assert runtime.sensor_models == ["kinect-v2", "kinect-v2"]
     assert control.heartbeats == [
-        (("rgb", "depth", "infrared"), True),
-        (("rgb", "depth", "infrared"), False),
-        (("rgb", "depth", "infrared"), True),
+        (("rgb", "depth", "infrared"), True, 1),
+        (("rgb", "depth", "infrared"), False, 2),
+        (("rgb", "depth", "infrared"), True, 3),
     ]
 
 

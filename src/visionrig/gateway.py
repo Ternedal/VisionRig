@@ -32,6 +32,7 @@ class GatewayHeartbeat(BaseModel):
     device: str | None = Field(default=None, max_length=256)
     capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
     capture_active: bool | None = None
+    applied_revision: int | None = Field(default=None, ge=0)
 
 
 def _validate_loopback_target(value: str) -> str:
@@ -208,12 +209,13 @@ def create_gateway_app(
             "POST",
             "/api/v1/sensors/heartbeat",
             json={
-                "schema_id": "visionrig/sensor-heartbeat/v1",
+                "schema_id": "visionrig/sensor-heartbeat/v2",
                 "source_id": body.source_id,
                 "source_type": body.source_type,
                 "device": body.device,
                 "capabilities": list(body.capabilities),
                 "capture_active": body.capture_active,
+                "applied_revision": body.applied_revision,
             },
         )
         return _relay(upstream)

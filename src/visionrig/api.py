@@ -71,7 +71,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v12",
+            "schema": "visionrig/health/v13",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -101,7 +101,7 @@ def create_app(
                 "schema": "visionrig/sensor-registry/v3",
                 "entries": len(registry.list()),
                 "discovered": len(registry.list_discovery()),
-                "desired_state_schema": "visionrig/sensor-desired-state/v1",
+                "desired_state_schema": "visionrig/sensor-desired-state/v2",
             },
         }
 
@@ -132,9 +132,18 @@ def create_app(
                 if runtime_source is not None
                 else None
             )
-            if effective is None:
+            applied_revision = (
+                runtime_source.applied_revision
+                if runtime_source is not None
+                else None
+            )
+            desired_revision = registry.control_revision(source_id)
+            if effective is None or applied_revision is None:
                 control_status = "unknown"
-            elif effective == metadata.enabled:
+            elif (
+                applied_revision == desired_revision
+                and effective == metadata.enabled
+            ):
                 control_status = "converged"
             else:
                 control_status = "pending"
@@ -155,13 +164,15 @@ def create_app(
                     ),
                     "control": {
                         "desired_enabled": metadata.enabled,
+                        "desired_revision": desired_revision,
                         "effective_capture_active": effective,
+                        "applied_revision": applied_revision,
                         "status": control_status,
                     },
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v4",
+            "schema": "visionrig/sensor-catalog/v5",
             "sources": sources,
         }
 

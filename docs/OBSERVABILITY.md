@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v3`.
+Schema: `visionrig/sensor-runtime-status/v4`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -22,7 +22,7 @@ sequence, accepted frames, producer-reported drops, heartbeat count,
 ## Heartbeat
 
 `POST /api/v1/sensors/heartbeat` accepts
-`visionrig/sensor-heartbeat/v1`. Cross-device clients use the same route
+`visionrig/sensor-heartbeat/v2`. Cross-device clients use the same route
 through the authenticated sensor gateway.
 
 ## Operator sensor catalog
@@ -51,10 +51,11 @@ first and most recently observed.
 ## Desired-state control contract
 
 `GET /api/v1/sensors/{source_id}/desired-state` returns
-`visionrig/sensor-desired-state/v1`:
+`visionrig/sensor-desired-state/v2`:
 
 - `source_id`
 - `enabled`
+- `revision`
 - `production_authority=false`
 
 The authenticated cross-device gateway exposes the same exact GET route and
@@ -72,20 +73,24 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v4` and adds a bounded control summary:
+`visionrig/sensor-catalog/v5` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
+- `desired_revision`: revision of the current enabled command;
 - `effective_capture_active`: producer acknowledgement when available;
+- `applied_revision`: exact command revision applied by the producer;
 - `status`: `converged`, `pending` or `unknown`.
 
-A mismatch is reported as `pending`; VisionRig does not pretend the command has
-taken effect until the producer reports it. A source without an effective-state
-heartbeat remains `unknown`. The producer still receives only its own minimal
-desired-state response and never gains catalog or world-state access.
+A sensor is `converged` only when both effective capture state and acknowledged
+revision match the current desired state. A stale acknowledgement therefore
+remains `pending` even if its boolean value happens to match. Missing effective
+state or revision acknowledgement remains `unknown`. The producer still
+receives only its own minimal desired-state response and never gains catalog or
+world-state access.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v12` and advertises the desired-state
+`GET /health` uses `visionrig/health/v13` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and

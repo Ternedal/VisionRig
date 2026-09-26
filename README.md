@@ -27,6 +27,7 @@ VisionRig includes:
 - **authenticated per-sensor desired-state control contract**
 - **reference producer that physically closes capture while disabled**
 - **closed-loop desired/effective sensor control convergence in the catalog**
+- **revisioned sensor commands with explicit producer acknowledgement**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -58,8 +59,8 @@ Registry metadata is persisted by default to
 
 A producer can fetch only its bounded desired state through
 `GET /api/v1/sensors/{source_id}/desired-state`. Cross-device reads pass
-through the authenticated gateway. V1 intentionally exposes only
-`source_id` + `enabled`; friendly names, location, role, catalog and world
+through the authenticated gateway. V2 intentionally exposes only
+`source_id` + `enabled` + `revision`; friendly names, location, role, catalog and world
 state are not disclosed to producers.
 
 The reference producer now polls desired state before opening capture. When
@@ -67,9 +68,11 @@ The reference producer now polls desired state before opening capture. When
 sequence is consumed, and only heartbeat/control polling continues. When
 re-enabled, capture is reopened and resumes from the durable next sequence.
 
-Heartbeat reports the actually applied `capture_active` state. The sensor
-catalog compares that acknowledgement with desired `enabled` and reports
-`converged`, `pending` or `unknown` for control surfaces.
+Heartbeat reports the actually applied `capture_active` state plus the
+`applied_revision`. The sensor catalog compares both with the current
+`enabled` + desired revision and reports `converged`, `pending` or
+`unknown`. An old heartbeat can therefore never make a newer command look
+applied.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.

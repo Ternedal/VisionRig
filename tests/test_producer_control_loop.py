@@ -32,22 +32,23 @@ class FakeProducer:
     def __init__(self, enabled_states: list[bool]) -> None:
         self.enabled_states = list(enabled_states)
         self.state_index = 0
-        self.heartbeats: list[tuple[tuple[str, ...], bool | None]] = []
+        self.heartbeats: list[tuple[tuple[str, ...], bool | None, int | None]] = []
         self.sent: list[bytes] = []
 
     def fetch_desired_state(self):
         index = min(self.state_index, len(self.enabled_states) - 1)
         enabled = self.enabled_states[index]
         self.state_index += 1
-        return SimpleNamespace(enabled=enabled)
+        return SimpleNamespace(enabled=enabled, revision=self.state_index)
 
     def send_heartbeat(
         self,
         *,
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
+        applied_revision: int | None = None,
     ):
-        self.heartbeats.append((capabilities, capture_active))
+        self.heartbeats.append((capabilities, capture_active, applied_revision))
         return SimpleNamespace(source_id="cam")
 
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"):
@@ -93,7 +94,10 @@ def test_disabled_source_is_not_opened_until_enabled() -> None:
     assert len(sources) == 1
     assert sources[0].reads == 1
     assert sources[0].closed is True
-    assert producer.heartbeats == [(("rgb",), False), (("rgb",), True)]
+    assert producer.heartbeats == [
+        (("rgb",), False, 1),
+        (("rgb",), True, 2),
+    ]
     assert len(producer.sent) == 1
 
 
@@ -127,9 +131,9 @@ def test_enabled_to_disabled_closes_source_then_reopens_on_resume() -> None:
     assert all(source.closed for source in sources)
     assert [source.reads for source in sources] == [1, 1]
     assert producer.heartbeats == [
-        (("rgb",), True),
-        (("rgb",), False),
-        (("rgb",), True),
+        (("rgb",), True, 1),
+        (("rgb",), False, 2),
+        (("rgb",), True, 3),
     ]
     assert len(producer.sent) == 2
 

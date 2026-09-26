@@ -22,6 +22,7 @@ class _ControlClient(Protocol):
         *,
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
+        applied_revision: int | None = None,
     ): ...
 
 
@@ -65,6 +66,7 @@ def _run_capture(
                     control.send_heartbeat(
                         capabilities=capabilities,
                         capture_active=False,
+                        applied_revision=desired.revision,
                     )
                     if verbose:
                         print("control=disabled capture=paused")
@@ -77,6 +79,7 @@ def _run_capture(
                 control.send_heartbeat(
                     capabilities=capabilities,
                     capture_active=True,
+                    applied_revision=desired.revision,
                 )
                 if verbose:
                     print("control=enabled capture=active")

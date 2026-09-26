@@ -42,12 +42,13 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     heartbeat = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "schema_id": "visionrig/sensor-heartbeat/v2",
             "source_id": "kinect-living-room",
             "source_type": "camera",
             "device": "kinect-v2",
             "capabilities": ["rgb", "depth", "infrared"],
             "capture_active": True,
+            "applied_revision": 0,
         },
     )
     assert heartbeat.status_code == 200
@@ -67,7 +68,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v4"
+    assert body["schema"] == "visionrig/sensor-catalog/v5"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -90,7 +91,9 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     assert source["discovery"]["observation_count"] == 1
     assert source["control"] == {
         "desired_enabled": True,
+        "desired_revision": 0,
         "effective_capture_active": True,
+        "applied_revision": 0,
         "status": "converged",
     }
 
@@ -127,7 +130,7 @@ def test_metadata_patch_does_not_disable_ingress() -> None:
     heartbeat = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "schema_id": "visionrig/sensor-heartbeat/v2",
             "source_id": "cam-a",
             "source_type": "camera",
         },
@@ -144,12 +147,12 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v12"
+    assert health["schema"] == "visionrig/health/v13"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v3",
         "entries": 1,
         "discovered": 0,
-        "desired_state_schema": "visionrig/sensor-desired-state/v1",
+        "desired_state_schema": "visionrig/sensor-desired-state/v2",
     }
 
 
@@ -160,7 +163,7 @@ def test_heartbeat_auto_registers_unknown_sensor() -> None:
     response = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "schema_id": "visionrig/sensor-heartbeat/v2",
             "source_id": "new-kinect",
             "source_type": "camera",
             "device": "kinect-v2",
@@ -193,7 +196,7 @@ def test_auto_registration_never_overwrites_operator_metadata() -> None:
     response = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "schema_id": "visionrig/sensor-heartbeat/v2",
             "source_id": "camera-a",
             "source_type": "camera",
             "device": "usb-camera",
@@ -217,7 +220,7 @@ def test_sensor_type_reuse_is_rejected_without_overwriting_discovery() -> None:
     first = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "schema_id": "visionrig/sensor-heartbeat/v2",
             "source_id": "sensor-a",
             "source_type": "camera",
             "device": "usb-camera",
@@ -229,7 +232,7 @@ def test_sensor_type_reuse_is_rejected_without_overwriting_discovery() -> None:
     conflict = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "schema_id": "visionrig/sensor-heartbeat/v2",
             "source_id": "sensor-a",
             "source_type": "vr",
             "device": "quest",
@@ -243,3 +246,46 @@ def test_sensor_type_reuse_is_rejected_without_overwriting_discovery() -> None:
     assert discovery.source_type == "camera"
     assert discovery.device == "usb-camera"
     assert discovery.capabilities == ("rgb",)
+
+
+def test_catalog_requires_current_revision_before_converged() -> None:
+    registry = SensorRegistry()
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    initial = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "cam-revision",
+            "source_type": "camera",
+            "capabilities": ["rgb"],
+            "capture_active": True,
+            "applied_revision": 0,
+        },
+    )
+    assert initial.status_code == 200
+    assert client.get("/api/v1/sensors/catalog").json()["sources"][0]["control"]["status"] == "converged"
+
+    client.patch(
+        "/api/v1/sensors/cam-revision/metadata",
+        json={"enabled": False},
+    )
+    pending = client.get("/api/v1/sensors/catalog").json()["sources"][0]["control"]
+    assert pending["desired_revision"] == 1
+    assert pending["applied_revision"] == 0
+    assert pending["status"] == "pending"
+
+    ack = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "cam-revision",
+            "source_type": "camera",
+            "capabilities": ["rgb"],
+            "capture_active": False,
+            "applied_revision": 1,
+        },
+    )
+    assert ack.status_code == 200
+    converged = client.get("/api/v1/sensors/catalog").json()["sources"][0]["control"]
+    assert converged["status"] == "converged"

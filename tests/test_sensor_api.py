@@ -48,7 +48,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v3"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v4"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -62,7 +62,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v12"
+    assert health["schema"] == "visionrig/health/v13"
     assert health["sensor_ingress"]["runtime"]["accepted_total"] == 2
 
 
@@ -77,11 +77,12 @@ def test_sensor_heartbeat_registers_capabilities_without_frame() -> None:
     response = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "schema_id": "visionrig/sensor-heartbeat/v2",
             "source_id": "kinect-living-room",
             "source_type": "camera",
             "device": "kinect-v2",
             "capabilities": ["RGB", "depth", "infrared", "depth"],
+            "applied_revision": 2,
         },
     )
     assert response.status_code == 200
@@ -95,6 +96,7 @@ def test_sensor_heartbeat_registers_capabilities_without_frame() -> None:
     assert source["accepted_frames"] == 0
     assert source["heartbeat_count"] == 1
     assert source["capabilities"] == ["depth", "infrared", "rgb"]
+    assert source["applied_revision"] == 2
     assert source["presence"] == "online"
 
 

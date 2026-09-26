@@ -148,7 +148,11 @@ def test_producer_sends_heartbeat_without_consuming_sequence() -> None:
             device="quest-2",
             client=client,
         )
-        receipt = producer.send_heartbeat(capabilities=("rgb", "passthrough"))
+        receipt = producer.send_heartbeat(
+            capabilities=("rgb", "passthrough"),
+            capture_active=False,
+            applied_revision=9,
+        )
         stats = producer.stats()
 
     assert receipt.source_id == "quest"
@@ -156,5 +160,7 @@ def test_producer_sends_heartbeat_without_consuming_sequence() -> None:
     assert seen["authorization"] == f"Bearer {TOKEN}"
     assert seen["json"]["device"] == "quest-2"
     assert seen["json"]["capabilities"] == ["rgb", "passthrough"]
+    assert seen["json"]["capture_active"] is False
+    assert seen["json"]["applied_revision"] == 9
     assert stats.next_sequence == 0
     assert stats.captured == 0

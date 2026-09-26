@@ -193,3 +193,18 @@ def test_legacy_discovery_without_timestamps_still_loads(tmp_path) -> None:
     assert discovery.first_seen_utc is None
     assert discovery.last_seen_utc is None
     assert discovery.observation_count == 0
+
+
+def test_control_revision_survives_restart(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    registry = SensorRegistry(path)
+
+    registry.patch("camera-a", SensorMetadataPatch(enabled=False))
+    registry.patch("camera-a", SensorMetadataPatch(enabled=True))
+    assert registry.control_revision("camera-a") == 2
+
+    restarted = SensorRegistry(path)
+    assert restarted.control_revision("camera-a") == 2
+    desired = restarted.desired_state("camera-a")
+    assert desired.enabled is True
+    assert desired.revision == 2
