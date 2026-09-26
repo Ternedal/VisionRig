@@ -12,6 +12,7 @@ from .producer_state import (
     producer_state_key,
 )
 from .sensor_ingress import SensorFrameReceipt
+from .sensor_registry import SensorDesiredState
 
 
 class ProducerError(RuntimeError):
@@ -136,6 +137,38 @@ class GatewayFrameProducer:
             pending_dropped_frames=self._pending_dropped,
             next_sequence=self._next_sequence,
         )
+
+    def fetch_desired_state(self) -> SensorDesiredState:
+        """Fetch the operator desired state through the authenticated gateway."""
+        target = self._base_url + f"/api/v1/sensors/{self._source_id}/desired-state"
+        kwargs = {
+            "headers": {"authorization": f"Bearer {self._token}"},
+            "timeout": self._timeout,
+        }
+        try:
+            if self._client is not None:
+                response = self._client.get(target, **kwargs)
+            else:
+                with httpx.Client() as client:
+                    response = client.get(target, **kwargs)
+        except httpx.HTTPError as exc:
+            raise ProducerError("VisionRig gateway desired state unavailable") from exc
+
+        if response.status_code in {401, 403}:
+            raise ProducerAuthError("VisionRig gateway rejected producer credentials")
+        if response.status_code != 200:
+            raise ProducerProtocolError(
+                f"VisionRig desired-state endpoint returned HTTP {response.status_code}"
+            )
+        try:
+            state = SensorDesiredState.model_validate(response.json())
+        except Exception as exc:
+            raise ProducerProtocolError("invalid VisionRig sensor desired state") from exc
+        if state.source_id != self._source_id:
+            raise ProducerProtocolError(
+                "VisionRig desired state does not match producer source"
+            )
+        return state
 
     def _reserve_frame(self) -> tuple[int, int]:
         if self._state_store is None:
