@@ -65,7 +65,8 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         },
     )
     assert patch.status_code == 200
-    assert patch.json()["schema"] == "visionrig/sensor-metadata/v1"
+    assert patch.json()["schema"] == "visionrig/sensor-metadata/v2"
+    assert patch.json()["state_revision"] == 2
 
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
@@ -156,7 +157,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v23"
+    assert health["schema"] == "visionrig/health/v24"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -329,7 +330,8 @@ def test_retire_disables_sensor_with_revision_and_restore_stays_disabled() -> No
     retired = client.post("/api/v1/sensors/camera-retire/retire")
     assert retired.status_code == 200
     retired_body = retired.json()
-    assert retired_body["schema"] == "visionrig/sensor-lifecycle/v1"
+    assert retired_body["schema"] == "visionrig/sensor-lifecycle/v2"
+    assert retired_body["state_revision"] == 2
     assert retired_body["status"] == "retired"
     assert retired_body["metadata"]["enabled"] is False
     assert retired_body["metadata"]["retired_utc"] == "2026-09-26T09:00:00+00:00"
@@ -355,6 +357,7 @@ def test_retire_disables_sensor_with_revision_and_restore_stays_disabled() -> No
 
     restored = client.post("/api/v1/sensors/camera-retire/restore")
     assert restored.status_code == 200
+    assert restored.json()["state_revision"] == 3
     assert restored.json()["status"] == "active"
     assert restored.json()["metadata"]["retired_utc"] is None
     assert restored.json()["metadata"]["enabled"] is False
@@ -387,7 +390,8 @@ def test_forget_requires_retired_and_offline_then_allows_fresh_registration() ->
     forgotten = client.delete("/api/v1/sensors/forgotten-sensor")
     assert forgotten.status_code == 200
     assert forgotten.json() == {
-        "schema": "visionrig/sensor-forget/v1",
+        "schema": "visionrig/sensor-forget/v2",
+        "state_revision": 3,
         "status": "forgotten",
         "source_id": "forgotten-sensor",
     }
@@ -511,7 +515,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v23"
+    assert health["schema"] == "visionrig/health/v24"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
@@ -543,3 +547,97 @@ def test_sensor_fleet_attention_is_bounded() -> None:
     assert fleet["attention_truncated"] is True
     assert fleet["attention"][0]["source_id"] == "offline-00"
     assert fleet["attention"][-1]["source_id"] == "offline-31"
+
+
+def test_metadata_write_rejects_stale_state_revision_without_mutation() -> None:
+    registry = SensorRegistry()
+    registry.patch(
+        "camera-concurrent",
+        SensorMetadataPatch(display_name="Camera"),
+    )
+    assert registry.state_revision == 1
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    accepted = client.patch(
+        "/api/v1/sensors/camera-concurrent/metadata",
+        params={"expected_state_revision": 1},
+        json={"location": "Office"},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json()["schema"] == "visionrig/sensor-metadata/v2"
+    assert accepted.json()["state_revision"] == 2
+    assert registry.get("camera-concurrent").location == "Office"
+
+    stale = client.patch(
+        "/api/v1/sensors/camera-concurrent/metadata",
+        params={"expected_state_revision": 1},
+        json={"location": "Bedroom"},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"] == {
+        "code": "sensor_state_revision_conflict",
+        "expected": 1,
+        "current": 2,
+    }
+    assert registry.state_revision == 2
+    assert registry.get("camera-concurrent").location == "Office"
+
+
+def test_lifecycle_writes_enforce_expected_state_revision() -> None:
+    registry = SensorRegistry()
+    registry.patch(
+        "camera-lifecycle",
+        SensorMetadataPatch(display_name="Camera", enabled=False),
+    )
+    assert registry.state_revision == 1
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    retired = client.post(
+        "/api/v1/sensors/camera-lifecycle/retire",
+        params={"expected_state_revision": 1},
+    )
+    assert retired.status_code == 200
+    assert retired.json()["state_revision"] == 2
+
+    stale_restore = client.post(
+        "/api/v1/sensors/camera-lifecycle/restore",
+        params={"expected_state_revision": 1},
+    )
+    assert stale_restore.status_code == 409
+    assert stale_restore.json()["detail"]["current"] == 2
+    assert registry.get("camera-lifecycle").retired_utc is not None
+
+    restored = client.post(
+        "/api/v1/sensors/camera-lifecycle/restore",
+        params={"expected_state_revision": 2},
+    )
+    assert restored.status_code == 200
+    assert restored.json()["state_revision"] == 3
+    assert registry.get("camera-lifecycle").retired_utc is None
+
+    retired_again = client.post(
+        "/api/v1/sensors/camera-lifecycle/retire",
+        params={"expected_state_revision": 3},
+    )
+    assert retired_again.status_code == 200
+    assert retired_again.json()["state_revision"] == 4
+
+    stale_forget = client.delete(
+        "/api/v1/sensors/camera-lifecycle",
+        params={"expected_state_revision": 3},
+    )
+    assert stale_forget.status_code == 409
+    assert stale_forget.json()["detail"] == {
+        "code": "sensor_state_revision_conflict",
+        "expected": 3,
+        "current": 4,
+    }
+    assert registry.contains("camera-lifecycle") is True
+
+    forgotten = client.delete(
+        "/api/v1/sensors/camera-lifecycle",
+        params={"expected_state_revision": 4},
+    )
+    assert forgotten.status_code == 200
+    assert forgotten.json()["state_revision"] == 5
+    assert registry.contains("camera-lifecycle") is False
