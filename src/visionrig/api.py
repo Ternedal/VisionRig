@@ -91,6 +91,7 @@ def create_app(
             "unknown": 0,
         }
         attention = []
+        attention_total = 0
 
         for source_id in source_ids:
             runtime_source = runtime_by_id.get(source_id)
@@ -138,6 +139,8 @@ def create_app(
                     and presence != "online"
                 )
             )
+            if needs_attention:
+                attention_total += 1
             if needs_attention and len(attention) < 32:
                 attention.append(
                     {
@@ -160,44 +163,8 @@ def create_app(
             "presence": presence_counts,
             "control": control_counts,
             "attention": attention,
-            "attention_truncated": (
-                sum(
-                    1
-                    for source_id in source_ids
-                    if (
-                        (
-                            (
-                                runtime_by_id.get(source_id).capture_active
-                                if runtime_by_id.get(source_id) is not None
-                                else None
-                            )
-                            is not None
-                            and (
-                                runtime_by_id.get(source_id).applied_revision
-                                if runtime_by_id.get(source_id) is not None
-                                else None
-                            )
-                            is not None
-                            and not (
-                                runtime_by_id.get(source_id).applied_revision
-                                == registry.control_state(source_id).revision
-                                and runtime_by_id.get(source_id).capture_active
-                                == registry.get(source_id).enabled
-                            )
-                        )
-                        or (
-                            registry.get(source_id).retired_utc is None
-                            and (
-                                runtime_by_id.get(source_id).presence
-                                if runtime_by_id.get(source_id) is not None
-                                else "unknown"
-                            )
-                            != "online"
-                        )
-                    )
-                )
-                > len(attention)
-            ),
+            "attention_total": attention_total,
+            "attention_truncated": attention_total > len(attention),
         }
 
     @app.get("/health")
