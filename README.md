@@ -23,6 +23,7 @@ VisionRig includes:
 - **restart-safe persistent sensor registry with atomic writes**
 - **automatic persistent registration of first-seen sensors**
 - **persistent discovered sensor type/device/capabilities with stable source identity**
+- **persistent first-seen/last-seen timestamps and observation count**
 - **authenticated per-sensor desired-state control contract**
 - **reference producer that physically closes capture while disabled**
 - **closed-loop desired/effective sensor control convergence in the catalog**

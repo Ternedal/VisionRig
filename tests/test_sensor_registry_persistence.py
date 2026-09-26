@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -129,3 +130,66 @@ def test_discovery_rejects_source_type_reuse(tmp_path) -> None:
 
     with pytest.raises(SensorIdentityConflict, match="already registered"):
         registry.observe("shared-id", source_type="vr")
+
+
+def test_discovery_first_last_seen_and_count_survive_restart(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 4, 30, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0])
+
+    first = registry.observe(
+        "camera-a",
+        source_type="camera",
+        device="usb-camera",
+        capabilities=("rgb",),
+    )
+    assert first.first_seen_utc == "2026-09-26T04:30:00+00:00"
+    assert first.last_seen_utc == "2026-09-26T04:30:00+00:00"
+    assert first.observation_count == 1
+
+    now[0] = datetime(2026, 9, 26, 4, 35, tzinfo=timezone.utc)
+    second = registry.observe(
+        "camera-a",
+        source_type="camera",
+        capabilities=("rgb", "depth"),
+    )
+    assert second.first_seen_utc == first.first_seen_utc
+    assert second.last_seen_utc == "2026-09-26T04:35:00+00:00"
+    assert second.observation_count == 2
+    assert second.device == "usb-camera"
+    assert second.capabilities == ("depth", "rgb")
+
+    restarted = SensorRegistry(path)
+    restored = restarted.get_discovery("camera-a")
+    assert restored is not None
+    assert restored.first_seen_utc == "2026-09-26T04:30:00+00:00"
+    assert restored.last_seen_utc == "2026-09-26T04:35:00+00:00"
+    assert restored.observation_count == 2
+
+
+def test_legacy_discovery_without_timestamps_still_loads(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_id": "visionrig/sensor-registry-file/v1",
+                "entries": [{"source_id": "legacy-camera"}],
+                "discovery": [
+                    {
+                        "source_id": "legacy-camera",
+                        "source_type": "camera",
+                        "device": "legacy-usb",
+                        "capabilities": ["rgb"],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    registry = SensorRegistry(path)
+    discovery = registry.get_discovery("legacy-camera")
+    assert discovery is not None
+    assert discovery.first_seen_utc is None
+    assert discovery.last_seen_utc is None
+    assert discovery.observation_count == 0
