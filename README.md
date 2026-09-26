@@ -32,6 +32,7 @@ VisionRig includes:
 - **reversible sensor retirement that preserves discovery/history**
 - **guarded permanent forget for retired/offline sensors**
 - **bounded sensor fleet summary for UI and health surfaces**
+- **bounded cursor-based semantic sensor change feed for incremental UI updates**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -94,6 +95,13 @@ not converged the catalog exposes neutral `pending_seconds` telemetry.
 monitoring: lifecycle counts, online/stale/offline/unknown presence, control
 convergence counts and a bounded attention list. The same payload is embedded in
 `/health`; it is observability only and grants no new control authority.
+
+`GET /api/v1/sensors/changes` provides a separate process-local cursor feed for
+semantic sensor changes such as registration, discovery, metadata/control,
+retire/restore/forget and producer applied-state changes. Repeated heartbeats
+that only refresh liveness do not create events. Time-based transitions from
+online to stale/offline remain derived state in fleet/status and therefore still
+require periodic liveness polling.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
