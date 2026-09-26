@@ -737,8 +737,6 @@ def create_app(
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except SensorPacketError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except SensorIngressBusy as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         except SensorSequenceError as exc:
@@ -767,6 +765,14 @@ def create_app(
         previous_discovery = registry.get_discovery(source_id)
         try:
             packet_header = inspect_sensor_packet(payload)
+            if (
+                previous_discovery is not None
+                and previous_discovery.source_type != source_type
+            ):
+                raise SensorIdentityConflict(
+                    f"source_id {source_id!r} is already registered as "
+                    f"{previous_discovery.source_type!r}, not {source_type!r}"
+                )
             capabilities = ["rgb"]
             if packet_header.depth is not None:
                 capabilities.append("depth")
@@ -796,6 +802,8 @@ def create_app(
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SensorPacketError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except SensorIngressBusy as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         except SensorSequenceError as exc:
