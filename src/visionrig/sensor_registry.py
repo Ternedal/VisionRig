@@ -68,7 +68,6 @@ class SensorMetadata:
     role: SensorRole | None = None
     enabled: bool = True
     retired_utc: str | None = None
-    retired_utc: str | None = None
 
 
 class _StoredSensorMetadata(BaseModel):
@@ -79,6 +78,7 @@ class _StoredSensorMetadata(BaseModel):
     location: str | None = Field(default=None, max_length=128)
     role: SensorRole | None = None
     enabled: bool = True
+    retired_utc: str | None = None
 
 
 class _StoredSensorDiscovery(BaseModel):
