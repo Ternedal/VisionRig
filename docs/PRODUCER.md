@@ -21,7 +21,7 @@ $env:VISIONRIG_PRODUCER_TOKEN="<same gateway token>"
 Optional producer-state location:
 
 ```powershell
-$env:VISIONRIG_PRODUCER_STATE="D:\VisionRig\producer-state.json"
+$env:VISIONRIG_PRODUCER_STATE="D:\\VisionRig\\producer-state.json"
 ```
 
 Default: `~/.visionrig/producer-state.json`.
@@ -37,6 +37,31 @@ Desktop:
 ```powershell
 visionrig-producer --screen 1 --source-id windows-screen --fps 3 --verbose
 ```
+
+The producer polls desired state every two seconds by default. Override with
+`--control-poll-seconds` between 0.25 and 60 seconds.
+
+## Remote pause/resume semantics
+
+The reference producer checks
+`GET /api/v1/sensors/{source_id}/desired-state` **before opening capture**.
+
+When `enabled=false`:
+
+- webcam/screen/image capture is not opened, or an existing source is closed;
+- no frame is captured or encoded;
+- no frame sequence is reserved/consumed;
+- heartbeat continues on each control poll so VisionRig can still report the
+  producer as online;
+- the producer keeps polling until it sees `enabled=true`.
+
+When re-enabled, the capture source is reopened and sending resumes at the
+durable next sequence.
+
+Desired-state lookup is fail-closed in the reference loop. If the control plane
+cannot be read or returns an invalid/mismatched response, the producer exits and
+the `finally` path closes any open source instead of continuing unsupervised
+capture.
 
 ## Backpressure and crash semantics
 
@@ -68,14 +93,19 @@ not part of the reference client.
 
 ## Client contract for Kaliv/Quest
 
-Native Android/Quest clients should implement the same durable state machine:
+Native Android/Quest clients should implement the same control + durable state
+machine:
 
-1. atomically reserve/increment a sequence before sending each captured frame;
-2. persist which sequence is in-flight;
-3. on 200, validate receipt and atomically clear pending drops + in-flight;
-4. on 429/network miss, atomically clear in-flight and increment pending drops;
-5. after process restart, convert any leftover in-flight frame into one drop;
-6. on 401/403 or malformed receipt, fail visibly;
-7. never treat a VisionRig recognition hint as identity authority.
+1. authenticate and fetch desired state before opening camera/passthrough;
+2. while disabled, keep capture closed and publish heartbeat while polling;
+3. on enable, open capture and atomically reserve/increment a sequence before
+   sending each captured frame;
+4. persist which sequence is in-flight;
+5. on 200, validate receipt and atomically clear pending drops + in-flight;
+6. on 429/network miss, atomically clear in-flight and increment pending drops;
+7. after process restart, convert any leftover in-flight frame into one drop;
+8. on 401/403, invalid desired state or malformed receipts, fail visibly and
+   close capture;
+9. never treat a VisionRig recognition hint as identity authority.
 
 This makes the Python producer an executable reference for Kotlin/Quest clients.
