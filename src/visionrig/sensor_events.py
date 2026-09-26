@@ -38,6 +38,7 @@ class SensorChangeEvent(BaseModel):
     kind: SensorChangeKind
     source_id: str = Field(min_length=1, max_length=128)
     occurred_utc: str
+    state_revision: int = Field(default=0, ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -184,12 +185,14 @@ class SensorChangeJournal:
         source_id: str,
         payload: dict[str, Any] | None = None,
         occurred_utc: str | None = None,
+        state_revision: int = 0,
     ) -> SensorChangeEntry:
         timestamp = occurred_utc or datetime.now(timezone.utc).isoformat()
         event = SensorChangeEvent(
             kind=kind,
             source_id=source_id,
             occurred_utc=timestamp,
+            state_revision=state_revision,
             payload=payload or {},
         )
         with self._condition:

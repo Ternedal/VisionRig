@@ -117,6 +117,7 @@ class _SensorRegistryFile(BaseModel):
     entries: tuple[_StoredSensorMetadata, ...] = ()
     discovery: tuple[_StoredSensorDiscovery, ...] = ()
     control: tuple[_StoredSensorControl, ...] = ()
+    state_revision: int = Field(default=0, ge=0)
 
 
 def _utcnow() -> datetime:
@@ -139,12 +140,18 @@ class SensorRegistry:
         self._discovery: dict[str, SensorDiscovery] = {}
         self._control_revisions: dict[str, int] = {}
         self._control_changed_utc: dict[str, str] = {}
+        self._state_revision = 0
         if self.path is not None:
             self._load()
 
     @property
     def persistent(self) -> bool:
         return self.path is not None
+
+    @property
+    def state_revision(self) -> int:
+        with self._lock:
+            return self._state_revision
 
     @staticmethod
     def _clean(value: str | None) -> str | None:
@@ -197,6 +204,7 @@ class SensorRegistry:
             for item in state.control
             if item.changed_utc is not None
         }
+        self._state_revision = state.state_revision
 
     def _save(self) -> None:
         if self.path is None:
@@ -235,6 +243,7 @@ class SensorRegistry:
                 for source_id, revision in sorted(self._control_revisions.items())
                 if revision > 0
             ),
+            state_revision=self._state_revision,
         )
         temp_name: str | None = None
         try:
@@ -281,11 +290,14 @@ class SensorRegistry:
             if current is not None:
                 return current
             created = SensorMetadata(source_id=source_id)
+            previous_state_revision = self._state_revision
             self._entries[source_id] = created
+            self._state_revision += 1
             try:
                 self._save()
             except Exception:
                 self._entries.pop(source_id, None)
+                self._state_revision = previous_state_revision
                 raise
             return created
 
@@ -347,9 +359,18 @@ class SensorRegistry:
             )
             previous_discovery = current
             previous_metadata = self._entries.get(source_id)
+            previous_state_revision = self._state_revision
+            semantic_change = (
+                current is None
+                or current.device != updated.device
+                or current.capabilities != updated.capabilities
+            )
             if previous_metadata is None:
                 self._entries[source_id] = SensorMetadata(source_id=source_id)
+                semantic_change = True
             self._discovery[source_id] = updated
+            if semantic_change:
+                self._state_revision += 1
             try:
                 self._save()
             except Exception:
@@ -359,6 +380,7 @@ class SensorRegistry:
                     self._discovery.pop(source_id, None)
                 else:
                     self._discovery[source_id] = previous_discovery
+                self._state_revision = previous_state_revision
                 raise
             return updated
 
@@ -400,7 +422,9 @@ class SensorRegistry:
             previous = self._entries.get(source_id)
             previous_revision = self._control_revisions.get(source_id, 0)
             previous_changed_utc = self._control_changed_utc.get(source_id)
+            previous_state_revision = self._state_revision
             self._entries[source_id] = updated
+            self._state_revision += 1
             if current.enabled:
                 self._control_revisions[source_id] = previous_revision + 1
                 self._control_changed_utc[source_id] = now
@@ -419,6 +443,7 @@ class SensorRegistry:
                     self._control_changed_utc.pop(source_id, None)
                 else:
                     self._control_changed_utc[source_id] = previous_changed_utc
+                self._state_revision = previous_state_revision
                 raise
             return updated
 
@@ -432,7 +457,9 @@ class SensorRegistry:
                 return current
             updated = replace(current, retired_utc=None, enabled=False)
             previous = self._entries.get(source_id)
+            previous_state_revision = self._state_revision
             self._entries[source_id] = updated
+            self._state_revision += 1
             try:
                 self._save()
             except Exception:
@@ -440,6 +467,7 @@ class SensorRegistry:
                     self._entries.pop(source_id, None)
                 else:
                     self._entries[source_id] = previous
+                self._state_revision = previous_state_revision
                 raise
             return updated
 
@@ -458,11 +486,13 @@ class SensorRegistry:
             previous_discovery = self._discovery.get(source_id)
             previous_revision = self._control_revisions.get(source_id)
             previous_changed_utc = self._control_changed_utc.get(source_id)
+            previous_state_revision = self._state_revision
 
             self._entries.pop(source_id, None)
             self._discovery.pop(source_id, None)
             self._control_revisions.pop(source_id, None)
             self._control_changed_utc.pop(source_id, None)
+            self._state_revision += 1
             try:
                 self._save()
             except Exception:
@@ -473,6 +503,7 @@ class SensorRegistry:
                     self._control_revisions[source_id] = previous_revision
                 if previous_changed_utc is not None:
                     self._control_changed_utc[source_id] = previous_changed_utc
+                self._state_revision = previous_state_revision
                 raise
 
     def desired_state(self, source_id: str) -> SensorDesiredState:
@@ -510,7 +541,10 @@ class SensorRegistry:
             previous = self._entries.get(source_id)
             previous_revision = self._control_revisions.get(source_id, 0)
             previous_changed_utc = self._control_changed_utc.get(source_id)
+            previous_state_revision = self._state_revision
             self._entries[source_id] = updated
+            if updated != current:
+                self._state_revision += 1
             if (
                 "enabled" in patch.model_fields_set
                 and updated.enabled != current.enabled
@@ -534,5 +568,6 @@ class SensorRegistry:
                     self._control_changed_utc.pop(source_id, None)
                 else:
                     self._control_changed_utc[source_id] = previous_changed_utc
+                self._state_revision = previous_state_revision
                 raise
             return updated

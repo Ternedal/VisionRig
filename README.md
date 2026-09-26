@@ -37,6 +37,7 @@ VisionRig includes:
 - **restart-detectable sensor change streams with explicit stream identity**
 - **bounded long-poll sensor changes with event wake-up and timeout fallback**
 - **restart-safe persistent semantic sensor change journal with atomic writes**
+- **persistent semantic sensor state revision for change-feed drift detection**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -123,6 +124,14 @@ stream id, cursors and retained events across a normal restart, so connected UI
 clients can continue without a reset. Override with
 `VISIONRIG_SENSOR_CHANGE_JOURNAL_FILE`; set it to an empty value for
 process-local/ephemeral mode.
+
+The sensor registry also persists a monotonic semantic `state_revision`.
+Bootstrap and fleet expose the current revision, and every semantic sensor-change
+event is stamped with the registry revision it reflects. Heartbeat-only
+last-seen/counter refreshes do not advance it. If a client observes a fleet or
+bootstrap revision newer than the highest semantic event revision it has
+applied, it can detect a registry/journal crash-window gap and rebootstrap
+instead of trusting an incomplete incremental history.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.

@@ -119,8 +119,9 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v1` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v2` with bounded operational aggregation:
 
+- `state_revision`: current persisted semantic registry revision;
 - total known/runtime sensor count;
 - lifecycle counts for `active` and `retired`;
 - presence counts for `online`, `stale`, `offline` and `unknown`;
@@ -141,6 +142,11 @@ uses the same cursor/gap recovery semantics as the perception journal plus a
 `stream_id` that identifies the current retained journal. In the normal
 service process this bounded journal is persistent; explicitly ephemeral
 configurations still use a process-local stream.
+
+Every change event also carries `state_revision`, the persisted semantic
+registry revision reflected by that event. Multiple events produced by one
+registry mutation may share the same revision. Runtime-only producer
+acknowledgement events carry the current registry revision without advancing it.
 
 Events are emitted only for semantic state changes:
 
@@ -183,12 +189,13 @@ so clients can issue the next bounded long poll without special error handling.
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v2` with:
+`visionrig/sensor-bootstrap-snapshot/v3` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
+- `sensor_state_revision`: current persisted semantic registry revision;
 - `change_cursor`: the semantic change-feed cursor to continue from;
-- `change_stream_id`: identity of the current process-local change journal.
+- `change_stream_id`: identity of the current retained change journal.
 
 The cursor is sampled **before** catalog/fleet construction. If a semantic
 change races with snapshot construction, the client may see that state already
@@ -196,19 +203,36 @@ reflected in the snapshot and then receive the same change once from
 `/changes`; the change cannot be skipped by sampling a cursor after it happened.
 This intentionally favors harmless replay over missed control/lifecycle state.
 
+The registry and semantic change journal are separate atomic files rather than
+one cross-file transaction. To make that crash window observable, the registry
+persists a monotonic semantic `state_revision`. It advances on registration,
+device/capability changes, operator metadata/control changes, lifecycle changes
+and permanent forget, but not on last-seen or observation-count-only heartbeat
+refreshes. Fleet v2 and bootstrap v3 expose the current revision, while each
+change event carries the revision it reflects.
+
+A client should track the highest event `state_revision` it has applied. If a
+later fleet/bootstrap reports a greater revision and the change feed has not
+delivered that revision, the client has detected registry/journal drift and
+should fetch a new bootstrap snapshot. This detects inconsistency; it does not
+pretend the two files are transactionally atomic.
+
 Recommended UI flow:
 
 1. fetch `/api/v1/sensors/bootstrap`;
 2. render catalog/fleet;
 3. poll
    `/api/v1/sensors/changes?after_cursor=<change_cursor>&stream_id=<change_stream_id>&wait_seconds=20`;
-4. if `gap=true` or `stream_reset=true`, fetch a new bootstrap snapshot;
-5. separately refresh fleet/status at a low cadence for time-derived liveness.
+4. track the highest applied event `state_revision`;
+5. if `gap=true`, `stream_reset=true`, or fleet `state_revision` is newer
+   than the highest delivered semantic revision, fetch a new bootstrap snapshot;
+6. separately refresh fleet/status at a low cadence for time-derived liveness.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v22` and advertises the desired-state
-schema plus persistent discovery counts under the sensor registry section.
+`GET /health` uses `visionrig/health/v23` and advertises the desired-state
+schema, persistent semantic state revision and discovery counts under the
+sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
 that already poll health. Health also advertises the process-local sensor change
 batch schema, durability, stream id and maximum wait under `sensor_changes`, and advertises the bootstrap snapshot
