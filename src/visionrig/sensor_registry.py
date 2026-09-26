@@ -176,6 +176,13 @@ class SensorRegistry:
                 self._state_revision,
             )
 
+    def assert_state_revision(
+        self,
+        expected_state_revision: int | None,
+    ) -> None:
+        with self._lock:
+            self._assert_expected_state_revision(expected_state_revision)
+
     @staticmethod
     def _clean(value: str | None) -> str | None:
         if value is None:
