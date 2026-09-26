@@ -91,11 +91,19 @@ class _StoredSensorDiscovery(BaseModel):
     observation_count: int = Field(default=0, ge=0)
 
 
+@dataclass(frozen=True, slots=True)
+class SensorControlState:
+    source_id: str
+    revision: int = 0
+    changed_utc: str | None = None
+
+
 class _StoredSensorControl(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     source_id: str = Field(min_length=1, max_length=128)
     revision: int = Field(default=0, ge=0)
+    changed_utc: str | None = None
 
 
 class _SensorRegistryFile(BaseModel):
@@ -128,6 +136,7 @@ class SensorRegistry:
         self._entries: dict[str, SensorMetadata] = {}
         self._discovery: dict[str, SensorDiscovery] = {}
         self._control_revisions: dict[str, int] = {}
+        self._control_changed_utc: dict[str, str] = {}
         if self.path is not None:
             self._load()
 
@@ -180,6 +189,11 @@ class SensorRegistry:
             item.source_id: item.revision
             for item in state.control
         }
+        self._control_changed_utc = {
+            item.source_id: item.changed_utc
+            for item in state.control
+            if item.changed_utc is not None
+        }
 
     def _save(self) -> None:
         if self.path is None:
@@ -212,6 +226,7 @@ class SensorRegistry:
                 _StoredSensorControl(
                     source_id=source_id,
                     revision=revision,
+                    changed_utc=self._control_changed_utc.get(source_id),
                 )
                 for source_id, revision in sorted(self._control_revisions.items())
                 if revision > 0
@@ -343,6 +358,27 @@ class SensorRegistry:
         with self._lock:
             return self._control_revisions.get(source_id, 0)
 
+    def control_state(self, source_id: str) -> SensorControlState:
+        with self._lock:
+            return SensorControlState(
+                source_id=source_id,
+                revision=self._control_revisions.get(source_id, 0),
+                changed_utc=self._control_changed_utc.get(source_id),
+            )
+
+    def control_pending_seconds(self, source_id: str) -> float | None:
+        state = self.control_state(source_id)
+        if state.changed_utc is None:
+            return None
+        try:
+            changed = datetime.fromisoformat(state.changed_utc)
+        except ValueError:
+            return None
+        if changed.tzinfo is None:
+            changed = changed.replace(tzinfo=timezone.utc)
+        now = self._clock().astimezone(timezone.utc)
+        return round(max(0.0, (now - changed.astimezone(timezone.utc)).total_seconds()), 3)
+
     def desired_state(self, source_id: str) -> SensorDesiredState:
         metadata = self.get(source_id)
         return SensorDesiredState(
@@ -375,12 +411,16 @@ class SensorRegistry:
             updated = replace(current, **changes)
             previous = self._entries.get(source_id)
             previous_revision = self._control_revisions.get(source_id, 0)
+            previous_changed_utc = self._control_changed_utc.get(source_id)
             self._entries[source_id] = updated
             if (
                 "enabled" in patch.model_fields_set
                 and updated.enabled != current.enabled
             ):
                 self._control_revisions[source_id] = previous_revision + 1
+                self._control_changed_utc[source_id] = (
+                    self._clock().astimezone(timezone.utc).isoformat()
+                )
             try:
                 self._save()
             except Exception:
@@ -392,5 +432,9 @@ class SensorRegistry:
                     self._control_revisions.pop(source_id, None)
                 else:
                     self._control_revisions[source_id] = previous_revision
+                if previous_changed_utc is None:
+                    self._control_changed_utc.pop(source_id, None)
+                else:
+                    self._control_changed_utc[source_id] = previous_changed_utc
                 raise
             return updated

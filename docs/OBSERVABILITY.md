@@ -73,24 +73,29 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v5` and adds a bounded control summary:
+`visionrig/sensor-catalog/v6` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
 - `desired_revision`: revision of the current enabled command;
+- `desired_changed_utc`: persisted UTC issue time for the current changed command;
 - `effective_capture_active`: producer acknowledgement when available;
 - `applied_revision`: exact command revision applied by the producer;
+- `pending_seconds`: elapsed seconds since the current command was issued while not converged;
 - `status`: `converged`, `pending` or `unknown`.
 
 A sensor is `converged` only when both effective capture state and acknowledged
 revision match the current desired state. A stale acknowledgement therefore
 remains `pending` even if its boolean value happens to match. Missing effective
-state or revision acknowledgement remains `unknown`. The producer still
+state or revision acknowledgement remains `unknown`. For non-converged
+commands with a persisted issue timestamp, `pending_seconds` is computed from
+that timestamp. VisionRig intentionally does not assign a timeout or "stuck"
+label; control surfaces can choose their own alert threshold. The producer still
 receives only its own minimal desired-state response and never gains catalog or
 world-state access.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v13` and advertises the desired-state
+`GET /health` uses `visionrig/health/v14` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and

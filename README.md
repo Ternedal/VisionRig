@@ -28,6 +28,7 @@ VisionRig includes:
 - **reference producer that physically closes capture while disabled**
 - **closed-loop desired/effective sensor control convergence in the catalog**
 - **revisioned sensor commands with explicit producer acknowledgement**
+- **persistent command timestamps and measurable pending control age**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -72,7 +73,8 @@ Heartbeat reports the actually applied `capture_active` state plus the
 `applied_revision`. The sensor catalog compares both with the current
 `enabled` + desired revision and reports `converged`, `pending` or
 `unknown`. An old heartbeat can therefore never make a newer command look
-applied.
+applied. Each changed command also persists `desired_changed_utc`; while it is
+not converged the catalog exposes neutral `pending_seconds` telemetry.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.

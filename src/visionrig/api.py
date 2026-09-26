@@ -71,7 +71,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v13",
+            "schema": "visionrig/health/v14",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -98,7 +98,7 @@ def create_app(
                 "runtime": asdict(sensor_ingress.stats()),
             },
             "sensor_registry": {
-                "schema": "visionrig/sensor-registry/v3",
+                "schema": "visionrig/sensor-registry/v4",
                 "entries": len(registry.list()),
                 "discovered": len(registry.list_discovery()),
                 "desired_state_schema": "visionrig/sensor-desired-state/v2",
@@ -137,7 +137,8 @@ def create_app(
                 if runtime_source is not None
                 else None
             )
-            desired_revision = registry.control_revision(source_id)
+            control_state = registry.control_state(source_id)
+            desired_revision = control_state.revision
             if effective is None or applied_revision is None:
                 control_status = "unknown"
             elif (
@@ -165,14 +166,20 @@ def create_app(
                     "control": {
                         "desired_enabled": metadata.enabled,
                         "desired_revision": desired_revision,
+                        "desired_changed_utc": control_state.changed_utc,
                         "effective_capture_active": effective,
                         "applied_revision": applied_revision,
+                        "pending_seconds": (
+                            registry.control_pending_seconds(source_id)
+                            if control_status != "converged"
+                            else None
+                        ),
                         "status": control_status,
                     },
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v5",
+            "schema": "visionrig/sensor-catalog/v6",
             "sources": sources,
         }
 
