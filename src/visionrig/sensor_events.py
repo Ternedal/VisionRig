@@ -72,6 +72,7 @@ class _SensorChangeJournalFile(BaseModel):
     )
     stream_id: str = Field(min_length=1, max_length=128)
     next_cursor: int = Field(ge=1)
+    state_revision_high_water: int = Field(default=0, ge=0)
     entries: tuple[SensorChangeEntry, ...] = ()
 
 
@@ -93,6 +94,7 @@ class SensorChangeJournal:
         self._stream_id = stream_id or uuid4().hex
         self._items: deque[SensorChangeEntry] = deque()
         self._next_cursor = 1
+        self._state_revision_high_water = 0
         self._lock = RLock()
         self._condition = Condition(self._lock)
 
@@ -106,6 +108,11 @@ class SensorChangeJournal:
     @property
     def persistent(self) -> bool:
         return self.path is not None
+
+    @property
+    def state_revision_high_water(self) -> int:
+        with self._lock:
+            return self._state_revision_high_water
 
     def _load(self, *, stream_id: str | None) -> None:
         assert self.path is not None
@@ -139,6 +146,13 @@ class SensorChangeJournal:
         retained = state.entries[-self._capacity :]
         self._items = deque(retained)
         self._next_cursor = state.next_cursor
+        self._state_revision_high_water = max(
+            state.state_revision_high_water,
+            max(
+                (entry.event.state_revision for entry in state.entries),
+                default=0,
+            ),
+        )
 
     def _save(self) -> None:
         if self.path is None:
@@ -148,6 +162,7 @@ class SensorChangeJournal:
         state = _SensorChangeJournalFile(
             stream_id=self._stream_id,
             next_cursor=self._next_cursor,
+            state_revision_high_water=self._state_revision_high_water,
             entries=tuple(self._items),
         )
         temp_name: str | None = None
@@ -199,8 +214,13 @@ class SensorChangeJournal:
             entry = SensorChangeEntry(cursor=self._next_cursor, event=event)
             previous_items = tuple(self._items)
             previous_next_cursor = self._next_cursor
+            previous_state_revision_high_water = self._state_revision_high_water
 
             self._next_cursor += 1
+            self._state_revision_high_water = max(
+                self._state_revision_high_water,
+                state_revision,
+            )
             self._items.append(entry)
             while len(self._items) > self._capacity:
                 self._items.popleft()
@@ -209,6 +229,7 @@ class SensorChangeJournal:
             except Exception:
                 self._items = deque(previous_items)
                 self._next_cursor = previous_next_cursor
+                self._state_revision_high_water = previous_state_revision_high_water
                 raise
 
             self._condition.notify_all()
