@@ -29,6 +29,7 @@ from .sensor_ingress import (
 )
 from .sensor_registry import (
     SensorDesiredState,
+    SensorIdentityConflict,
     SensorMetadataPatch,
     SensorRegistry,
 )
@@ -70,7 +71,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v10",
+            "schema": "visionrig/health/v11",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -97,8 +98,9 @@ def create_app(
                 "runtime": asdict(sensor_ingress.stats()),
             },
             "sensor_registry": {
-                "schema": "visionrig/sensor-registry/v1",
+                "schema": "visionrig/sensor-registry/v2",
                 "entries": len(registry.list()),
+                "discovered": len(registry.list_discovery()),
                 "desired_state_schema": "visionrig/sensor-desired-state/v1",
             },
         }
@@ -136,6 +138,7 @@ def create_app(
                 control_status = "converged"
             else:
                 control_status = "pending"
+            discovery = registry.get_discovery(source_id)
             sources.append(
                 {
                     "source_id": source_id,
@@ -145,6 +148,11 @@ def create_app(
                         else None
                     ),
                     "metadata": asdict(metadata),
+                    "discovery": (
+                        asdict(discovery)
+                        if discovery is not None
+                        else None
+                    ),
                     "control": {
                         "desired_enabled": metadata.enabled,
                         "effective_capture_active": effective,
@@ -153,7 +161,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v2",
+            "schema": "visionrig/sensor-catalog/v3",
             "sources": sources,
         }
 
@@ -186,8 +194,15 @@ def create_app(
     @app.post("/api/v1/sensors/heartbeat", response_model=SensorHeartbeatReceipt)
     def sensor_heartbeat(body: SensorHeartbeat) -> SensorHeartbeatReceipt:
         try:
-            registry.ensure_registered(body.source_id)
+            registry.observe(
+                body.source_id,
+                source_type=body.source_type,
+                device=body.device,
+                capabilities=body.capabilities,
+            )
             return sensor_ingress.heartbeat(body)
+        except SensorIdentityConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -217,7 +232,11 @@ def create_app(
         content_type = request.headers.get("content-type", "")
         payload = await read_bounded_body(request, sensor_ingress.max_payload_bytes)
         try:
-            registry.ensure_registered(source_id)
+            registry.observe(
+                source_id,
+                source_type=source_type,
+                device=device,
+            )
             return await run_in_threadpool(
                 sensor_ingress.process_encoded,
                 source_id=source_id,
@@ -228,6 +247,8 @@ def create_app(
                 device=device,
                 dropped_frames=dropped_frames,
             )
+        except SensorIdentityConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except SensorIngressBusy as exc:
             raise HTTPException(status_code=429, detail=str(exc)) from exc
         except SensorSequenceError as exc:

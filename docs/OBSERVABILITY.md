@@ -40,6 +40,12 @@ idempotent and never overwrites operator-owned display name, location, role or
 `enabled` state. This keeps previously seen sensors visible as known/offline
 after service restart.
 
+Persistent discovery stores the producer-described `source_type`, `device` and
+normalized capabilities separately from operator metadata. Once a `source_id`
+has been observed with a source type, reusing that id as another type is a 409
+identity conflict. Device/capability observations may refresh without gaining
+operator authority.
+
 ## Desired-state control contract
 
 `GET /api/v1/sensors/{source_id}/desired-state` returns
@@ -64,7 +70,7 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v2` and adds a bounded control summary:
+`visionrig/sensor-catalog/v3` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
 - `effective_capture_active`: producer acknowledgement when available;
@@ -77,8 +83,8 @@ desired-state response and never gains catalog or world-state access.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v10` and advertises the desired-state
-schema under the sensor registry section.
+`GET /health` uses `visionrig/health/v11` and advertises the desired-state
+schema plus persistent discovery counts under the sensor registry section.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
 embeddings are never returned by these surfaces.

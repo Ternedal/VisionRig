@@ -23,6 +23,10 @@ class SensorRegistryError(RuntimeError):
     pass
 
 
+class SensorIdentityConflict(SensorRegistryError):
+    pass
+
+
 class SensorMetadataPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -44,6 +48,14 @@ class SensorDesiredState(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
+class SensorDiscovery:
+    source_id: str
+    source_type: str
+    device: str | None = None
+    capabilities: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class SensorMetadata:
     source_id: str
     display_name: str | None = None
@@ -62,6 +74,15 @@ class _StoredSensorMetadata(BaseModel):
     enabled: bool = True
 
 
+class _StoredSensorDiscovery(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: str = Field(min_length=1, max_length=128)
+    source_type: str = Field(min_length=1, max_length=32)
+    device: str | None = Field(default=None, max_length=256)
+    capabilities: tuple[str, ...] = ()
+
+
 class _SensorRegistryFile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -69,6 +90,7 @@ class _SensorRegistryFile(BaseModel):
         "visionrig/sensor-registry-file/v1"
     )
     entries: tuple[_StoredSensorMetadata, ...] = ()
+    discovery: tuple[_StoredSensorDiscovery, ...] = ()
 
 
 class SensorRegistry:
@@ -78,6 +100,7 @@ class SensorRegistry:
         self._lock = RLock()
         self.path = Path(path).expanduser() if path is not None else None
         self._entries: dict[str, SensorMetadata] = {}
+        self._discovery: dict[str, SensorDiscovery] = {}
         if self.path is not None:
             self._load()
 
@@ -114,6 +137,15 @@ class SensorRegistry:
             )
             for entry in state.entries
         }
+        self._discovery = {
+            item.source_id: SensorDiscovery(
+                source_id=item.source_id,
+                source_type=item.source_type,
+                device=item.device,
+                capabilities=tuple(item.capabilities),
+            )
+            for item in state.discovery
+        }
 
     def _save(self) -> None:
         if self.path is None:
@@ -129,7 +161,16 @@ class SensorRegistry:
                     enabled=entry.enabled,
                 )
                 for entry in self.list()
-            )
+            ),
+            discovery=tuple(
+                _StoredSensorDiscovery(
+                    source_id=item.source_id,
+                    source_type=item.source_type,
+                    device=item.device,
+                    capabilities=item.capabilities,
+                )
+                for item in self.list_discovery()
+            ),
         )
         temp_name: str | None = None
         try:
@@ -179,6 +220,69 @@ class SensorRegistry:
                 self._entries.pop(source_id, None)
                 raise
             return created
+
+    def get_discovery(self, source_id: str) -> SensorDiscovery | None:
+        with self._lock:
+            return self._discovery.get(source_id)
+
+    def list_discovery(self) -> tuple[SensorDiscovery, ...]:
+        with self._lock:
+            return tuple(self._discovery[key] for key in sorted(self._discovery))
+
+    def observe(
+        self,
+        source_id: str,
+        *,
+        source_type: str,
+        device: str | None = None,
+        capabilities: tuple[str, ...] = (),
+    ) -> SensorDiscovery:
+        """Persist producer-described discovery data without operator authority."""
+        if not source_id or len(source_id) > 128:
+            raise ValueError("source_id must contain 1..128 characters")
+        cleaned_type = source_type.strip().lower()
+        if not cleaned_type or len(cleaned_type) > 32:
+            raise ValueError("source_type must contain 1..32 characters")
+        cleaned_caps = tuple(sorted({
+            value.strip().lower()
+            for value in capabilities
+            if value.strip()
+        }))
+        with self._lock:
+            current = self._discovery.get(source_id)
+            if current is not None and current.source_type != cleaned_type:
+                raise SensorIdentityConflict(
+                    f"source_id {source_id!r} is already registered as "
+                    f"{current.source_type!r}, not {cleaned_type!r}"
+                )
+            updated = SensorDiscovery(
+                source_id=source_id,
+                source_type=cleaned_type,
+                device=(
+                    device
+                    if device is not None
+                    else (current.device if current is not None else None)
+                ),
+                capabilities=cleaned_caps or (
+                    current.capabilities if current is not None else ()
+                ),
+            )
+            previous_discovery = current
+            previous_metadata = self._entries.get(source_id)
+            if previous_metadata is None:
+                self._entries[source_id] = SensorMetadata(source_id=source_id)
+            self._discovery[source_id] = updated
+            try:
+                self._save()
+            except Exception:
+                if previous_metadata is None:
+                    self._entries.pop(source_id, None)
+                if previous_discovery is None:
+                    self._discovery.pop(source_id, None)
+                else:
+                    self._discovery[source_id] = previous_discovery
+                raise
+            return updated
 
     def desired_state(self, source_id: str) -> SensorDesiredState:
         metadata = self.get(source_id)

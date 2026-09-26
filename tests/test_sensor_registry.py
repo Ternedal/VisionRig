@@ -67,7 +67,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v2"
+    assert body["schema"] == "visionrig/sensor-catalog/v3"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -80,6 +80,12 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "location": "Living room",
         "role": "tracking",
         "enabled": True,
+    }
+    assert source["discovery"] == {
+        "source_id": "kinect-living-room",
+        "source_type": "camera",
+        "device": "kinect-v2",
+        "capabilities": ["depth", "infrared", "rgb"],
     }
     assert source["control"] == {
         "desired_enabled": True,
@@ -137,10 +143,11 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v10"
+    assert health["schema"] == "visionrig/health/v11"
     assert health["sensor_registry"] == {
-        "schema": "visionrig/sensor-registry/v1",
+        "schema": "visionrig/sensor-registry/v2",
         "entries": 1,
+        "discovered": 0,
         "desired_state_schema": "visionrig/sensor-desired-state/v1",
     }
 
@@ -200,3 +207,38 @@ def test_auto_registration_never_overwrites_operator_metadata() -> None:
     assert metadata.location == "Office"
     assert metadata.role == "primary"
     assert metadata.enabled is False
+
+
+def test_sensor_type_reuse_is_rejected_without_overwriting_discovery() -> None:
+    registry = SensorRegistry()
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    first = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "source_id": "sensor-a",
+            "source_type": "camera",
+            "device": "usb-camera",
+            "capabilities": ["rgb"],
+        },
+    )
+    assert first.status_code == 200
+
+    conflict = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "source_id": "sensor-a",
+            "source_type": "vr",
+            "device": "quest",
+            "capabilities": ["passthrough"],
+        },
+    )
+    assert conflict.status_code == 409
+
+    discovery = registry.get_discovery("sensor-a")
+    assert discovery is not None
+    assert discovery.source_type == "camera"
+    assert discovery.device == "usb-camera"
+    assert discovery.capabilities == ("rgb",)
