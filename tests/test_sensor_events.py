@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from visionrig.api import create_app
 from visionrig.pipeline import PerceptionPipeline
-from visionrig.sensor_events import SensorChangeJournal
+from visionrig.sensor_events import SensorChangeJournal, SensorChangeJournalError
 from visionrig.sensor_registry import SensorMetadataPatch, SensorRegistry
 
 
@@ -378,3 +378,104 @@ def test_sensor_change_endpoint_long_poll_returns_immediately_on_stream_reset() 
     assert response.status_code == 200
     assert elapsed < 0.5
     assert response.json()["stream_reset"] is True
+
+
+def test_persistent_sensor_change_journal_survives_restart(tmp_path) -> None:
+    path = tmp_path / "sensor-changes.json"
+    first = SensorChangeJournal(
+        capacity=3,
+        stream_id="persistent-stream",
+        path=path,
+    )
+    for index in range(4):
+        first.append(
+            kind="metadata_changed",
+            source_id=f"camera-{index}",
+            payload={"index": index},
+            occurred_utc=f"2026-09-26T12:40:0{index}+00:00",
+        )
+
+    assert first.persistent is True
+    assert path.exists()
+
+    restarted = SensorChangeJournal(capacity=3, path=path)
+    assert restarted.stream_id == "persistent-stream"
+    batch = restarted.read(after_cursor=1, limit=10)
+    assert batch.gap is True
+    assert [entry.cursor for entry in batch.entries] == [2, 3, 4]
+    assert [entry.event.payload["index"] for entry in batch.entries] == [1, 2, 3]
+
+    appended = restarted.append(
+        kind="registered",
+        source_id="camera-4",
+        occurred_utc="2026-09-26T12:40:04+00:00",
+    )
+    assert appended.cursor == 5
+
+    third = SensorChangeJournal(capacity=3, path=path)
+    latest = third.read(after_cursor=2, limit=10)
+    assert [entry.cursor for entry in latest.entries] == [3, 4, 5]
+    assert latest.stream_id == "persistent-stream"
+
+
+def test_corrupt_sensor_change_journal_fails_closed(tmp_path) -> None:
+    path = tmp_path / "sensor-changes.json"
+    path.write_text(
+        '{"schema_id":"wrong","stream_id":"x","next_cursor":1,"entries":[]}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        SensorChangeJournalError,
+        match="invalid sensor change journal file",
+    ):
+        SensorChangeJournal(path=path)
+
+
+def test_failed_sensor_change_persist_rolls_back_cursor_and_entries(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    path = tmp_path / "sensor-changes.json"
+    journal = SensorChangeJournal(
+        stream_id="rollback-stream",
+        path=path,
+    )
+    first = journal.append(kind="registered", source_id="camera-a")
+    assert first.cursor == 1
+
+    def fail_replace(_source, _target):
+        raise OSError("disk failure")
+
+    monkeypatch.setattr("visionrig.sensor_events.os.replace", fail_replace)
+
+    with pytest.raises(
+        SensorChangeJournalError,
+        match="unable to persist sensor change journal",
+    ):
+        journal.append(kind="metadata_changed", source_id="camera-a")
+
+    batch = journal.read(after_cursor=0)
+    assert [entry.cursor for entry in batch.entries] == [1]
+    assert batch.newest_available_cursor == 1
+
+    monkeypatch.undo()
+    second = journal.append(kind="metadata_changed", source_id="camera-a")
+    assert second.cursor == 2
+
+
+def test_persisted_stream_id_mismatch_fails_closed(tmp_path) -> None:
+    path = tmp_path / "sensor-changes.json"
+    SensorChangeJournal(
+        stream_id="stored-stream",
+        path=path,
+    ).append(kind="registered", source_id="camera-a")
+
+    with pytest.raises(
+        SensorChangeJournalError,
+        match="does not match persisted journal",
+    ):
+        SensorChangeJournal(
+            stream_id="different-stream",
+            path=path,
+        )
