@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 from visionrig.api import create_app
@@ -68,7 +70,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v5"
+    assert body["schema"] == "visionrig/sensor-catalog/v6"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -92,8 +94,10 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     assert source["control"] == {
         "desired_enabled": True,
         "desired_revision": 0,
+        "desired_changed_utc": None,
         "effective_capture_active": True,
         "applied_revision": 0,
+        "pending_seconds": None,
         "status": "converged",
     }
 
@@ -147,9 +151,9 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v13"
+    assert health["schema"] == "visionrig/health/v14"
     assert health["sensor_registry"] == {
-        "schema": "visionrig/sensor-registry/v3",
+        "schema": "visionrig/sensor-registry/v4",
         "entries": 1,
         "discovered": 0,
         "desired_state_schema": "visionrig/sensor-desired-state/v2",
@@ -249,7 +253,8 @@ def test_sensor_type_reuse_is_rejected_without_overwriting_discovery() -> None:
 
 
 def test_catalog_requires_current_revision_before_converged() -> None:
-    registry = SensorRegistry()
+    now = [datetime(2026, 9, 26, 8, 0, tzinfo=timezone.utc)]
+    registry = SensorRegistry(clock=lambda: now[0])
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     initial = client.post(
@@ -270,9 +275,14 @@ def test_catalog_requires_current_revision_before_converged() -> None:
         "/api/v1/sensors/cam-revision/metadata",
         json={"enabled": False},
     )
+    changed_utc = registry.control_state("cam-revision").changed_utc
+    assert changed_utc == "2026-09-26T08:00:00+00:00"
+    now[0] = datetime(2026, 9, 26, 8, 0, 12, 500000, tzinfo=timezone.utc)
     pending = client.get("/api/v1/sensors/catalog").json()["sources"][0]["control"]
     assert pending["desired_revision"] == 1
+    assert pending["desired_changed_utc"] == changed_utc
     assert pending["applied_revision"] == 0
+    assert pending["pending_seconds"] == 12.5
     assert pending["status"] == "pending"
 
     ack = client.post(
@@ -289,3 +299,5 @@ def test_catalog_requires_current_revision_before_converged() -> None:
     assert ack.status_code == 200
     converged = client.get("/api/v1/sensors/catalog").json()["sources"][0]["control"]
     assert converged["status"] == "converged"
+    assert converged["pending_seconds"] is None
+    assert converged["desired_changed_utc"] == changed_utc
