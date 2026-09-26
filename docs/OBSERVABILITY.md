@@ -52,9 +52,22 @@ metadata defaults. Operators can preconfigure `enabled=false` before a device
 ever connects.
 
 The reference producer validates schema + source id through
-`fetch_desired_state()`. This slice provides the transport/contract; automatic
-capture-loop pausing can be layered on top without giving the producer broader
-authority.
+`fetch_desired_state()`, closes capture while disabled, and reports
+`capture_active` only after the source has actually opened or closed.
+
+## Control convergence
+
+`GET /api/v1/sensors/catalog` uses
+`visionrig/sensor-catalog/v2` and adds a bounded control summary:
+
+- `desired_enabled`: operator intent from the registry;
+- `effective_capture_active`: producer acknowledgement when available;
+- `status`: `converged`, `pending` or `unknown`.
+
+A mismatch is reported as `pending`; VisionRig does not pretend the command has
+taken effect until the producer reports it. A source without an effective-state
+heartbeat remains `unknown`. The producer still receives only its own minimal
+desired-state response and never gains catalog or world-state access.
 
 ## Health integration
 
