@@ -119,3 +119,42 @@ def test_mismatched_receipt_fails_closed() -> None:
         )
         with pytest.raises(ProducerProtocolError, match="does not match"):
             producer.send_encoded(b"a")
+
+
+def test_producer_sends_heartbeat_without_consuming_sequence() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["authorization"] = request.headers.get("authorization")
+        seen["json"] = __import__("json").loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "schema_id": "visionrig/sensor-heartbeat-receipt/v1",
+                "status": "accepted",
+                "source_id": "quest",
+                "seen_utc": "2026-09-26T03:00:00+00:00",
+                "production_authority": False,
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="quest",
+            source_type="vr",
+            device="quest-2",
+            client=client,
+        )
+        receipt = producer.send_heartbeat(capabilities=("rgb", "passthrough"))
+        stats = producer.stats()
+
+    assert receipt.source_id == "quest"
+    assert seen["path"] == "/api/v1/sensors/heartbeat"
+    assert seen["authorization"] == f"Bearer {TOKEN}"
+    assert seen["json"]["device"] == "quest-2"
+    assert seen["json"]["capabilities"] == ["rgb", "passthrough"]
+    assert stats.next_sequence == 0
+    assert stats.captured == 0
