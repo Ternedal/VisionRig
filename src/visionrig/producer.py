@@ -11,7 +11,7 @@ from .producer_state import (
     ProducerStateStore,
     producer_state_key,
 )
-from .sensor_ingress import SensorFrameReceipt
+from .sensor_ingress import SensorFrameReceipt, SensorHeartbeatReceipt
 from .sensor_registry import SensorDesiredState
 
 
@@ -137,6 +137,49 @@ class GatewayFrameProducer:
             pending_dropped_frames=self._pending_dropped,
             next_sequence=self._next_sequence,
         )
+
+    def send_heartbeat(
+        self,
+        *,
+        capabilities: tuple[str, ...] = (),
+    ) -> SensorHeartbeatReceipt:
+        """Publish producer liveness without capturing or sending a frame."""
+        target = self._base_url + "/api/v1/sensors/heartbeat"
+        payload = {
+            "source_id": self._source_id,
+            "source_type": self._source_type,
+            "device": self._device,
+            "capabilities": list(capabilities),
+        }
+        kwargs = {
+            "json": payload,
+            "headers": {"authorization": f"Bearer {self._token}"},
+            "timeout": self._timeout,
+        }
+        try:
+            if self._client is not None:
+                response = self._client.post(target, **kwargs)
+            else:
+                with httpx.Client() as client:
+                    response = client.post(target, **kwargs)
+        except httpx.HTTPError as exc:
+            raise ProducerError("VisionRig gateway heartbeat unavailable") from exc
+
+        if response.status_code in {401, 403}:
+            raise ProducerAuthError("VisionRig gateway rejected producer credentials")
+        if response.status_code != 200:
+            raise ProducerProtocolError(
+                f"VisionRig heartbeat endpoint returned HTTP {response.status_code}"
+            )
+        try:
+            receipt = SensorHeartbeatReceipt.model_validate(response.json())
+        except Exception as exc:
+            raise ProducerProtocolError("invalid VisionRig heartbeat receipt") from exc
+        if receipt.source_id != self._source_id:
+            raise ProducerProtocolError(
+                "VisionRig heartbeat receipt does not match producer source"
+            )
+        return receipt
 
     def fetch_desired_state(self) -> SensorDesiredState:
         """Fetch the operator desired state through the authenticated gateway."""
