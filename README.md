@@ -58,8 +58,8 @@ Registry metadata is persisted by default to
 
 A producer can fetch only its bounded desired state through
 `GET /api/v1/sensors/{source_id}/desired-state`. Cross-device reads pass
-through the authenticated gateway. V1 intentionally exposes only
-`source_id` + `enabled`; friendly names, location, role, catalog and world
+through the authenticated gateway. V2 intentionally exposes only
+`source_id` + `enabled` + `revision`; friendly names, location, role, catalog and world
 state are not disclosed to producers.
 
 The reference producer now polls desired state before opening capture. When
