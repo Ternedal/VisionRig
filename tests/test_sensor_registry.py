@@ -70,7 +70,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v6"
+    assert body["schema"] == "visionrig/sensor-catalog/v7"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -83,6 +83,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "location": "Living room",
         "role": "tracking",
         "enabled": True,
+        "retired_utc": None,
     }
     assert source["discovery"]["source_id"] == "kinect-living-room"
     assert source["discovery"]["source_type"] == "camera"
@@ -91,6 +92,10 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     assert source["discovery"]["first_seen_utc"] is not None
     assert source["discovery"]["last_seen_utc"] is not None
     assert source["discovery"]["observation_count"] == 1
+    assert source["lifecycle"] == {
+        "status": "active",
+        "retired_utc": None,
+    }
     assert source["control"] == {
         "desired_enabled": True,
         "desired_revision": 0,
@@ -151,9 +156,9 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v14"
+    assert health["schema"] == "visionrig/health/v15"
     assert health["sensor_registry"] == {
-        "schema": "visionrig/sensor-registry/v4",
+        "schema": "visionrig/sensor-registry/v5",
         "entries": 1,
         "discovered": 0,
         "desired_state_schema": "visionrig/sensor-desired-state/v2",
@@ -301,3 +306,62 @@ def test_catalog_requires_current_revision_before_converged() -> None:
     assert converged["status"] == "converged"
     assert converged["pending_seconds"] is None
     assert converged["desired_changed_utc"] == changed_utc
+
+
+def test_retire_disables_sensor_with_revision_and_restore_stays_disabled() -> None:
+    now = [datetime(2026, 9, 26, 9, 0, tzinfo=timezone.utc)]
+    registry = SensorRegistry(clock=lambda: now[0])
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    heartbeat = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "camera-retire",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+        },
+    )
+    assert heartbeat.status_code == 200
+
+    retired = client.post("/api/v1/sensors/camera-retire/retire")
+    assert retired.status_code == 200
+    retired_body = retired.json()
+    assert retired_body["schema"] == "visionrig/sensor-lifecycle/v1"
+    assert retired_body["status"] == "retired"
+    assert retired_body["metadata"]["enabled"] is False
+    assert retired_body["metadata"]["retired_utc"] == "2026-09-26T09:00:00+00:00"
+    assert retired_body["desired_state"]["revision"] == 1
+    assert retired_body["desired_state"]["enabled"] is False
+
+    catalog = client.get("/api/v1/sensors/catalog").json()["sources"][0]
+    assert catalog["lifecycle"] == {
+        "status": "retired",
+        "retired_utc": "2026-09-26T09:00:00+00:00",
+    }
+    assert catalog["control"]["status"] == "pending"
+
+    duplicate = client.post("/api/v1/sensors/camera-retire/retire")
+    assert duplicate.status_code == 200
+    assert duplicate.json()["desired_state"]["revision"] == 1
+
+    enable_while_retired = client.patch(
+        "/api/v1/sensors/camera-retire/metadata",
+        json={"enabled": True},
+    )
+    assert enable_while_retired.status_code == 422
+
+    restored = client.post("/api/v1/sensors/camera-retire/restore")
+    assert restored.status_code == 200
+    assert restored.json()["status"] == "active"
+    assert restored.json()["metadata"]["retired_utc"] is None
+    assert restored.json()["metadata"]["enabled"] is False
+    assert restored.json()["desired_state"]["revision"] == 1
+
+    enabled = client.patch(
+        "/api/v1/sensors/camera-retire/metadata",
+        json={"enabled": True},
+    )
+    assert enabled.status_code == 200
+    assert registry.desired_state("camera-retire").revision == 2
