@@ -28,6 +28,15 @@ class SensorIdentityConflict(SensorRegistryError):
     pass
 
 
+class SensorStateRevisionConflict(SensorRegistryError):
+    def __init__(self, expected: int, current: int) -> None:
+        self.expected = expected
+        self.current = current
+        super().__init__(
+            f"sensor state revision conflict: expected {expected}, current {current}"
+        )
+
+
 class SensorMetadataPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -152,6 +161,20 @@ class SensorRegistry:
     def state_revision(self) -> int:
         with self._lock:
             return self._state_revision
+
+    def _assert_expected_state_revision(
+        self,
+        expected_state_revision: int | None,
+    ) -> None:
+        if expected_state_revision is None:
+            return
+        if expected_state_revision < 0:
+            raise ValueError("expected_state_revision must be >= 0")
+        if expected_state_revision != self._state_revision:
+            raise SensorStateRevisionConflict(
+                expected_state_revision,
+                self._state_revision,
+            )
 
     @staticmethod
     def _clean(value: str | None) -> str | None:
@@ -409,11 +432,17 @@ class SensorRegistry:
         now = self._clock().astimezone(timezone.utc)
         return round(max(0.0, (now - changed.astimezone(timezone.utc)).total_seconds()), 3)
 
-    def retire(self, source_id: str) -> SensorMetadata:
+    def retire(
+        self,
+        source_id: str,
+        *,
+        expected_state_revision: int | None = None,
+    ) -> SensorMetadata:
         """Retire a sensor while preserving metadata, discovery and history."""
         if not source_id or len(source_id) > 128:
             raise ValueError("source_id must contain 1..128 characters")
         with self._lock:
+            self._assert_expected_state_revision(expected_state_revision)
             current = self._entries.get(source_id, SensorMetadata(source_id=source_id))
             if current.retired_utc is not None:
                 return current
@@ -447,11 +476,17 @@ class SensorRegistry:
                 raise
             return updated
 
-    def restore(self, source_id: str) -> SensorMetadata:
+    def restore(
+        self,
+        source_id: str,
+        *,
+        expected_state_revision: int | None = None,
+    ) -> SensorMetadata:
         """Restore a retired sensor to managed-but-disabled state."""
         if not source_id or len(source_id) > 128:
             raise ValueError("source_id must contain 1..128 characters")
         with self._lock:
+            self._assert_expected_state_revision(expected_state_revision)
             current = self._entries.get(source_id, SensorMetadata(source_id=source_id))
             if current.retired_utc is None:
                 return current
@@ -471,11 +506,17 @@ class SensorRegistry:
                 raise
             return updated
 
-    def forget(self, source_id: str) -> None:
+    def forget(
+        self,
+        source_id: str,
+        *,
+        expected_state_revision: int | None = None,
+    ) -> None:
         """Permanently remove retired sensor metadata, discovery and control history."""
         if not source_id or len(source_id) > 128:
             raise ValueError("source_id must contain 1..128 characters")
         with self._lock:
+            self._assert_expected_state_revision(expected_state_revision)
             if not self.contains(source_id):
                 raise KeyError(source_id)
             current = self._entries.get(source_id)
@@ -519,10 +560,17 @@ class SensorRegistry:
         with self._lock:
             return tuple(self._entries[key] for key in sorted(self._entries))
 
-    def patch(self, source_id: str, patch: SensorMetadataPatch) -> SensorMetadata:
+    def patch(
+        self,
+        source_id: str,
+        patch: SensorMetadataPatch,
+        *,
+        expected_state_revision: int | None = None,
+    ) -> SensorMetadata:
         if not source_id or len(source_id) > 128:
             raise ValueError("source_id must contain 1..128 characters")
         with self._lock:
+            self._assert_expected_state_revision(expected_state_revision)
             current = self._entries.get(source_id, SensorMetadata(source_id=source_id))
             changes = {}
             if "display_name" in patch.model_fields_set:
