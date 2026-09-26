@@ -13,11 +13,11 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v2`.
+Schema: `visionrig/sensor-runtime-status/v3`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
-`last_seen_utc`, `age_seconds` and derived `online/stale/offline` presence.
+`last_seen_utc`, `age_seconds`, `capture_active` and derived `online/stale/offline` presence.
 
 ## Heartbeat
 
@@ -58,7 +58,7 @@ authority.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v8` and advertises the desired-state
+`GET /health` uses `visionrig/health/v9` and advertises the desired-state
 schema under the sensor registry section.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
