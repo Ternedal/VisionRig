@@ -38,6 +38,7 @@ VisionRig includes:
 - **bounded long-poll sensor changes with event wake-up and timeout fallback**
 - **restart-safe persistent semantic sensor change journal with atomic writes**
 - **persistent semantic sensor state revision for change-feed drift detection**
+- **optimistic concurrency guards for operator sensor writes**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -132,6 +133,14 @@ last-seen/counter refreshes do not advance it. If a client observes a fleet or
 bootstrap revision newer than the highest semantic event revision it has
 applied, it can detect a registry/journal crash-window gap and rebootstrap
 instead of trusting an incomplete incremental history.
+
+Operator mutations support an optional `expected_state_revision` query
+parameter on metadata patch, retire, restore and permanent forget. A stale
+revision is rejected with HTTP 409 and a structured
+`sensor_state_revision_conflict` detail instead of overwriting newer state.
+Successful writes return the resulting `state_revision`. Existing clients may
+omit the precondition, but control UIs should send the revision from their
+latest bootstrap/fleet state.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.

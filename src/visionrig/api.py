@@ -33,6 +33,7 @@ from .sensor_registry import (
     SensorIdentityConflict,
     SensorMetadataPatch,
     SensorRegistry,
+    SensorStateRevisionConflict,
 )
 
 
@@ -68,6 +69,18 @@ def create_app(
     )
     registry = sensor_registry or SensorRegistry()
     sensor_changes = sensor_change_journal or SensorChangeJournal()
+
+    def raise_state_revision_conflict(
+        exc: SensorStateRevisionConflict,
+    ) -> None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "sensor_state_revision_conflict",
+                "expected": exc.expected,
+                "current": exc.current,
+            },
+        ) from exc
 
     def append_sensor_change(
         *,
@@ -254,7 +267,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v23",
+            "schema": "visionrig/health/v24",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -436,10 +449,18 @@ def create_app(
         return registry.desired_state(source_id)
 
     @app.post("/api/v1/sensors/{source_id}/retire")
-    def retire_sensor(source_id: str) -> dict[str, object]:
+    def retire_sensor(
+        source_id: str,
+        expected_state_revision: int | None = Query(default=None, ge=0),
+    ) -> dict[str, object]:
         previous = registry.get(source_id)
         try:
-            metadata = registry.retire(source_id)
+            metadata = registry.retire(
+                source_id,
+                expected_state_revision=expected_state_revision,
+            )
+        except SensorStateRevisionConflict as exc:
+            raise_state_revision_conflict(exc)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if previous.retired_utc is None and metadata.retired_utc is not None:
@@ -454,17 +475,26 @@ def create_app(
                 },
             )
         return {
-            "schema": "visionrig/sensor-lifecycle/v1",
+            "schema": "visionrig/sensor-lifecycle/v2",
+            "state_revision": registry.state_revision,
             "status": "retired",
             "metadata": asdict(metadata),
             "desired_state": registry.desired_state(source_id).model_dump(),
         }
 
     @app.post("/api/v1/sensors/{source_id}/restore")
-    def restore_sensor(source_id: str) -> dict[str, object]:
+    def restore_sensor(
+        source_id: str,
+        expected_state_revision: int | None = Query(default=None, ge=0),
+    ) -> dict[str, object]:
         previous = registry.get(source_id)
         try:
-            metadata = registry.restore(source_id)
+            metadata = registry.restore(
+                source_id,
+                expected_state_revision=expected_state_revision,
+            )
+        except SensorStateRevisionConflict as exc:
+            raise_state_revision_conflict(exc)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         if previous.retired_utc is not None and metadata.retired_utc is None:
@@ -474,14 +504,23 @@ def create_app(
                 payload={"enabled": metadata.enabled},
             )
         return {
-            "schema": "visionrig/sensor-lifecycle/v1",
+            "schema": "visionrig/sensor-lifecycle/v2",
+            "state_revision": registry.state_revision,
             "status": "active",
             "metadata": asdict(metadata),
             "desired_state": registry.desired_state(source_id).model_dump(),
         }
 
     @app.delete("/api/v1/sensors/{source_id}")
-    def forget_sensor(source_id: str) -> dict[str, object]:
+    def forget_sensor(
+        source_id: str,
+        expected_state_revision: int | None = Query(default=None, ge=0),
+    ) -> dict[str, object]:
+        try:
+            registry.assert_state_revision(expected_state_revision)
+        except SensorStateRevisionConflict as exc:
+            raise_state_revision_conflict(exc)
+
         if not registry.contains(source_id):
             raise HTTPException(status_code=404, detail="sensor is not registered")
 
@@ -507,7 +546,12 @@ def create_app(
             )
 
         try:
-            registry.forget(source_id)
+            registry.forget(
+                source_id,
+                expected_state_revision=expected_state_revision,
+            )
+        except SensorStateRevisionConflict as exc:
+            raise_state_revision_conflict(exc)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="sensor is not registered") from exc
         except ValueError as exc:
@@ -518,7 +562,8 @@ def create_app(
             source_id=source_id,
         )
         return {
-            "schema": "visionrig/sensor-forget/v1",
+            "schema": "visionrig/sensor-forget/v2",
+            "state_revision": registry.state_revision,
             "status": "forgotten",
             "source_id": source_id,
         }
@@ -527,12 +572,19 @@ def create_app(
     def patch_sensor_metadata(
         source_id: str,
         body: SensorMetadataPatch,
+        expected_state_revision: int | None = Query(default=None, ge=0),
     ) -> dict[str, object]:
         previous = registry.get(source_id)
         previous_revision = registry.control_revision(source_id)
         was_registered = registry.contains(source_id)
         try:
-            metadata = registry.patch(source_id, body)
+            metadata = registry.patch(
+                source_id,
+                body,
+                expected_state_revision=expected_state_revision,
+            )
+        except SensorStateRevisionConflict as exc:
+            raise_state_revision_conflict(exc)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -574,7 +626,8 @@ def create_app(
                 },
             )
         return {
-            "schema": "visionrig/sensor-metadata/v1",
+            "schema": "visionrig/sensor-metadata/v2",
+            "state_revision": registry.state_revision,
             "metadata": asdict(metadata),
         }
 
