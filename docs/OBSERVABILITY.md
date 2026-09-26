@@ -34,6 +34,12 @@ through the authenticated sensor gateway.
 state. The registry is restart-safe by default at
 `~/.visionrig/sensor-registry.json` and uses fsync plus atomic replacement.
 
+The first valid heartbeat or encoded frame from an unknown `source_id` creates
+an empty persistent registry entry automatically. Auto-registration is
+idempotent and never overwrites operator-owned display name, location, role or
+`enabled` state. This keeps previously seen sensors visible as known/offline
+after service restart.
+
 ## Desired-state control contract
 
 `GET /api/v1/sensors/{source_id}/desired-state` returns
@@ -71,7 +77,7 @@ desired-state response and never gains catalog or world-state access.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v9` and advertises the desired-state
+`GET /health` uses `visionrig/health/v10` and advertises the desired-state
 schema under the sensor registry section.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
