@@ -135,4 +135,5 @@ def test_health_reports_registry_surface() -> None:
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v1",
         "entries": 1,
+        "desired_state_schema": "visionrig/sensor-desired-state/v1",
     }
