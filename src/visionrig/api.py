@@ -27,6 +27,7 @@ from .sensor_ingress import (
     SensorPayloadTooLarge,
     SensorSequenceError,
 )
+from .sensor_registry import SensorMetadataPatch, SensorRegistry
 
 
 class IngestBody(BaseModel):
@@ -44,6 +45,7 @@ def create_app(
     sensor_stale_after_seconds: float = 15.0,
     sensor_offline_after_seconds: float = 60.0,
     modelrig_publisher: ModelRigPerceptionPublisher | None = None,
+    sensor_registry: SensorRegistry | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
@@ -57,13 +59,14 @@ def create_app(
         stale_after_seconds=sensor_stale_after_seconds,
         offline_after_seconds=sensor_offline_after_seconds,
     )
+    registry = sensor_registry or SensorRegistry()
 
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v6",
+            "schema": "visionrig/health/v7",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -89,6 +92,10 @@ def create_app(
                 "overload_policy": "reject",
                 "runtime": asdict(sensor_ingress.stats()),
             },
+            "sensor_registry": {
+                "schema": "visionrig/sensor-registry/v1",
+                "entries": len(registry.list()),
+            },
         }
 
     @app.get("/api/v1/capabilities")
@@ -102,6 +109,42 @@ def create_app(
     @app.get("/api/v1/sensors/status")
     def sensor_status() -> dict[str, object]:
         return asdict(sensor_ingress.stats())
+
+    @app.get("/api/v1/sensors/catalog")
+    def sensor_catalog() -> dict[str, object]:
+        runtime_status = sensor_ingress.stats()
+        runtime_by_id = {source.source_id: source for source in runtime_status.sources}
+        metadata_by_id = {entry.source_id: entry for entry in registry.list()}
+        source_ids = sorted(set(runtime_by_id) | set(metadata_by_id))
+        return {
+            "schema": "visionrig/sensor-catalog/v1",
+            "sources": [
+                {
+                    "source_id": source_id,
+                    "runtime": (
+                        asdict(runtime_by_id[source_id])
+                        if source_id in runtime_by_id
+                        else None
+                    ),
+                    "metadata": asdict(registry.get(source_id)),
+                }
+                for source_id in source_ids
+            ],
+        }
+
+    @app.patch("/api/v1/sensors/{source_id}/metadata")
+    def patch_sensor_metadata(
+        source_id: str,
+        body: SensorMetadataPatch,
+    ) -> dict[str, object]:
+        try:
+            metadata = registry.patch(source_id, body)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "schema": "visionrig/sensor-metadata/v1",
+            "metadata": asdict(metadata),
+        }
 
     @app.post("/api/v1/sensors/heartbeat", response_model=SensorHeartbeatReceipt)
     def sensor_heartbeat(body: SensorHeartbeat) -> SensorHeartbeatReceipt:
