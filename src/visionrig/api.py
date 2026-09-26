@@ -16,6 +16,7 @@ from .journal import EventBatch
 from .modelrig_bridge import ModelRigPerceptionPublisher
 from .pipeline import Frame, PassthroughStage, PerceptionPipeline
 from .runtime import VisionRuntime
+from .sensor_events import SensorChangeBatch, SensorChangeJournal
 from .sensor_ingress import (
     SensorDecodeError,
     SensorFrameReceipt,
@@ -51,6 +52,7 @@ def create_app(
     sensor_offline_after_seconds: float = 60.0,
     modelrig_publisher: ModelRigPerceptionPublisher | None = None,
     sensor_registry: SensorRegistry | None = None,
+    sensor_change_journal: SensorChangeJournal | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
@@ -65,6 +67,72 @@ def create_app(
         offline_after_seconds=sensor_offline_after_seconds,
     )
     registry = sensor_registry or SensorRegistry()
+    sensor_changes = sensor_change_journal or SensorChangeJournal()
+
+    def runtime_source_for(source_id: str):
+        return next(
+            (
+                source
+                for source in sensor_ingress.stats().sources
+                if source.source_id == source_id
+            ),
+            None,
+        )
+
+    def emit_registration_changes(
+        source_id: str,
+        *,
+        was_registered: bool,
+        previous_discovery,
+    ) -> None:
+        current_discovery = registry.get_discovery(source_id)
+        if not was_registered and registry.contains(source_id):
+            sensor_changes.append(
+                kind="registered",
+                source_id=source_id,
+                payload={
+                    "discovery": (
+                        asdict(current_discovery)
+                        if current_discovery is not None
+                        else None
+                    )
+                },
+            )
+        elif (
+            previous_discovery is not None
+            and current_discovery is not None
+            and (
+                previous_discovery.source_type != current_discovery.source_type
+                or previous_discovery.device != current_discovery.device
+                or previous_discovery.capabilities != current_discovery.capabilities
+            )
+        ):
+            sensor_changes.append(
+                kind="discovery_changed",
+                source_id=source_id,
+                payload={
+                    "discovery": asdict(current_discovery),
+                },
+            )
+
+    def emit_runtime_change(source_id: str, previous_runtime) -> None:
+        current_runtime = runtime_source_for(source_id)
+        if current_runtime is None:
+            return
+        if (
+            previous_runtime is None
+            or previous_runtime.capture_active != current_runtime.capture_active
+            or previous_runtime.applied_revision != current_runtime.applied_revision
+        ):
+            sensor_changes.append(
+                kind="runtime_changed",
+                source_id=source_id,
+                payload={
+                    "capture_active": current_runtime.capture_active,
+                    "applied_revision": current_runtime.applied_revision,
+                    "presence": current_runtime.presence,
+                },
+            )
 
     def sensor_fleet_summary_payload() -> dict[str, object]:
         runtime_status = sensor_ingress.stats()
@@ -172,7 +240,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v17",
+            "schema": "visionrig/health/v18",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -205,6 +273,10 @@ def create_app(
                 "desired_state_schema": "visionrig/sensor-desired-state/v2",
             },
             "sensor_fleet": sensor_fleet_summary_payload(),
+            "sensor_changes": {
+                "schema": "visionrig/sensor-change-batch/v1",
+                "durability": "process-local",
+            },
         }
 
     @app.get("/api/v1/capabilities")
@@ -222,6 +294,19 @@ def create_app(
     @app.get("/api/v1/sensors/fleet")
     def sensor_fleet_summary() -> dict[str, object]:
         return sensor_fleet_summary_payload()
+
+    @app.get(
+        "/api/v1/sensors/changes",
+        response_model=SensorChangeBatch,
+    )
+    def sensor_change_feed(
+        after_cursor: int = Query(default=0, ge=0),
+        limit: int = Query(default=64, ge=1, le=256),
+    ) -> SensorChangeBatch:
+        return sensor_changes.read(
+            after_cursor=after_cursor,
+            limit=limit,
+        )
 
     @app.get("/api/v1/sensors/catalog")
     def sensor_catalog() -> dict[str, object]:
@@ -311,10 +396,22 @@ def create_app(
 
     @app.post("/api/v1/sensors/{source_id}/retire")
     def retire_sensor(source_id: str) -> dict[str, object]:
+        previous = registry.get(source_id)
         try:
             metadata = registry.retire(source_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if previous.retired_utc is None and metadata.retired_utc is not None:
+            desired = registry.desired_state(source_id)
+            sensor_changes.append(
+                kind="retired",
+                source_id=source_id,
+                payload={
+                    "retired_utc": metadata.retired_utc,
+                    "desired_enabled": desired.enabled,
+                    "desired_revision": desired.revision,
+                },
+            )
         return {
             "schema": "visionrig/sensor-lifecycle/v1",
             "status": "retired",
@@ -324,10 +421,17 @@ def create_app(
 
     @app.post("/api/v1/sensors/{source_id}/restore")
     def restore_sensor(source_id: str) -> dict[str, object]:
+        previous = registry.get(source_id)
         try:
             metadata = registry.restore(source_id)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        if previous.retired_utc is not None and metadata.retired_utc is None:
+            sensor_changes.append(
+                kind="restored",
+                source_id=source_id,
+                payload={"enabled": metadata.enabled},
+            )
         return {
             "schema": "visionrig/sensor-lifecycle/v1",
             "status": "active",
@@ -368,6 +472,10 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         sensor_ingress.forget_source(source_id)
+        sensor_changes.append(
+            kind="forgotten",
+            source_id=source_id,
+        )
         return {
             "schema": "visionrig/sensor-forget/v1",
             "status": "forgotten",
@@ -379,10 +487,51 @@ def create_app(
         source_id: str,
         body: SensorMetadataPatch,
     ) -> dict[str, object]:
+        previous = registry.get(source_id)
+        previous_revision = registry.control_revision(source_id)
+        was_registered = registry.contains(source_id)
         try:
             metadata = registry.patch(source_id, body)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        if not was_registered:
+            sensor_changes.append(
+                kind="registered",
+                source_id=source_id,
+                payload={"metadata": asdict(metadata)},
+            )
+
+        metadata_fields_changed = (
+            previous.display_name != metadata.display_name
+            or previous.location != metadata.location
+            or previous.role != metadata.role
+        )
+        if metadata_fields_changed:
+            sensor_changes.append(
+                kind="metadata_changed",
+                source_id=source_id,
+                payload={
+                    "display_name": metadata.display_name,
+                    "location": metadata.location,
+                    "role": metadata.role,
+                },
+            )
+
+        current_revision = registry.control_revision(source_id)
+        if (
+            previous.enabled != metadata.enabled
+            or previous_revision != current_revision
+        ):
+            sensor_changes.append(
+                kind="control_changed",
+                source_id=source_id,
+                payload={
+                    "enabled": metadata.enabled,
+                    "revision": current_revision,
+                    "changed_utc": registry.control_state(source_id).changed_utc,
+                },
+            )
         return {
             "schema": "visionrig/sensor-metadata/v1",
             "metadata": asdict(metadata),
@@ -390,6 +539,9 @@ def create_app(
 
     @app.post("/api/v1/sensors/heartbeat", response_model=SensorHeartbeatReceipt)
     def sensor_heartbeat(body: SensorHeartbeat) -> SensorHeartbeatReceipt:
+        was_registered = registry.contains(body.source_id)
+        previous_discovery = registry.get_discovery(body.source_id)
+        previous_runtime = runtime_source_for(body.source_id)
         try:
             registry.observe(
                 body.source_id,
@@ -397,7 +549,14 @@ def create_app(
                 device=body.device,
                 capabilities=body.capabilities,
             )
-            return sensor_ingress.heartbeat(body)
+            receipt = sensor_ingress.heartbeat(body)
+            emit_registration_changes(
+                body.source_id,
+                was_registered=was_registered,
+                previous_discovery=previous_discovery,
+            )
+            emit_runtime_change(body.source_id, previous_runtime)
+            return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
@@ -428,13 +587,15 @@ def create_app(
     ) -> SensorFrameReceipt:
         content_type = request.headers.get("content-type", "")
         payload = await read_bounded_body(request, sensor_ingress.max_payload_bytes)
+        was_registered = registry.contains(source_id)
+        previous_discovery = registry.get_discovery(source_id)
         try:
             registry.observe(
                 source_id,
                 source_type=source_type,
                 device=device,
             )
-            return await run_in_threadpool(
+            receipt = await run_in_threadpool(
                 sensor_ingress.process_encoded,
                 source_id=source_id,
                 source_type=source_type,
@@ -444,6 +605,12 @@ def create_app(
                 device=device,
                 dropped_frames=dropped_frames,
             )
+            emit_registration_changes(
+                source_id,
+                was_registered=was_registered,
+                previous_discovery=previous_discovery,
+            )
+            return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except SensorIngressBusy as exc:
