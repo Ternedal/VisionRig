@@ -258,7 +258,11 @@ class SensorRegistry:
             updated = SensorDiscovery(
                 source_id=source_id,
                 source_type=cleaned_type,
-                device=device,
+                device=(
+                    device
+                    if device is not None
+                    else (current.device if current is not None else None)
+                ),
                 capabilities=cleaned_caps or (
                     current.capabilities if current is not None else ()
                 ),
