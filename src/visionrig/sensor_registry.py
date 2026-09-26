@@ -7,7 +7,6 @@ without allowing a sensor producer to grant itself authority.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-import json
 import os
 from pathlib import Path
 from threading import RLock
@@ -31,6 +30,17 @@ class SensorMetadataPatch(BaseModel):
     location: str | None = Field(default=None, max_length=128)
     role: SensorRole | None = None
     enabled: bool | None = None
+
+
+class SensorDesiredState(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_id: Literal["visionrig/sensor-desired-state/v1"] = (
+        "visionrig/sensor-desired-state/v1"
+    )
+    source_id: str = Field(min_length=1, max_length=128)
+    enabled: bool
+    production_authority: Literal[False] = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +162,14 @@ class SensorRegistry:
     def get(self, source_id: str) -> SensorMetadata:
         with self._lock:
             return self._entries.get(source_id, SensorMetadata(source_id=source_id))
+
+    def desired_state(self, source_id: str) -> SensorDesiredState:
+        metadata = self.get(source_id)
+        return SensorDesiredState(
+            source_id=source_id,
+            enabled=metadata.enabled,
+            production_authority=False,
+        )
 
     def list(self) -> tuple[SensorMetadata, ...]:
         with self._lock:

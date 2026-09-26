@@ -27,7 +27,11 @@ from .sensor_ingress import (
     SensorPayloadTooLarge,
     SensorSequenceError,
 )
-from .sensor_registry import SensorMetadataPatch, SensorRegistry
+from .sensor_registry import (
+    SensorDesiredState,
+    SensorMetadataPatch,
+    SensorRegistry,
+)
 
 
 class IngestBody(BaseModel):
@@ -66,7 +70,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v7",
+            "schema": "visionrig/health/v8",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -95,6 +99,7 @@ def create_app(
             "sensor_registry": {
                 "schema": "visionrig/sensor-registry/v1",
                 "entries": len(registry.list()),
+                "desired_state_schema": "visionrig/sensor-desired-state/v1",
             },
         }
 
@@ -131,6 +136,18 @@ def create_app(
                 for source_id in source_ids
             ],
         }
+
+    @app.get(
+        "/api/v1/sensors/{source_id}/desired-state",
+        response_model=SensorDesiredState,
+    )
+    def sensor_desired_state(source_id: str) -> SensorDesiredState:
+        if not source_id or len(source_id) > 128:
+            raise HTTPException(
+                status_code=422,
+                detail="source_id must contain 1..128 characters",
+            )
+        return registry.desired_state(source_id)
 
     @app.patch("/api/v1/sensors/{source_id}/metadata")
     def patch_sensor_metadata(

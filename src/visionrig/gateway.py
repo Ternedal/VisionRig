@@ -1,8 +1,8 @@
 """Authenticated cross-device gateway for VisionRig sensor producers.
 
-The gateway exposes only frame ingress and sensor heartbeat, and forwards only
-to a loopback VisionRig core service. It does not proxy journal, world-state,
-model or profile APIs.
+The gateway exposes only frame ingress, sensor heartbeat and bounded desired
+state reads, forwarding only to a loopback VisionRig core service. It does not
+proxy journal, world-state, model or profile APIs.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import ipaddress
 import os
 import secrets
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -148,15 +148,20 @@ def create_gateway_app(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.2.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.3.0")
 
-    async def post_upstream(path: str, **kwargs) -> httpx.Response:
+    async def request_upstream(method: str, path: str, **kwargs) -> httpx.Response:
         target = config.target_base_url + path
         try:
             if client is None:
                 async with httpx.AsyncClient(timeout=config.timeout_seconds) as local_client:
-                    return await local_client.post(target, **kwargs)
-            return await client.post(target, timeout=config.timeout_seconds, **kwargs)
+                    return await local_client.request(method, target, **kwargs)
+            return await client.request(
+                method,
+                target,
+                timeout=config.timeout_seconds,
+                **kwargs,
+            )
         except httpx.HTTPError as exc:
             raise HTTPException(
                 status_code=502,
@@ -168,13 +173,29 @@ def create_gateway_app(
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v2",
+            "schema": "visionrig/sensor-gateway-health/v3",
             "target_scope": "loopback-only",
             "routes": [
                 "/api/v1/frames/ingest",
                 "/api/v1/sensors/heartbeat",
+                "/api/v1/sensors/{source_id}/desired-state",
             ],
         }
+
+    @app.get("/api/v1/sensors/{source_id}/desired-state")
+    async def desired_state(source_id: str, request: Request) -> Response:
+        _require_auth(request, config.token)
+        if not source_id or len(source_id) > 128:
+            raise HTTPException(
+                status_code=422,
+                detail="source_id must contain 1..128 characters",
+            )
+        safe_source_id = quote(source_id, safe="")
+        upstream = await request_upstream(
+            "GET",
+            f"/api/v1/sensors/{safe_source_id}/desired-state",
+        )
+        return _relay(upstream)
 
     @app.post("/api/v1/sensors/heartbeat")
     async def heartbeat(
@@ -182,7 +203,8 @@ def create_gateway_app(
         body: GatewayHeartbeat,
     ) -> Response:
         _require_auth(request, config.token)
-        upstream = await post_upstream(
+        upstream = await request_upstream(
+            "POST",
             "/api/v1/sensors/heartbeat",
             json={
                 "schema_id": "visionrig/sensor-heartbeat/v1",
@@ -216,7 +238,8 @@ def create_gateway_app(
         if device is not None:
             params["device"] = device
 
-        upstream = await post_upstream(
+        upstream = await request_upstream(
+            "POST",
             "/api/v1/frames/ingest",
             params=params,
             content=payload,
