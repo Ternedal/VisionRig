@@ -3,7 +3,7 @@ import pytest
 from visionrig.service_config import ServiceConfig, ServiceConfigError
 
 
-def test_service_config_reads_optional_pipeline_switches(monkeypatch) -> None:
+def test_service_config_reads_optional_pipeline_switches(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("VISIONRIG_OCR", "1")
     monkeypatch.setenv("VISIONRIG_LANDMARKS", "true")
     monkeypatch.setenv("VISIONRIG_SPATIAL_RELATIONS", "0")
@@ -14,6 +14,8 @@ def test_service_config_reads_optional_pipeline_switches(monkeypatch) -> None:
         "VISIONRIG_MODELRIG_WORKER_URL",
         "http://127.0.0.1:8099",
     )
+    registry_path = tmp_path / "sensor-registry.json"
+    monkeypatch.setenv("VISIONRIG_SENSOR_REGISTRY_FILE", str(registry_path))
 
     config = ServiceConfig.from_env()
     assert config.ocr is True
@@ -23,9 +25,32 @@ def test_service_config_reads_optional_pipeline_switches(monkeypatch) -> None:
     assert config.max_sensor_frame_bytes == 4096
     assert config.modelrig_bridge is True
     assert config.modelrig_worker_url == "http://127.0.0.1:8099"
+    assert config.sensor_registry_file == str(registry_path)
+
     publisher = config.build_modelrig_publisher()
     assert publisher is not None
     publisher.close()
+
+    registry = config.build_sensor_registry()
+    assert registry.path == registry_path
+    assert registry.persistent is True
+
+
+def test_sensor_registry_path_defaults_under_home(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("VISIONRIG_SENSOR_REGISTRY_FILE", raising=False)
+    monkeypatch.setattr("visionrig.service_config.Path.home", lambda: tmp_path)
+
+    config = ServiceConfig.from_env()
+    assert config.sensor_registry_file == str(
+        tmp_path / ".visionrig" / "sensor-registry.json"
+    )
+
+
+def test_sensor_registry_can_be_explicitly_ephemeral(monkeypatch) -> None:
+    monkeypatch.setenv("VISIONRIG_SENSOR_REGISTRY_FILE", "   ")
+    config = ServiceConfig.from_env()
+    assert config.sensor_registry_file is None
+    assert config.build_sensor_registry().persistent is False
 
 
 def test_spatial_relations_default_on(monkeypatch) -> None:

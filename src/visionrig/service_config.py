@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 
 from .modelrig_bridge import ModelRigPerceptionPublisher
 from .pipeline_factory import PipelineBundle, build_pipeline
 from .profile import MrVisionProfile
 from .profile_io import load_encrypted_profile
+from .sensor_registry import SensorRegistry
 
 
 class ServiceConfigError(RuntimeError):
@@ -41,6 +43,10 @@ def _threshold(name: str, default: float) -> float:
     return value
 
 
+def _default_sensor_registry_path() -> str:
+    return str(Path.home() / ".visionrig" / "sensor-registry.json")
+
+
 @dataclass(frozen=True, slots=True)
 class ServiceConfig:
     yolo_manifest: str | None = None
@@ -56,6 +62,7 @@ class ServiceConfig:
     max_sensor_frame_bytes: int = 8 * 1024 * 1024
     modelrig_bridge: bool = False
     modelrig_worker_url: str = "http://127.0.0.1:8099"
+    sensor_registry_file: str | None = None
 
     @classmethod
     def from_env(cls) -> "ServiceConfig":
@@ -85,6 +92,13 @@ class ServiceConfig:
                 "VISIONRIG_MRVISION_PROFILE requires VISIONRIG_EMBEDDING_MANIFEST"
             )
 
+        registry_file = os.getenv(
+            "VISIONRIG_SENSOR_REGISTRY_FILE",
+            _default_sensor_registry_path(),
+        ).strip()
+        if not registry_file:
+            registry_file = None
+
         return cls(
             yolo_manifest=os.getenv("VISIONRIG_YOLO_MANIFEST"),
             depth_manifest=os.getenv("VISIONRIG_DEPTH_MANIFEST"),
@@ -105,6 +119,7 @@ class ServiceConfig:
                 "VISIONRIG_MODELRIG_WORKER_URL",
                 "http://127.0.0.1:8099",
             ),
+            sensor_registry_file=registry_file,
         )
 
     def load_profile(self) -> MrVisionProfile | None:
@@ -129,8 +144,10 @@ class ServiceConfig:
             prefer_cuda=self.prefer_cuda,
         )
 
-
     def build_modelrig_publisher(self) -> ModelRigPerceptionPublisher | None:
         if not self.modelrig_bridge:
             return None
         return ModelRigPerceptionPublisher(self.modelrig_worker_url)
+
+    def build_sensor_registry(self) -> SensorRegistry:
+        return SensorRegistry(self.sensor_registry_file)
