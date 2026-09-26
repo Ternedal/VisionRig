@@ -48,6 +48,22 @@ operator authority. Discovery also persists `first_seen_utc`, `last_seen_utc` an
 `observation_count`, so a restarted service can show when an offline sensor was
 first and most recently observed.
 
+## Sensor lifecycle
+
+`POST /api/v1/sensors/{source_id}/retire` is an explicit operator action.
+Retirement persists `retired_utc`, preserves metadata/discovery history, and
+sets desired `enabled=false`. If the sensor was enabled, that transition uses
+the same revision/timestamp mechanism as any other control change.
+
+`POST /api/v1/sensors/{source_id}/restore` clears `retired_utc` but keeps the
+sensor disabled. This avoids a restore operation unexpectedly opening a camera;
+an operator must explicitly enable it afterwards. Enabling a retired sensor
+directly is rejected.
+
+The catalog exposes `lifecycle.status` as `active` or `retired` plus the
+retirement timestamp. Retirement is reversible and does not delete discovery
+history.
+
 ## Desired-state control contract
 
 `GET /api/v1/sensors/{source_id}/desired-state` returns
@@ -73,7 +89,7 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v6` and adds a bounded control summary:
+`visionrig/sensor-catalog/v7` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
 - `desired_revision`: revision of the current enabled command;
@@ -95,7 +111,7 @@ world-state access.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v14` and advertises the desired-state
+`GET /health` uses `visionrig/health/v15` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
