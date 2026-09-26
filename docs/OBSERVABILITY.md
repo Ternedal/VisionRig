@@ -164,6 +164,13 @@ restarted, the journal has a new id and the response sets
 old cursor belongs to the new journal. The client should then fetch a fresh
 bootstrap snapshot.
 
+The change endpoint also accepts `wait_seconds` from 0 through 30. When the
+requested cursor is current and there is no gap/reset, VisionRig may hold the
+request until a semantic event arrives or the timeout expires. Appending an
+event wakes waiting clients immediately. Gap and stream-reset responses return
+without waiting. A timeout returns a normal empty batch with the current cursor,
+so clients can issue the next bounded long poll without special error handling.
+
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
@@ -185,17 +192,17 @@ Recommended UI flow:
 1. fetch `/api/v1/sensors/bootstrap`;
 2. render catalog/fleet;
 3. poll
-   `/api/v1/sensors/changes?after_cursor=<change_cursor>&stream_id=<change_stream_id>`;
+   `/api/v1/sensors/changes?after_cursor=<change_cursor>&stream_id=<change_stream_id>&wait_seconds=20`;
 4. if `gap=true` or `stream_reset=true`, fetch a new bootstrap snapshot;
 5. separately refresh fleet/status at a low cadence for time-derived liveness.
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v20` and advertises the desired-state
+`GET /health` uses `visionrig/health/v21` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
 that already poll health. Health also advertises the process-local sensor change
-batch schema under `sensor_changes` and advertises the bootstrap snapshot
+batch schema, stream id and maximum wait under `sensor_changes`, and advertises the bootstrap snapshot
 schema under `sensor_bootstrap`.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
