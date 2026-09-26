@@ -26,7 +26,8 @@ VisionRig includes:
 - **persistent first-seen/last-seen timestamps and observation count**
 - **authenticated per-sensor desired-state control contract**
 - **reference producer that physically closes capture while disabled**
-- **closed-loop desired/effective sensor control convergence in the catalog**\n- **revisioned sensor commands with explicit producer acknowledgement**
+- **closed-loop desired/effective sensor control convergence in the catalog**
+- **revisioned sensor commands with explicit producer acknowledgement**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
