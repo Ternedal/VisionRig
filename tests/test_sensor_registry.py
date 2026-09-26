@@ -47,6 +47,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
             "source_type": "camera",
             "device": "kinect-v2",
             "capabilities": ["rgb", "depth", "infrared"],
+            "capture_active": True,
         },
     )
     assert heartbeat.status_code == 200
@@ -66,7 +67,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v1"
+    assert body["schema"] == "visionrig/sensor-catalog/v2"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -79,6 +80,11 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "location": "Living room",
         "role": "tracking",
         "enabled": True,
+    }
+    assert source["control"] == {
+        "desired_enabled": True,
+        "effective_capture_active": True,
+        "status": "converged",
     }
 
 
@@ -131,7 +137,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v8"
+    assert health["schema"] == "visionrig/health/v9"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v1",
         "entries": 1,

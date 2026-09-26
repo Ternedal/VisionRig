@@ -31,6 +31,7 @@ class GatewayHeartbeat(BaseModel):
     source_type: Literal["camera", "screen", "vr", "image"]
     device: str | None = Field(default=None, max_length=256)
     capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
+    capture_active: bool | None = None
 
 
 def _validate_loopback_target(value: str) -> str:
@@ -212,6 +213,7 @@ def create_gateway_app(
                 "source_type": body.source_type,
                 "device": body.device,
                 "capabilities": list(body.capabilities),
+                "capture_active": body.capture_active,
             },
         )
         return _relay(upstream)

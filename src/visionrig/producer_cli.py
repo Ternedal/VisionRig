@@ -15,7 +15,12 @@ from .sources import CameraSource, FrameSource, ImageFileSource
 
 class _ProducerClient(Protocol):
     def fetch_desired_state(self): ...
-    def send_heartbeat(self, *, capabilities: tuple[str, ...] = ()): ...
+    def send_heartbeat(
+        self,
+        *,
+        capabilities: tuple[str, ...] = (),
+        capture_active: bool | None = None,
+    ): ...
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"): ...
     def stats(self): ...
 
@@ -78,7 +83,6 @@ def _run_controlled_capture(
             now = monotonic()
             if enabled is None or now >= next_control_check:
                 desired = producer.fetch_desired_state()
-                producer.send_heartbeat(capabilities=capabilities)
                 next_control_check = now + control_poll_seconds
 
                 if not desired.enabled:
@@ -88,6 +92,10 @@ def _run_controlled_capture(
                     if enabled is not False and verbose:
                         print("control=disabled capture=paused")
                     enabled = False
+                    producer.send_heartbeat(
+                        capabilities=capabilities,
+                        capture_active=False,
+                    )
                     sleep(control_poll_seconds)
                     continue
 
@@ -97,6 +105,10 @@ def _run_controlled_capture(
                 if source is None:
                     source = source_factory()
                     deadline = monotonic()
+                producer.send_heartbeat(
+                    capabilities=capabilities,
+                    capture_active=True,
+                )
 
             if source is None:
                 source = source_factory()

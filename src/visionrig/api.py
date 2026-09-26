@@ -70,7 +70,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v8",
+            "schema": "visionrig/health/v9",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -121,20 +121,40 @@ def create_app(
         runtime_by_id = {source.source_id: source for source in runtime_status.sources}
         metadata_by_id = {entry.source_id: entry for entry in registry.list()}
         source_ids = sorted(set(runtime_by_id) | set(metadata_by_id))
-        return {
-            "schema": "visionrig/sensor-catalog/v1",
-            "sources": [
+        sources = []
+        for source_id in source_ids:
+            runtime_source = runtime_by_id.get(source_id)
+            metadata = registry.get(source_id)
+            effective = (
+                runtime_source.capture_active
+                if runtime_source is not None
+                else None
+            )
+            if effective is None:
+                control_status = "unknown"
+            elif effective == metadata.enabled:
+                control_status = "converged"
+            else:
+                control_status = "pending"
+            sources.append(
                 {
                     "source_id": source_id,
                     "runtime": (
-                        asdict(runtime_by_id[source_id])
-                        if source_id in runtime_by_id
+                        asdict(runtime_source)
+                        if runtime_source is not None
                         else None
                     ),
-                    "metadata": asdict(registry.get(source_id)),
+                    "metadata": asdict(metadata),
+                    "control": {
+                        "desired_enabled": metadata.enabled,
+                        "effective_capture_active": effective,
+                        "status": control_status,
+                    },
                 }
-                for source_id in source_ids
-            ],
+            )
+        return {
+            "schema": "visionrig/sensor-catalog/v2",
+            "sources": sources,
         }
 
     @app.get(
