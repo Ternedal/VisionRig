@@ -71,7 +71,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v15",
+            "schema": "visionrig/health/v16",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -98,7 +98,7 @@ def create_app(
                 "runtime": asdict(sensor_ingress.stats()),
             },
             "sensor_registry": {
-                "schema": "visionrig/sensor-registry/v5",
+                "schema": "visionrig/sensor-registry/v6",
                 "entries": len(registry.list()),
                 "discovered": len(registry.list_discovery()),
                 "desired_state_schema": "visionrig/sensor-desired-state/v2",
@@ -227,6 +227,45 @@ def create_app(
             "status": "active",
             "metadata": asdict(metadata),
             "desired_state": registry.desired_state(source_id).model_dump(),
+        }
+
+    @app.delete("/api/v1/sensors/{source_id}")
+    def forget_sensor(source_id: str) -> dict[str, object]:
+        if not registry.contains(source_id):
+            raise HTTPException(status_code=404, detail="sensor is not registered")
+
+        metadata = registry.get(source_id)
+        if metadata.retired_utc is None:
+            raise HTTPException(
+                status_code=409,
+                detail="sensor must be retired before it can be forgotten",
+            )
+
+        runtime_source = next(
+            (
+                source
+                for source in sensor_ingress.stats().sources
+                if source.source_id == source_id
+            ),
+            None,
+        )
+        if runtime_source is not None and runtime_source.presence != "offline":
+            raise HTTPException(
+                status_code=409,
+                detail="retired sensor must be offline before it can be forgotten",
+            )
+
+        try:
+            registry.forget(source_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="sensor is not registered") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        sensor_ingress.forget_source(source_id)
+        return {
+            "schema": "visionrig/sensor-forget/v1",
+            "status": "forgotten",
+            "source_id": source_id,
         }
 
     @app.patch("/api/v1/sensors/{source_id}/metadata")

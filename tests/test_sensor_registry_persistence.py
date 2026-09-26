@@ -244,3 +244,34 @@ def test_retirement_survives_restart_with_discovery_history(tmp_path) -> None:
     assert discovery.device == "kinect-v2"
     assert discovery.observation_count == 1
     assert restarted.control_revision("retired-kinect") == 1
+
+
+def test_forget_removes_persisted_metadata_discovery_and_control(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    registry = SensorRegistry(path)
+    registry.observe(
+        "old-sensor",
+        source_type="camera",
+        device="old-camera",
+        capabilities=("rgb",),
+    )
+    registry.patch("old-sensor", SensorMetadataPatch(display_name="Old sensor"))
+    registry.retire("old-sensor")
+    assert registry.contains("old-sensor") is True
+    assert registry.control_revision("old-sensor") == 1
+
+    registry.forget("old-sensor")
+    assert registry.contains("old-sensor") is False
+    assert registry.get_discovery("old-sensor") is None
+    assert registry.control_revision("old-sensor") == 0
+    assert registry.control_state("old-sensor").changed_utc is None
+
+    restarted = SensorRegistry(path)
+    assert restarted.contains("old-sensor") is False
+    assert restarted.get_discovery("old-sensor") is None
+    assert restarted.control_revision("old-sensor") == 0
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["entries"] == []
+    assert payload["discovery"] == []
+    assert payload["control"] == []

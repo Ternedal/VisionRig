@@ -30,6 +30,7 @@ VisionRig includes:
 - **revisioned sensor commands with explicit producer acknowledgement**
 - **persistent command timestamps and measurable pending control age**
 - **reversible sensor retirement that preserves discovery/history**
+- **guarded permanent forget for retired/offline sensors**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -64,7 +65,11 @@ Operators can retire a sensor with
 discovery history, records `retired_utc`, and drives desired state to disabled
 through the normal revisioned control path. `restore` removes the retirement
 marker but deliberately leaves the sensor disabled until it is explicitly
-enabled again.
+enabled again. Permanent removal uses
+`DELETE /api/v1/sensors/{source_id}` and is accepted only when the sensor is
+both retired and offline. Forget removes metadata, discovery and control history
+plus process-local ingress sequence/runtime state; a later observation is a new
+registration.
 
 A producer can fetch only its bounded desired state through
 `GET /api/v1/sensors/{source_id}/desired-state`. Cross-device reads pass

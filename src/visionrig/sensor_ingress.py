@@ -224,6 +224,12 @@ class SensorIngress:
                 cleaned.append(item)
         return tuple(sorted(cleaned))
 
+    def forget_source(self, source_id: str) -> None:
+        """Drop process-local runtime and sequence state for a forgotten source."""
+        with self._metrics_lock:
+            self._sources.pop(source_id, None)
+            self._last_sequence.pop(source_id, None)
+
     def heartbeat(self, heartbeat: SensorHeartbeat) -> SensorHeartbeatReceipt:
         now = self._clock()
         capabilities = self._normalize_capabilities(heartbeat.capabilities)

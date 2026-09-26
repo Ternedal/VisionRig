@@ -264,6 +264,10 @@ class SensorRegistry:
                 except OSError:
                     pass
 
+    def contains(self, source_id: str) -> bool:
+        with self._lock:
+            return source_id in self._entries or source_id in self._discovery
+
     def get(self, source_id: str) -> SensorMetadata:
         with self._lock:
             return self._entries.get(source_id, SensorMetadata(source_id=source_id))
@@ -438,6 +442,38 @@ class SensorRegistry:
                     self._entries[source_id] = previous
                 raise
             return updated
+
+    def forget(self, source_id: str) -> None:
+        """Permanently remove retired sensor metadata, discovery and control history."""
+        if not source_id or len(source_id) > 128:
+            raise ValueError("source_id must contain 1..128 characters")
+        with self._lock:
+            if not self.contains(source_id):
+                raise KeyError(source_id)
+            current = self._entries.get(source_id)
+            if current is None or current.retired_utc is None:
+                raise ValueError("sensor must be retired before it can be forgotten")
+
+            previous_metadata = current
+            previous_discovery = self._discovery.get(source_id)
+            previous_revision = self._control_revisions.get(source_id)
+            previous_changed_utc = self._control_changed_utc.get(source_id)
+
+            self._entries.pop(source_id, None)
+            self._discovery.pop(source_id, None)
+            self._control_revisions.pop(source_id, None)
+            self._control_changed_utc.pop(source_id, None)
+            try:
+                self._save()
+            except Exception:
+                self._entries[source_id] = previous_metadata
+                if previous_discovery is not None:
+                    self._discovery[source_id] = previous_discovery
+                if previous_revision is not None:
+                    self._control_revisions[source_id] = previous_revision
+                if previous_changed_utc is not None:
+                    self._control_changed_utc[source_id] = previous_changed_utc
+                raise
 
     def desired_state(self, source_id: str) -> SensorDesiredState:
         metadata = self.get(source_id)
