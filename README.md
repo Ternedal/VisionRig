@@ -22,6 +22,7 @@ VisionRig includes:
 - **operator-owned sensor catalog metadata for UI/control surfaces**
 - **restart-safe persistent sensor registry with atomic writes**
 - **automatic persistent registration of first-seen sensors**
+- **persistent discovered sensor type/device/capabilities with stable source identity**
 - **authenticated per-sensor desired-state control contract**
 - **reference producer that physically closes capture while disabled**
 - **closed-loop desired/effective sensor control convergence in the catalog**
@@ -46,7 +47,9 @@ identity.
 Metadata can be prepared before the sensor is online with
 `PATCH /api/v1/sensors/{source_id}/metadata`. A previously unknown source is
 automatically persisted on its first valid heartbeat or frame, so it remains
-visible in the catalog after restart even before an operator names it.
+visible in the catalog after restart even before an operator names it. Discovery data
+(type, device and capabilities) is persisted separately from operator metadata,
+so an offline sensor is still identifiable after restart.
 
 Registry metadata is persisted by default to
 `~/.visionrig/sensor-registry.json` using atomic replacement. Override with
