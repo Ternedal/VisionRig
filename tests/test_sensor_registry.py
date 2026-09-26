@@ -67,7 +67,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v3"
+    assert body["schema"] == "visionrig/sensor-catalog/v4"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -144,9 +144,9 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v11"
+    assert health["schema"] == "visionrig/health/v12"
     assert health["sensor_registry"] == {
-        "schema": "visionrig/sensor-registry/v2",
+        "schema": "visionrig/sensor-registry/v3",
         "entries": 1,
         "discovered": 0,
         "desired_state_schema": "visionrig/sensor-desired-state/v1",
