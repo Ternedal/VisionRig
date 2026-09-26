@@ -100,6 +100,7 @@ class SensorHeartbeat(BaseModel):
     source_type: SensorSourceType
     device: str | None = Field(default=None, max_length=256)
     capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
+    capture_active: bool | None = None
 
 
 class SensorHeartbeatReceipt(BaseModel):
@@ -120,6 +121,7 @@ class SensorSourceStats:
     source_type: str
     device: str | None
     capabilities: tuple[str, ...]
+    capture_active: bool | None
     presence: SensorPresence
     age_seconds: float
     last_sequence: int | None
@@ -150,6 +152,7 @@ class _MutableSourceStats:
     source_type: str
     device: str | None
     capabilities: tuple[str, ...]
+    capture_active: bool | None
     last_sequence: int | None
     accepted_frames: int
     heartbeat_count: int
@@ -229,6 +232,7 @@ class SensorIngress:
                     source_type=heartbeat.source_type,
                     device=heartbeat.device,
                     capabilities=capabilities,
+                    capture_active=heartbeat.capture_active,
                     last_sequence=None,
                     accepted_frames=0,
                     heartbeat_count=1,
@@ -239,6 +243,7 @@ class SensorIngress:
                 current.source_type = heartbeat.source_type
                 current.device = heartbeat.device
                 current.capabilities = capabilities
+                current.capture_active = heartbeat.capture_active
                 current.heartbeat_count += 1
                 current.last_seen = now
         return SensorHeartbeatReceipt(
@@ -265,6 +270,7 @@ class SensorIngress:
                     source_type=source_type,
                     device=device,
                     capabilities=(),
+                    capture_active=True,
                     last_sequence=frame_sequence,
                     accepted_frames=1,
                     heartbeat_count=0,
@@ -274,6 +280,7 @@ class SensorIngress:
                 return
             current.source_type = source_type
             current.device = device
+            current.capture_active = True
             current.last_sequence = frame_sequence
             current.accepted_frames += 1
             current.dropped_frames_total += dropped_frames
@@ -295,6 +302,7 @@ class SensorIngress:
                     source_type=state.source_type,
                     device=state.device,
                     capabilities=state.capabilities,
+                    capture_active=state.capture_active,
                     presence=self._presence(
                         max(0.0, (now - state.last_seen).total_seconds())
                     ),
@@ -311,7 +319,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v2",
+                schema="visionrig/sensor-runtime-status/v3",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
