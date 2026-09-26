@@ -195,16 +195,21 @@ def test_legacy_discovery_without_timestamps_still_loads(tmp_path) -> None:
     assert discovery.observation_count == 0
 
 
-def test_control_revision_survives_restart(tmp_path) -> None:
+def test_control_revision_and_change_time_survive_restart(tmp_path) -> None:
     path = tmp_path / "sensor-registry.json"
-    registry = SensorRegistry(path)
+    now = [datetime(2026, 9, 26, 8, 0, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0])
 
     registry.patch("camera-a", SensorMetadataPatch(enabled=False))
+    now[0] = datetime(2026, 9, 26, 8, 5, tzinfo=timezone.utc)
     registry.patch("camera-a", SensorMetadataPatch(enabled=True))
     assert registry.control_revision("camera-a") == 2
+    assert registry.control_state("camera-a").changed_utc == "2026-09-26T08:05:00+00:00"
 
-    restarted = SensorRegistry(path)
+    restarted = SensorRegistry(path, clock=lambda: datetime(2026, 9, 26, 8, 6, tzinfo=timezone.utc))
     assert restarted.control_revision("camera-a") == 2
+    assert restarted.control_state("camera-a").changed_utc == "2026-09-26T08:05:00+00:00"
+    assert restarted.control_pending_seconds("camera-a") == 60.0
     desired = restarted.desired_state("camera-a")
     assert desired.enabled is True
     assert desired.revision == 2
