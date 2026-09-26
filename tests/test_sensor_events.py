@@ -510,7 +510,7 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     )
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v23"
+    assert health["schema"] == "visionrig/health/v24"
     assert health["sensor_changes"]["durability"] == "persistent"
     assert health["sensor_changes"]["stream_id"] == "restored-stream"
 
@@ -577,3 +577,48 @@ def test_fleet_revision_exposes_change_feed_drift() -> None:
     bootstrap = client.get("/api/v1/sensors/bootstrap").json()
     assert bootstrap["sensor_state_revision"] == 2
     assert bootstrap["fleet"]["state_revision"] == 2
+
+
+def test_stale_operator_write_emits_no_sensor_change_event() -> None:
+    registry = SensorRegistry()
+    registry.patch(
+        "camera-stale-event",
+        SensorMetadataPatch(display_name="Camera"),
+    )
+    journal = SensorChangeJournal(stream_id="concurrency-stream")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_registry=registry,
+            sensor_change_journal=journal,
+        )
+    )
+
+    accepted = client.patch(
+        "/api/v1/sensors/camera-stale-event/metadata",
+        params={"expected_state_revision": 1},
+        json={"location": "Office"},
+    )
+    assert accepted.status_code == 200
+    first = client.get("/api/v1/sensors/changes").json()
+    assert [entry["event"]["kind"] for entry in first["entries"]] == [
+        "metadata_changed"
+    ]
+    assert first["entries"][0]["event"]["state_revision"] == 2
+
+    stale = client.patch(
+        "/api/v1/sensors/camera-stale-event/metadata",
+        params={"expected_state_revision": 1},
+        json={"location": "Bedroom"},
+    )
+    assert stale.status_code == 409
+
+    after = client.get(
+        "/api/v1/sensors/changes",
+        params={
+            "after_cursor": first["next_cursor"],
+            "stream_id": first["stream_id"],
+        },
+    ).json()
+    assert after["entries"] == []
+    assert registry.state_revision == 2
