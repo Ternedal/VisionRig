@@ -1,0 +1,174 @@
+from fastapi.testclient import TestClient
+
+from visionrig.api import create_app
+from visionrig.pipeline import PerceptionPipeline
+from visionrig.sensor_events import SensorChangeJournal
+from visionrig.sensor_registry import SensorMetadataPatch, SensorRegistry
+
+
+def test_sensor_change_journal_reports_cursor_gap() -> None:
+    journal = SensorChangeJournal(capacity=2)
+    for index in range(4):
+        journal.append(
+            kind="metadata_changed",
+            source_id=f"camera-{index}",
+            payload={"index": index},
+            occurred_utc=f"2026-09-26T10:00:0{index}+00:00",
+        )
+
+    batch = journal.read(after_cursor=1, limit=10)
+    assert batch.schema_id == "visionrig/sensor-change-batch/v1"
+    assert batch.gap is True
+    assert batch.oldest_available_cursor == 3
+    assert batch.newest_available_cursor == 4
+    assert [entry.cursor for entry in batch.entries] == [3, 4]
+    assert batch.next_cursor == 4
+
+
+def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> None:
+    registry = SensorRegistry()
+    journal = SensorChangeJournal()
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_registry=registry,
+            sensor_change_journal=journal,
+        )
+    )
+
+    heartbeat = {
+        "schema_id": "visionrig/sensor-heartbeat/v2",
+        "source_id": "camera-a",
+        "source_type": "camera",
+        "device": "usb-camera",
+        "capabilities": ["rgb"],
+        "capture_active": True,
+        "applied_revision": 0,
+    }
+    assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+
+    first = client.get("/api/v1/sensors/changes").json()
+    assert [entry["event"]["kind"] for entry in first["entries"]] == [
+        "registered",
+        "runtime_changed",
+    ]
+    cursor = first["next_cursor"]
+
+    # Liveness refresh only: no semantic producer/discovery change.
+    assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+    quiet = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert quiet["entries"] == []
+    assert quiet["next_cursor"] == cursor
+
+    changed_discovery = dict(heartbeat)
+    changed_discovery["capabilities"] = ["rgb", "depth"]
+    assert (
+        client.post("/api/v1/sensors/heartbeat", json=changed_discovery).status_code
+        == 200
+    )
+    discovery_batch = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert [entry["event"]["kind"] for entry in discovery_batch["entries"]] == [
+        "discovery_changed"
+    ]
+    cursor = discovery_batch["next_cursor"]
+
+    patch = client.patch(
+        "/api/v1/sensors/camera-a/metadata",
+        json={
+            "display_name": "Desk camera",
+            "enabled": False,
+        },
+    )
+    assert patch.status_code == 200
+    patch_batch = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert [entry["event"]["kind"] for entry in patch_batch["entries"]] == [
+        "metadata_changed",
+        "control_changed",
+    ]
+    assert patch_batch["entries"][1]["event"]["payload"]["revision"] == 1
+    cursor = patch_batch["next_cursor"]
+
+    applied = dict(changed_discovery)
+    applied["capture_active"] = False
+    applied["applied_revision"] = 1
+    assert client.post("/api/v1/sensors/heartbeat", json=applied).status_code == 200
+    runtime_batch = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert [entry["event"]["kind"] for entry in runtime_batch["entries"]] == [
+        "runtime_changed"
+    ]
+    assert runtime_batch["entries"][0]["event"]["payload"] == {
+        "capture_active": False,
+        "applied_revision": 1,
+        "presence": "online",
+    }
+
+
+def test_sensor_change_feed_tracks_lifecycle_and_forget() -> None:
+    registry = SensorRegistry()
+    journal = SensorChangeJournal()
+    registry.patch(
+        "old-camera",
+        SensorMetadataPatch(
+            display_name="Old camera",
+            enabled=False,
+        ),
+    )
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_registry=registry,
+            sensor_change_journal=journal,
+        )
+    )
+
+    retired = client.post("/api/v1/sensors/old-camera/retire")
+    assert retired.status_code == 200
+    restored = client.post("/api/v1/sensors/old-camera/restore")
+    assert restored.status_code == 200
+    retired_again = client.post("/api/v1/sensors/old-camera/retire")
+    assert retired_again.status_code == 200
+    forgotten = client.delete("/api/v1/sensors/old-camera")
+    assert forgotten.status_code == 200
+
+    batch = client.get("/api/v1/sensors/changes").json()
+    assert [entry["event"]["kind"] for entry in batch["entries"]] == [
+        "retired",
+        "restored",
+        "retired",
+        "forgotten",
+    ]
+    assert batch["entries"][-1]["event"]["source_id"] == "old-camera"
+
+
+def test_preconfigured_sensor_emits_registered_then_metadata_change() -> None:
+    journal = SensorChangeJournal()
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_change_journal=journal,
+        )
+    )
+
+    response = client.patch(
+        "/api/v1/sensors/future-camera/metadata",
+        json={"display_name": "Future camera"},
+    )
+    assert response.status_code == 200
+
+    batch = client.get("/api/v1/sensors/changes").json()
+    assert [entry["event"]["kind"] for entry in batch["entries"]] == [
+        "registered",
+        "metadata_changed",
+    ]
