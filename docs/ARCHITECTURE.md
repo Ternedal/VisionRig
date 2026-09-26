@@ -98,8 +98,11 @@ C20 adapter. Exact event refs are receipt-bound; OCR text, identity hints and
 raw frame modalities remain outside cognitive context. Delivery failure is
 isolated from local perception.
 
-### V5 — Kaliv sensors
-Android camera, Windows screen/camera and Kaliv VR/passthrough producers.
+### V5 — sensor control and Kaliv ingress — implemented foundation
+Authenticated Windows/screen/camera and Kaliv VR/passthrough producer transport,
+persistent sensor catalog, desired-state control, effective-state convergence,
+and managed local webcam/Kinect control are implemented. Native Kaliv Android/
+Quest producer clients remain a separate client-delivery slice.
 
 
 ## Contract change: v2 -> v3
