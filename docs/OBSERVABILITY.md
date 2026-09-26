@@ -133,12 +133,36 @@ sensor whose presence is not online. This is descriptive telemetry, not a
 health score or automatic policy. Retired sensors are not flagged merely for
 being offline.
 
+## Semantic sensor change feed
+
+`GET /api/v1/sensors/changes?after_cursor=<n>&limit=<n>` returns
+`visionrig/sensor-change-batch/v1`. The feed is bounded and process-local and
+uses the same cursor/gap recovery semantics as the perception journal.
+
+Events are emitted only for semantic state changes:
+
+- first registration;
+- changed device/capabilities discovery;
+- operator metadata changes;
+- desired control revision changes;
+- retire, restore and permanent forget;
+- producer `capture_active` / `applied_revision` changes.
+
+Heartbeat refreshes that only update last-seen/counters do not emit events.
+Likewise, online/stale/offline is derived from elapsed time; the passage of time
+alone does not append an event. UI clients should use the change feed for
+incremental semantic updates and continue polling fleet/status at a low cadence
+for liveness transitions. A reported `gap=true` means the client fell behind
+the bounded journal and should refresh catalog/fleet before continuing from the
+returned cursor.
+
 ## Health integration
 
-`GET /health` uses `visionrig/health/v17` and advertises the desired-state
+`GET /health` uses `visionrig/health/v18` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
-that already poll health.
+that already poll health. Health also advertises the process-local sensor change
+batch schema under `sensor_changes`.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
 embeddings are never returned by these surfaces.
