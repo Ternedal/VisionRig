@@ -220,9 +220,10 @@ def test_gateway_health_advertises_only_sensor_routes() -> None:
     app = create_gateway_app(GatewayConfig(token=TOKEN))
     with TestClient(app) as client:
         body = client.get("/health").json()
-    assert body["schema"] == "visionrig/sensor-gateway-health/v3"
+    assert body["schema"] == "visionrig/sensor-gateway-health/v4"
     assert body["routes"] == [
         "/api/v1/frames/ingest",
+        "/api/v1/sensor-packets/ingest",
         "/api/v1/sensors/heartbeat",
         "/api/v1/sensors/{source_id}/desired-state",
     ]
@@ -232,3 +233,61 @@ def test_gateway_env_requires_token(monkeypatch) -> None:
     monkeypatch.delenv("VISIONRIG_GATEWAY_TOKEN", raising=False)
     with pytest.raises(GatewayConfigError, match="at least 32"):
         GatewayConfig.from_env()
+
+
+@pytest.mark.asyncio
+async def test_gateway_forwards_authenticated_sensor_packet_to_fixed_route() -> None:
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        seen["authorization"] = request.headers.get("authorization")
+        seen["content_type"] = request.headers.get("content-type")
+        seen["body"] = await request.aread()
+        return httpx.Response(
+            200,
+            json={
+                "schema_id": "visionrig/sensor-frame-receipt/v1",
+                "status": "processed",
+                "source_id": "kinect",
+                "source_type": "camera",
+                "frame_sequence": 3,
+                "event_id": "evt-packet",
+                "dropped_frames": 1,
+                "production_authority": False,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
+        app = create_gateway_app(GatewayConfig(token=TOKEN), client=upstream)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://gateway",
+        ) as caller:
+            response = await caller.post(
+                "/api/v1/sensor-packets/ingest",
+                params={
+                    "source_id": "kinect",
+                    "source_type": "camera",
+                    "frame_sequence": 3,
+                    "device": "kinect-v2",
+                    "dropped_frames": 1,
+                },
+                content=b"packet-bytes",
+                headers={
+                    "content-type": "application/vnd.visionrig.sensor-packet",
+                    "authorization": f"Bearer {TOKEN}",
+                    "x-untrusted": "must-not-forward",
+                },
+            )
+
+    assert response.status_code == 200
+    assert seen["url"].startswith(
+        "http://127.0.0.1:8110/api/v1/sensor-packets/ingest?"
+    )
+    assert "source_id=kinect" in seen["url"]
+    assert "frame_sequence=3" in seen["url"]
+    assert seen["authorization"] is None
+    assert seen["content_type"] == "application/vnd.visionrig.sensor-packet"
+    assert seen["body"] == b"packet-bytes"
+    assert response.headers["x-visionrig-gateway"] == "1"
