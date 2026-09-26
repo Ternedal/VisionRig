@@ -143,6 +143,7 @@ class GatewayFrameProducer:
         *,
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
+        applied_revision: int | None = None,
     ) -> SensorHeartbeatReceipt:
         """Publish producer liveness without capturing or sending a frame."""
         target = self._base_url + "/api/v1/sensors/heartbeat"
@@ -152,6 +153,7 @@ class GatewayFrameProducer:
             "device": self._device,
             "capabilities": list(capabilities),
             "capture_active": capture_active,
+            "applied_revision": applied_revision,
         }
         kwargs = {
             "json": payload,
