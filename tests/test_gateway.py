@@ -140,6 +140,7 @@ async def test_gateway_forwards_authenticated_heartbeat_only_to_fixed_route() ->
                     "source_type": "vr",
                     "device": "quest-2",
                     "capabilities": ["rgb", "passthrough"],
+                    "applied_revision": 7,
                 },
                 headers={"authorization": f"Bearer {TOKEN}"},
             )
@@ -147,8 +148,9 @@ async def test_gateway_forwards_authenticated_heartbeat_only_to_fixed_route() ->
     assert response.status_code == 200
     assert seen["url"] == "http://127.0.0.1:8110/api/v1/sensors/heartbeat"
     assert seen["authorization"] is None
-    assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v1"
+    assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v2"
     assert seen["json"]["capabilities"] == ["rgb", "passthrough"]
+    assert seen["json"]["applied_revision"] == 7
     assert response.headers["x-visionrig-gateway"] == "1"
 
 
@@ -186,9 +188,10 @@ async def test_gateway_forwards_desired_state_read_to_fixed_source_route() -> No
         return httpx.Response(
             200,
             json={
-                "schema_id": "visionrig/sensor-desired-state/v1",
+                "schema_id": "visionrig/sensor-desired-state/v2",
                 "source_id": "quest",
                 "enabled": False,
+                "revision": 4,
                 "production_authority": False,
             },
         )
@@ -209,6 +212,7 @@ async def test_gateway_forwards_desired_state_read_to_fixed_source_route() -> No
     assert seen["url"] == "http://127.0.0.1:8110/api/v1/sensors/quest/desired-state"
     assert seen["authorization"] is None
     assert response.json()["enabled"] is False
+    assert response.json()["revision"] == 4
     assert response.headers["x-visionrig-gateway"] == "1"
 
 
