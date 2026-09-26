@@ -81,12 +81,13 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "role": "tracking",
         "enabled": True,
     }
-    assert source["discovery"] == {
-        "source_id": "kinect-living-room",
-        "source_type": "camera",
-        "device": "kinect-v2",
-        "capabilities": ["depth", "infrared", "rgb"],
-    }
+    assert source["discovery"]["source_id"] == "kinect-living-room"
+    assert source["discovery"]["source_type"] == "camera"
+    assert source["discovery"]["device"] == "kinect-v2"
+    assert source["discovery"]["capabilities"] == ["depth", "infrared", "rgb"]
+    assert source["discovery"]["first_seen_utc"] is not None
+    assert source["discovery"]["last_seen_utc"] is not None
+    assert source["discovery"]["observation_count"] == 1
     assert source["control"] == {
         "desired_enabled": True,
         "effective_capture_active": True,
