@@ -116,10 +116,29 @@ label; control surfaces can choose their own alert threshold. The producer still
 receives only its own minimal desired-state response and never gains catalog or
 world-state access.
 
+## Fleet summary
+
+`GET /api/v1/sensors/fleet` returns
+`visionrig/sensor-fleet-summary/v1` with bounded operational aggregation:
+
+- total known/runtime sensor count;
+- lifecycle counts for `active` and `retired`;
+- presence counts for `online`, `stale`, `offline` and `unknown`;
+- control counts for `converged`, `pending` and `unknown`;
+- up to 32 attention entries plus `attention_total` and
+  `attention_truncated`.
+
+An attention entry is emitted for a pending control command or for an active
+sensor whose presence is not online. This is descriptive telemetry, not a
+health score or automatic policy. Retired sensors are not flagged merely for
+being offline.
+
 ## Health integration
 
-`GET /health` uses `visionrig/health/v16` and advertises the desired-state
+`GET /health` uses `visionrig/health/v17` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
+The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
+that already poll health.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
 embeddings are never returned by these surfaces.

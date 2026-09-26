@@ -31,6 +31,7 @@ VisionRig includes:
 - **persistent command timestamps and measurable pending control age**
 - **reversible sensor retirement that preserves discovery/history**
 - **guarded permanent forget for retired/offline sensors**
+- **bounded sensor fleet summary for UI and health surfaces**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -88,6 +89,11 @@ Heartbeat reports the actually applied `capture_active` state plus the
 `unknown`. An old heartbeat can therefore never make a newer command look
 applied. Each changed command also persists `desired_changed_utc`; while it is
 not converged the catalog exposes neutral `pending_seconds` telemetry.
+
+`GET /api/v1/sensors/fleet` provides a compact operational summary for UI and
+monitoring: lifecycle counts, online/stale/offline/unknown presence, control
+convergence counts and a bounded attention list. The same payload is embedded in
+`/health`; it is observability only and grants no new control authority.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.

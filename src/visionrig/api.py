@@ -66,12 +66,113 @@ def create_app(
     )
     registry = sensor_registry or SensorRegistry()
 
+    def sensor_fleet_summary_payload() -> dict[str, object]:
+        runtime_status = sensor_ingress.stats()
+        runtime_by_id = {
+            source.source_id: source
+            for source in runtime_status.sources
+        }
+        metadata_by_id = {
+            entry.source_id: entry
+            for entry in registry.list()
+        }
+        source_ids = sorted(set(runtime_by_id) | set(metadata_by_id))
+
+        lifecycle_counts = {"active": 0, "retired": 0}
+        presence_counts = {
+            "online": 0,
+            "stale": 0,
+            "offline": 0,
+            "unknown": 0,
+        }
+        control_counts = {
+            "converged": 0,
+            "pending": 0,
+            "unknown": 0,
+        }
+        attention = []
+        attention_total = 0
+
+        for source_id in source_ids:
+            runtime_source = runtime_by_id.get(source_id)
+            metadata = registry.get(source_id)
+            lifecycle = (
+                "retired"
+                if metadata.retired_utc is not None
+                else "active"
+            )
+            lifecycle_counts[lifecycle] += 1
+
+            presence = (
+                runtime_source.presence
+                if runtime_source is not None
+                else "unknown"
+            )
+            presence_counts[presence] += 1
+
+            effective = (
+                runtime_source.capture_active
+                if runtime_source is not None
+                else None
+            )
+            applied_revision = (
+                runtime_source.applied_revision
+                if runtime_source is not None
+                else None
+            )
+            control_state = registry.control_state(source_id)
+            if effective is None or applied_revision is None:
+                control_status = "unknown"
+            elif (
+                applied_revision == control_state.revision
+                and effective == metadata.enabled
+            ):
+                control_status = "converged"
+            else:
+                control_status = "pending"
+            control_counts[control_status] += 1
+
+            needs_attention = (
+                control_status == "pending"
+                or (
+                    lifecycle == "active"
+                    and presence != "online"
+                )
+            )
+            if needs_attention:
+                attention_total += 1
+            if needs_attention and len(attention) < 32:
+                attention.append(
+                    {
+                        "source_id": source_id,
+                        "lifecycle": lifecycle,
+                        "presence": presence,
+                        "control_status": control_status,
+                        "pending_seconds": (
+                            registry.control_pending_seconds(source_id)
+                            if control_status == "pending"
+                            else None
+                        ),
+                    }
+                )
+
+        return {
+            "schema": "visionrig/sensor-fleet-summary/v1",
+            "total": len(source_ids),
+            "lifecycle": lifecycle_counts,
+            "presence": presence_counts,
+            "control": control_counts,
+            "attention": attention,
+            "attention_total": attention_total,
+            "attention_truncated": attention_total > len(attention),
+        }
+
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v16",
+            "schema": "visionrig/health/v17",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -103,6 +204,7 @@ def create_app(
                 "discovered": len(registry.list_discovery()),
                 "desired_state_schema": "visionrig/sensor-desired-state/v2",
             },
+            "sensor_fleet": sensor_fleet_summary_payload(),
         }
 
     @app.get("/api/v1/capabilities")
@@ -116,6 +218,10 @@ def create_app(
     @app.get("/api/v1/sensors/status")
     def sensor_status() -> dict[str, object]:
         return asdict(sensor_ingress.stats())
+
+    @app.get("/api/v1/sensors/fleet")
+    def sensor_fleet_summary() -> dict[str, object]:
+        return sensor_fleet_summary_payload()
 
     @app.get("/api/v1/sensors/catalog")
     def sensor_catalog() -> dict[str, object]:
