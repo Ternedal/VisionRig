@@ -137,8 +137,10 @@ being offline.
 
 `GET /api/v1/sensors/changes?after_cursor=<n>&limit=<n>` returns
 `visionrig/sensor-change-batch/v2`. The feed is bounded and process-local and
-uses the same cursor/gap recovery semantics as the perception journal plus an
-ephemeral `stream_id` that uniquely identifies the current process journal.
+uses the same cursor/gap recovery semantics as the perception journal plus a
+`stream_id` that identifies the current retained journal. In the normal
+service process this bounded journal is persistent; explicitly ephemeral
+configurations still use a process-local stream.
 
 Events are emitted only for semantic state changes:
 
@@ -157,12 +159,19 @@ for liveness transitions. A reported `gap=true` means the client fell behind
 the bounded journal and should refresh catalog/fleet before continuing from the
 returned cursor.
 
-Clients should send the current stream id back as
-`/api/v1/sensors/changes?after_cursor=<n>&stream_id=<id>`. If VisionRig has
-restarted, the journal has a new id and the response sets
-`stream_reset=true`, returns the new `stream_id`, and does not pretend the
-old cursor belongs to the new journal. The client should then fetch a fresh
-bootstrap snapshot.
+The service process persists the journal by default to
+`~/.visionrig/sensor-changes.json` with atomic replacement. The persisted
+state contains the bounded retained entries, next cursor and stream id. A normal
+restart therefore restores the same stream and cursors. Configure
+`VISIONRIG_SENSOR_CHANGE_JOURNAL_FILE` to another path, or set it to an empty
+value to use process-local mode.
+
+Clients should still send the current stream id back as
+`/api/v1/sensors/changes?after_cursor=<n>&stream_id=<id>`. A new/ephemeral
+journal, deleted journal file, or otherwise different stream returns
+`stream_reset=true` rather than pretending an old cursor belongs to it.
+Corrupt persistent journal files fail service startup explicitly instead of
+silently discarding retained events.
 
 The change endpoint also accepts `wait_seconds` from 0 through 30. When the
 requested cursor is current and there is no gap/reset, VisionRig may hold the
@@ -198,11 +207,11 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v21` and advertises the desired-state
+`GET /health` uses `visionrig/health/v22` and advertises the desired-state
 schema plus persistent discovery counts under the sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
 that already poll health. Health also advertises the process-local sensor change
-batch schema, stream id and maximum wait under `sensor_changes`, and advertises the bootstrap snapshot
+batch schema, durability, stream id and maximum wait under `sensor_changes`, and advertises the bootstrap snapshot
 schema under `sensor_bootstrap`.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and

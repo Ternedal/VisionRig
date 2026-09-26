@@ -36,6 +36,7 @@ VisionRig includes:
 - **race-safe UI bootstrap snapshot with catalog, fleet and change cursor**
 - **restart-detectable sensor change streams with explicit stream identity**
 - **bounded long-poll sensor changes with event wake-up and timeout fallback**
+- **restart-safe persistent semantic sensor change journal with atomic writes**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -115,6 +116,13 @@ stream id back to `/changes`; after a service restart the new process returns
 journal. Clients may add `wait_seconds` (0..30) to hold an empty change
 request until a semantic event arrives or the timeout expires; gap and
 stream-reset responses never wait.
+
+The service process persists the bounded semantic journal by default at
+`~/.visionrig/sensor-changes.json` using atomic replacement. That preserves
+stream id, cursors and retained events across a normal restart, so connected UI
+clients can continue without a reset. Override with
+`VISIONRIG_SENSOR_CHANGE_JOURNAL_FILE`; set it to an empty value for
+process-local/ephemeral mode.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
