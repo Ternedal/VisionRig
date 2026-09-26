@@ -12,7 +12,8 @@ VisionRig includes:
 
 - typed PerceptionEvent/v3 observations
 - local webcam/image/video capture
-- Kinect v2 RGB + hardware depth + infrared capture\n- **managed local webcam/Kinect capture through the shared desired/effective-state contract**
+- Kinect v2 RGB + hardware depth + infrared capture
+- **managed local webcam/Kinect capture through the shared desired/effective-state contract**
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - crash-safe webcam/screen reference producer
@@ -22,7 +23,8 @@ VisionRig includes:
 - **restart-safe persistent sensor registry with atomic writes**
 - **automatic persistent registration of first-seen sensors**
 - **authenticated per-sensor desired-state control contract**
-- **reference producer that physically closes capture while disabled**\n- **closed-loop desired/effective sensor control convergence in the catalog**
+- **reference producer that physically closes capture while disabled**
+- **closed-loop desired/effective sensor control convergence in the catalog**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
