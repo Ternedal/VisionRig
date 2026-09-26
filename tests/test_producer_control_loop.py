@@ -1,6 +1,11 @@
 from types import SimpleNamespace
 
-from visionrig.producer_cli import _run_controlled_capture
+import numpy as np
+
+from visionrig.contracts import SourceDescriptor
+from visionrig.pipeline import Frame
+from visionrig.producer_cli import _encode_kinect_packet, _run_controlled_capture
+from visionrig.sensor_packet import decode_sensor_packet
 
 
 class FakeClock:
@@ -199,3 +204,28 @@ def test_controlled_capture_can_send_multimodal_packet() -> None:
     assert producer.heartbeats == [
         (("rgb", "depth", "infrared"), True, 1),
     ]
+
+
+def test_encode_kinect_packet_uses_aligned_depth_and_infrared() -> None:
+    depth = np.array([[1000, 1500], [2000, 2500]], dtype=np.uint16)
+    infrared = np.array([[10, 20], [30, 40]], dtype=np.uint16)
+    frame = Frame(
+        source=SourceDescriptor(
+            source_id="kinect",
+            source_type="camera",
+            device="kinect-v2",
+        ),
+        sequence=0,
+        payload=np.zeros((2, 2, 3), dtype=np.uint8),
+        sensor_data={
+            "color_aligned_depth_mm": depth,
+            "infrared": infrared,
+        },
+    )
+
+    packet = _encode_kinect_packet(frame, b"jpeg")
+    decoded = decode_sensor_packet(packet)
+
+    assert decoded.rgb_payload == b"jpeg"
+    assert np.array_equal(decoded.depth_mm, depth)
+    assert np.array_equal(decoded.infrared, infrared)
