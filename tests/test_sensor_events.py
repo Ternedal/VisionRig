@@ -7,7 +7,7 @@ from visionrig.sensor_registry import SensorMetadataPatch, SensorRegistry
 
 
 def test_sensor_change_journal_reports_cursor_gap() -> None:
-    journal = SensorChangeJournal(capacity=2)
+    journal = SensorChangeJournal(capacity=2, stream_id="stream-a")
     for index in range(4):
         journal.append(
             kind="metadata_changed",
@@ -17,7 +17,9 @@ def test_sensor_change_journal_reports_cursor_gap() -> None:
         )
 
     batch = journal.read(after_cursor=1, limit=10)
-    assert batch.schema_id == "visionrig/sensor-change-batch/v1"
+    assert batch.schema_id == "visionrig/sensor-change-batch/v2"
+    assert batch.stream_id == "stream-a"
+    assert batch.stream_reset is False
     assert batch.gap is True
     assert batch.oldest_available_cursor == 3
     assert batch.newest_available_cursor == 4
@@ -27,7 +29,7 @@ def test_sensor_change_journal_reports_cursor_gap() -> None:
 
 def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> None:
     registry = SensorRegistry()
-    journal = SensorChangeJournal()
+    journal = SensorChangeJournal(stream_id="stream-live")
     client = TestClient(
         create_app(
             PerceptionPipeline(),
@@ -197,7 +199,8 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v1"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v2"
+    assert body["change_stream_id"] == "stream-live"
     assert body["change_cursor"] == 2
     assert body["catalog"]["schema"] == "visionrig/sensor-catalog/v7"
     assert body["catalog"]["sources"][0]["source_id"] == "camera-bootstrap"
@@ -212,7 +215,10 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
 
     after = client.get(
         "/api/v1/sensors/changes",
-        params={"after_cursor": body["change_cursor"]},
+        params={
+            "after_cursor": body["change_cursor"],
+            "stream_id": body["change_stream_id"],
+        },
     ).json()
     assert [entry["event"]["kind"] for entry in after["entries"]] == [
         "control_changed"
@@ -226,9 +232,33 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body == {
-        "schema": "visionrig/sensor-bootstrap-snapshot/v1",
-        "change_cursor": 0,
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v2"
+    assert body["change_cursor"] == 0
+    assert isinstance(body["change_stream_id"], str)
+    assert body["change_stream_id"]
+    assert body["catalog"] == {
+            "schema": "visionrig/sensor-catalog/v7",
+            "sources": [],
+        }
+    assert body["fleet"] == {
+            "schema": "visionrig/sensor-fleet-summary/v1",
+            "total": 0,
+            "lifecycle": {"active": 0, "retired": 0},
+            "presence": {
+                "online": 0,
+                "stale": 0,
+                "offline": 0,
+                "unknown": 0,
+            },
+            "control": {
+                "converged": 0,
+                "pending": 0,
+                "unknown": 0,
+            },
+            "attention": [],
+            "attention_total": 0,
+            "attention_truncated": False,
+        }
         "catalog": {
             "schema": "visionrig/sensor-catalog/v7",
             "sources": [],
@@ -253,3 +283,23 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "attention_truncated": False,
         },
     }
+
+
+def test_sensor_change_feed_detects_stream_restart() -> None:
+    old = SensorChangeJournal(stream_id="old-stream")
+    old.append(kind="metadata_changed", source_id="camera-a")
+    old_batch = old.read(after_cursor=0)
+    assert old_batch.stream_id == "old-stream"
+    assert old_batch.next_cursor == 1
+
+    restarted = SensorChangeJournal(stream_id="new-stream")
+    restarted.append(kind="registered", source_id="camera-b")
+    reset = restarted.read(
+        after_cursor=old_batch.next_cursor,
+        expected_stream_id=old_batch.stream_id,
+    )
+    assert reset.stream_id == "new-stream"
+    assert reset.stream_reset is True
+    assert reset.entries == ()
+    assert reset.next_cursor == 0
+    assert reset.newest_available_cursor == 1
