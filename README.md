@@ -12,7 +12,7 @@ VisionRig includes:
 
 - typed PerceptionEvent/v3 observations
 - local webcam/image/video capture
-- Kinect v2 RGB + hardware depth + infrared capture
+- Kinect v2 RGB + hardware depth + infrared capture\n- **managed local webcam/Kinect capture through the shared desired/effective-state contract**
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - crash-safe webcam/screen reference producer
