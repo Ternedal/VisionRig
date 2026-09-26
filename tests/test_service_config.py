@@ -15,7 +15,9 @@ def test_service_config_reads_optional_pipeline_switches(monkeypatch, tmp_path) 
         "http://127.0.0.1:8099",
     )
     registry_path = tmp_path / "sensor-registry.json"
+    change_path = tmp_path / "sensor-changes.json"
     monkeypatch.setenv("VISIONRIG_SENSOR_REGISTRY_FILE", str(registry_path))
+    monkeypatch.setenv("VISIONRIG_SENSOR_CHANGE_JOURNAL_FILE", str(change_path))
 
     config = ServiceConfig.from_env()
     assert config.ocr is True
@@ -26,6 +28,7 @@ def test_service_config_reads_optional_pipeline_switches(monkeypatch, tmp_path) 
     assert config.modelrig_bridge is True
     assert config.modelrig_worker_url == "http://127.0.0.1:8099"
     assert config.sensor_registry_file == str(registry_path)
+    assert config.sensor_change_journal_file == str(change_path)
 
     publisher = config.build_modelrig_publisher()
     assert publisher is not None
@@ -34,6 +37,10 @@ def test_service_config_reads_optional_pipeline_switches(monkeypatch, tmp_path) 
     registry = config.build_sensor_registry()
     assert registry.path == registry_path
     assert registry.persistent is True
+
+    journal = config.build_sensor_change_journal()
+    assert journal.path == change_path
+    assert journal.persistent is True
 
 
 def test_sensor_registry_path_defaults_under_home(monkeypatch, tmp_path) -> None:
@@ -75,3 +82,20 @@ def test_modelrig_bridge_defaults_off(monkeypatch) -> None:
     config = ServiceConfig.from_env()
     assert config.modelrig_bridge is False
     assert config.build_modelrig_publisher() is None
+
+
+def test_sensor_change_journal_path_defaults_under_home(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("VISIONRIG_SENSOR_CHANGE_JOURNAL_FILE", raising=False)
+    monkeypatch.setattr("visionrig.service_config.Path.home", lambda: tmp_path)
+
+    config = ServiceConfig.from_env()
+    assert config.sensor_change_journal_file == str(
+        tmp_path / ".visionrig" / "sensor-changes.json"
+    )
+
+
+def test_sensor_change_journal_can_be_explicitly_ephemeral(monkeypatch) -> None:
+    monkeypatch.setenv("VISIONRIG_SENSOR_CHANGE_JOURNAL_FILE", "   ")
+    config = ServiceConfig.from_env()
+    assert config.sensor_change_journal_file is None
+    assert config.build_sensor_change_journal().persistent is False
