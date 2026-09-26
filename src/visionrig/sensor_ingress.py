@@ -93,14 +93,15 @@ class SensorFrameReceipt(BaseModel):
 class SensorHeartbeat(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_id: Literal["visionrig/sensor-heartbeat/v1"] = (
-        "visionrig/sensor-heartbeat/v1"
+    schema_id: Literal["visionrig/sensor-heartbeat/v2"] = (
+        "visionrig/sensor-heartbeat/v2"
     )
     source_id: str = Field(min_length=1, max_length=128)
     source_type: SensorSourceType
     device: str | None = Field(default=None, max_length=256)
     capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
     capture_active: bool | None = None
+    applied_revision: int | None = Field(default=None, ge=0)
 
 
 class SensorHeartbeatReceipt(BaseModel):
@@ -122,6 +123,7 @@ class SensorSourceStats:
     device: str | None
     capabilities: tuple[str, ...]
     capture_active: bool | None
+    applied_revision: int | None
     presence: SensorPresence
     age_seconds: float
     last_sequence: int | None
@@ -153,6 +155,7 @@ class _MutableSourceStats:
     device: str | None
     capabilities: tuple[str, ...]
     capture_active: bool | None
+    applied_revision: int | None
     last_sequence: int | None
     accepted_frames: int
     heartbeat_count: int
@@ -233,6 +236,7 @@ class SensorIngress:
                     device=heartbeat.device,
                     capabilities=capabilities,
                     capture_active=heartbeat.capture_active,
+                    applied_revision=heartbeat.applied_revision,
                     last_sequence=None,
                     accepted_frames=0,
                     heartbeat_count=1,
@@ -244,6 +248,7 @@ class SensorIngress:
                 current.device = heartbeat.device
                 current.capabilities = capabilities
                 current.capture_active = heartbeat.capture_active
+                current.applied_revision = heartbeat.applied_revision
                 current.heartbeat_count += 1
                 current.last_seen = now
         return SensorHeartbeatReceipt(
@@ -271,6 +276,7 @@ class SensorIngress:
                     device=device,
                     capabilities=(),
                     capture_active=True,
+                    applied_revision=None,
                     last_sequence=frame_sequence,
                     accepted_frames=1,
                     heartbeat_count=0,
@@ -303,6 +309,7 @@ class SensorIngress:
                     device=state.device,
                     capabilities=state.capabilities,
                     capture_active=state.capture_active,
+                    applied_revision=state.applied_revision,
                     presence=self._presence(
                         max(0.0, (now - state.last_seen).total_seconds())
                     ),
@@ -319,7 +326,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v3",
+                schema="visionrig/sensor-runtime-status/v4",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
