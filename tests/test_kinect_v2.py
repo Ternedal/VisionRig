@@ -1,7 +1,13 @@
+import numpy as np
 import pytest
 
 from visionrig.contracts import BoundingBox, SourceDescriptor, VisualEntity
-from visionrig.kinect_v2 import KinectV2DepthStage, KinectV2FrameSet, KinectV2Source
+from visionrig.kinect_v2 import (
+    KinectV2DepthStage,
+    KinectV2FrameSet,
+    KinectV2Source,
+    align_depth_mm_to_color,
+)
 from visionrig.pipeline import Frame, StageResult
 from visionrig.pipeline_factory import build_pipeline
 
@@ -36,6 +42,7 @@ def test_kinect_source_keeps_rgb_primary_and_aux_sensor_channels() -> None:
             color_bgr={"rgb": True},
             depth_sampler=sampler,
             depth_mm={"depth": True},
+            color_aligned_depth_mm={"aligned": True},
             infrared={"ir": True},
         )
     )
@@ -48,6 +55,7 @@ def test_kinect_source_keeps_rgb_primary_and_aux_sensor_channels() -> None:
     assert frame.sensor_data["sensor_model"] == "kinect-v2"
     assert frame.sensor_data["metric_depth_sampler"] is sampler
     assert frame.sensor_data["depth_mm"] == {"depth": True}
+    assert frame.sensor_data["color_aligned_depth_mm"] == {"aligned": True}
     assert frame.sensor_data["infrared"] == {"ir": True}
     assert frame.sequence == 0
     assert source.read() is None
@@ -101,3 +109,46 @@ def test_kinect_depth_range_must_be_valid() -> None:
 def test_pipeline_can_enable_kinect_hardware_depth() -> None:
     bundle = build_pipeline(kinect_depth=True, spatial_relations=False)
     assert "kinect_v2_depth" in bundle.pipeline.stages
+
+
+def test_align_depth_mm_to_color_maps_valid_points_and_zeroes_invalid() -> None:
+    depth = np.array(
+        [
+            [1000, 1100, 1200],
+            [2000, 2100, 2200],
+        ],
+        dtype=np.uint16,
+    )
+    mapping = np.array(
+        [
+            [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]],
+            [[0.0, 1.0], [2.0, 1.0], [99.0, 99.0]],
+        ],
+        dtype=np.float32,
+    )
+
+    aligned = align_depth_mm_to_color(
+        mapping,
+        depth,
+        color_width=3,
+        color_height=2,
+    )
+
+    assert aligned.dtype == np.uint16
+    assert aligned.tolist() == [
+        [1000, 1100, 1200],
+        [2000, 2200, 0],
+    ]
+
+
+def test_align_depth_mm_to_color_rejects_wrong_mapping_shape() -> None:
+    depth = np.zeros((2, 3), dtype=np.uint16)
+    mapping = np.zeros((1, 1, 2), dtype=np.float32)
+
+    with pytest.raises(Exception, match="mapping shape"):
+        align_depth_mm_to_color(
+            mapping,
+            depth,
+            color_width=3,
+            color_height=2,
+        )
