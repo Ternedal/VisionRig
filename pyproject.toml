@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visionrig"
-version = "0.24.0"
+version = "0.25.0"
 description = "Visual perception subsystem for ModelRig / Kaliv"
 requires-python = ">=3.11"
 dependencies = [
