@@ -10,10 +10,12 @@ def main() -> None:
     config = ServiceConfig.from_env()
     bundle = config.build_bundle()
     modelrig_publisher = config.build_modelrig_publisher()
+    sensor_registry = config.build_sensor_registry()
     app = create_app(
         bundle.pipeline,
         max_sensor_frame_bytes=config.max_sensor_frame_bytes,
         modelrig_publisher=modelrig_publisher,
+        sensor_registry=sensor_registry,
     )
     uvicorn.run(app, host="127.0.0.1", port=8110, reload=False)
 
