@@ -156,7 +156,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v16"
+    assert health["schema"] == "visionrig/health/v17"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v6",
         "entries": 1,
@@ -432,3 +432,82 @@ def test_forget_rejects_retired_sensor_that_is_still_online() -> None:
     assert forgotten.status_code == 409
     assert "offline" in forgotten.json()["detail"]
     assert registry.contains("online-camera") is True
+
+
+def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
+    registry = SensorRegistry()
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    online = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "online-ok",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+        },
+    )
+    assert online.status_code == 200
+
+    preconfigured = client.patch(
+        "/api/v1/sensors/preconfigured/metadata",
+        json={"display_name": "Future camera"},
+    )
+    assert preconfigured.status_code == 200
+
+    retired = client.post("/api/v1/sensors/retired-offline/retire")
+    assert retired.status_code == 200
+
+    pending_hb = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "pending-camera",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+        },
+    )
+    assert pending_hb.status_code == 200
+    disable = client.patch(
+        "/api/v1/sensors/pending-camera/metadata",
+        json={"enabled": False},
+    )
+    assert disable.status_code == 200
+
+    response = client.get("/api/v1/sensors/fleet")
+    assert response.status_code == 200
+    fleet = response.json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v1"
+    assert fleet["total"] == 4
+    assert fleet["lifecycle"] == {"active": 3, "retired": 1}
+    assert fleet["presence"] == {
+        "online": 2,
+        "stale": 0,
+        "offline": 0,
+        "unknown": 2,
+    }
+    assert fleet["control"] == {
+        "converged": 1,
+        "pending": 1,
+        "unknown": 2,
+    }
+    assert fleet["attention_total"] == 2
+    assert fleet["attention_truncated"] is False
+    assert [item["source_id"] for item in fleet["attention"]] == [
+        "pending-camera",
+        "preconfigured",
+    ]
+    pending_item = fleet["attention"][0]
+    assert pending_item["presence"] == "online"
+    assert pending_item["control_status"] == "pending"
+    assert pending_item["pending_seconds"] is not None
+    unknown_item = fleet["attention"][1]
+    assert unknown_item["presence"] == "unknown"
+    assert unknown_item["control_status"] == "unknown"
+    assert unknown_item["pending_seconds"] is None
+
+    health = client.get("/health").json()
+    assert health["schema"] == "visionrig/health/v17"
+    assert health["sensor_fleet"] == fleet
