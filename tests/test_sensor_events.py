@@ -1,6 +1,7 @@
 import threading
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from visionrig.api import create_app
