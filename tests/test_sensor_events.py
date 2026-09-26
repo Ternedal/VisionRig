@@ -178,7 +178,7 @@ def test_preconfigured_sensor_emits_registered_then_metadata_change() -> None:
 
 def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     registry = SensorRegistry()
-    journal = SensorChangeJournal()
+    journal = SensorChangeJournal(stream_id="stream-live")
     client = TestClient(
         create_app(
             PerceptionPipeline(),
@@ -227,63 +227,43 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
 
 
 def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
+    journal = SensorChangeJournal(stream_id="empty-stream")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_change_journal=journal,
+        )
+    )
 
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
     assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v2"
+    assert body["change_stream_id"] == "empty-stream"
     assert body["change_cursor"] == 0
-    assert isinstance(body["change_stream_id"], str)
-    assert body["change_stream_id"]
     assert body["catalog"] == {
-            "schema": "visionrig/sensor-catalog/v7",
-            "sources": [],
-        }
-    assert body["fleet"] == {
-            "schema": "visionrig/sensor-fleet-summary/v1",
-            "total": 0,
-            "lifecycle": {"active": 0, "retired": 0},
-            "presence": {
-                "online": 0,
-                "stale": 0,
-                "offline": 0,
-                "unknown": 0,
-            },
-            "control": {
-                "converged": 0,
-                "pending": 0,
-                "unknown": 0,
-            },
-            "attention": [],
-            "attention_total": 0,
-            "attention_truncated": False,
-        }
-        "catalog": {
-            "schema": "visionrig/sensor-catalog/v7",
-            "sources": [],
-        },
-        "fleet": {
-            "schema": "visionrig/sensor-fleet-summary/v1",
-            "total": 0,
-            "lifecycle": {"active": 0, "retired": 0},
-            "presence": {
-                "online": 0,
-                "stale": 0,
-                "offline": 0,
-                "unknown": 0,
-            },
-            "control": {
-                "converged": 0,
-                "pending": 0,
-                "unknown": 0,
-            },
-            "attention": [],
-            "attention_total": 0,
-            "attention_truncated": False,
-        },
+        "schema": "visionrig/sensor-catalog/v7",
+        "sources": [],
     }
-
+    assert body["fleet"] == {
+        "schema": "visionrig/sensor-fleet-summary/v1",
+        "total": 0,
+        "lifecycle": {"active": 0, "retired": 0},
+        "presence": {
+            "online": 0,
+            "stale": 0,
+            "offline": 0,
+            "unknown": 0,
+        },
+        "control": {
+            "converged": 0,
+            "pending": 0,
+            "unknown": 0,
+        },
+        "attention": [],
+        "attention_total": 0,
+        "attention_truncated": False,
+    }
 
 def test_sensor_change_feed_detects_stream_restart() -> None:
     old = SensorChangeJournal(stream_id="old-stream")
