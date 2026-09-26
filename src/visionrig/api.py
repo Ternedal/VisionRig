@@ -516,6 +516,11 @@ def create_app(
         source_id: str,
         expected_state_revision: int | None = Query(default=None, ge=0),
     ) -> dict[str, object]:
+        try:
+            registry.assert_state_revision(expected_state_revision)
+        except SensorStateRevisionConflict as exc:
+            raise_state_revision_conflict(exc)
+
         if not registry.contains(source_id):
             raise HTTPException(status_code=404, detail="sensor is not registered")
 
