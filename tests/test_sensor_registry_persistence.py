@@ -213,3 +213,34 @@ def test_control_revision_and_change_time_survive_restart(tmp_path) -> None:
     desired = restarted.desired_state("camera-a")
     assert desired.enabled is True
     assert desired.revision == 2
+
+
+def test_retirement_survives_restart_with_discovery_history(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 9, 0, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0])
+    registry.observe(
+        "retired-kinect",
+        source_type="camera",
+        device="kinect-v2",
+        capabilities=("rgb", "depth", "infrared"),
+    )
+    registry.patch(
+        "retired-kinect",
+        SensorMetadataPatch(display_name="Old Kinect"),
+    )
+    retired = registry.retire("retired-kinect")
+    assert retired.retired_utc == "2026-09-26T09:00:00+00:00"
+    assert retired.enabled is False
+    assert registry.control_revision("retired-kinect") == 1
+
+    restarted = SensorRegistry(path)
+    metadata = restarted.get("retired-kinect")
+    discovery = restarted.get_discovery("retired-kinect")
+    assert metadata.display_name == "Old Kinect"
+    assert metadata.retired_utc == "2026-09-26T09:00:00+00:00"
+    assert metadata.enabled is False
+    assert discovery is not None
+    assert discovery.device == "kinect-v2"
+    assert discovery.observation_count == 1
+    assert restarted.control_revision("retired-kinect") == 1

@@ -67,6 +67,7 @@ class SensorMetadata:
     location: str | None = None
     role: SensorRole | None = None
     enabled: bool = True
+    retired_utc: str | None = None
 
 
 class _StoredSensorMetadata(BaseModel):
@@ -77,6 +78,7 @@ class _StoredSensorMetadata(BaseModel):
     location: str | None = Field(default=None, max_length=128)
     role: SensorRole | None = None
     enabled: bool = True
+    retired_utc: str | None = None
 
 
 class _StoredSensorDiscovery(BaseModel):
@@ -170,6 +172,7 @@ class SensorRegistry:
                 location=entry.location,
                 role=entry.role,
                 enabled=entry.enabled,
+                retired_utc=entry.retired_utc,
             )
             for entry in state.entries
         }
@@ -207,6 +210,7 @@ class SensorRegistry:
                     location=entry.location,
                     role=entry.role,
                     enabled=entry.enabled,
+                    retired_utc=entry.retired_utc,
                 )
                 for entry in self.list()
             ),
@@ -379,6 +383,62 @@ class SensorRegistry:
         now = self._clock().astimezone(timezone.utc)
         return round(max(0.0, (now - changed.astimezone(timezone.utc)).total_seconds()), 3)
 
+    def retire(self, source_id: str) -> SensorMetadata:
+        """Retire a sensor while preserving metadata, discovery and history."""
+        if not source_id or len(source_id) > 128:
+            raise ValueError("source_id must contain 1..128 characters")
+        with self._lock:
+            current = self._entries.get(source_id, SensorMetadata(source_id=source_id))
+            if current.retired_utc is not None:
+                return current
+            now = self._clock().astimezone(timezone.utc).isoformat()
+            updated = replace(current, enabled=False, retired_utc=now)
+            previous = self._entries.get(source_id)
+            previous_revision = self._control_revisions.get(source_id, 0)
+            previous_changed_utc = self._control_changed_utc.get(source_id)
+            self._entries[source_id] = updated
+            if current.enabled:
+                self._control_revisions[source_id] = previous_revision + 1
+                self._control_changed_utc[source_id] = now
+            try:
+                self._save()
+            except Exception:
+                if previous is None:
+                    self._entries.pop(source_id, None)
+                else:
+                    self._entries[source_id] = previous
+                if previous_revision == 0:
+                    self._control_revisions.pop(source_id, None)
+                else:
+                    self._control_revisions[source_id] = previous_revision
+                if previous_changed_utc is None:
+                    self._control_changed_utc.pop(source_id, None)
+                else:
+                    self._control_changed_utc[source_id] = previous_changed_utc
+                raise
+            return updated
+
+    def restore(self, source_id: str) -> SensorMetadata:
+        """Restore a retired sensor to managed-but-disabled state."""
+        if not source_id or len(source_id) > 128:
+            raise ValueError("source_id must contain 1..128 characters")
+        with self._lock:
+            current = self._entries.get(source_id, SensorMetadata(source_id=source_id))
+            if current.retired_utc is None:
+                return current
+            updated = replace(current, retired_utc=None, enabled=False)
+            previous = self._entries.get(source_id)
+            self._entries[source_id] = updated
+            try:
+                self._save()
+            except Exception:
+                if previous is None:
+                    self._entries.pop(source_id, None)
+                else:
+                    self._entries[source_id] = previous
+                raise
+            return updated
+
     def desired_state(self, source_id: str) -> SensorDesiredState:
         metadata = self.get(source_id)
         return SensorDesiredState(
@@ -407,6 +467,8 @@ class SensorRegistry:
             if "enabled" in patch.model_fields_set:
                 if patch.enabled is None:
                     raise ValueError("enabled cannot be null")
+                if patch.enabled and current.retired_utc is not None:
+                    raise ValueError("retired sensor must be restored before enabling")
                 changes["enabled"] = patch.enabled
             updated = replace(current, **changes)
             previous = self._entries.get(source_id)
