@@ -70,7 +70,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v9",
+            "schema": "visionrig/health/v10",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -186,6 +186,7 @@ def create_app(
     @app.post("/api/v1/sensors/heartbeat", response_model=SensorHeartbeatReceipt)
     def sensor_heartbeat(body: SensorHeartbeat) -> SensorHeartbeatReceipt:
         try:
+            registry.ensure_registered(body.source_id)
             return sensor_ingress.heartbeat(body)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -216,6 +217,7 @@ def create_app(
         content_type = request.headers.get("content-type", "")
         payload = await read_bounded_body(request, sensor_ingress.max_payload_bytes)
         try:
+            registry.ensure_registered(source_id)
             return await run_in_threadpool(
                 sensor_ingress.process_encoded,
                 source_id=source_id,

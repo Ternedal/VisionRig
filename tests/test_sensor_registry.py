@@ -137,9 +137,66 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v9"
+    assert health["schema"] == "visionrig/health/v10"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v1",
         "entries": 1,
         "desired_state_schema": "visionrig/sensor-desired-state/v1",
     }
+
+
+def test_heartbeat_auto_registers_unknown_sensor() -> None:
+    registry = SensorRegistry()
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "source_id": "new-kinect",
+            "source_type": "camera",
+            "device": "kinect-v2",
+            "capabilities": ["rgb", "depth", "infrared"],
+            "capture_active": False,
+        },
+    )
+    assert response.status_code == 200
+
+    registered = registry.list()
+    assert len(registered) == 1
+    assert registered[0].source_id == "new-kinect"
+    assert registered[0].display_name is None
+    assert registered[0].enabled is True
+
+
+def test_auto_registration_never_overwrites_operator_metadata() -> None:
+    registry = SensorRegistry()
+    registry.patch(
+        "camera-a",
+        SensorMetadataPatch(
+            display_name="Desk camera",
+            location="Office",
+            role="primary",
+            enabled=False,
+        ),
+    )
+    client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
+
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v1",
+            "source_id": "camera-a",
+            "source_type": "camera",
+            "device": "usb-camera",
+            "capabilities": ["rgb"],
+            "capture_active": True,
+        },
+    )
+    assert response.status_code == 200
+
+    metadata = registry.get("camera-a")
+    assert metadata.display_name == "Desk camera"
+    assert metadata.location == "Office"
+    assert metadata.role == "primary"
+    assert metadata.enabled is False

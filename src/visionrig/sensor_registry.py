@@ -163,6 +163,23 @@ class SensorRegistry:
         with self._lock:
             return self._entries.get(source_id, SensorMetadata(source_id=source_id))
 
+    def ensure_registered(self, source_id: str) -> SensorMetadata:
+        """Persist a first-seen source without changing operator-owned metadata."""
+        if not source_id or len(source_id) > 128:
+            raise ValueError("source_id must contain 1..128 characters")
+        with self._lock:
+            current = self._entries.get(source_id)
+            if current is not None:
+                return current
+            created = SensorMetadata(source_id=source_id)
+            self._entries[source_id] = created
+            try:
+                self._save()
+            except Exception:
+                self._entries.pop(source_id, None)
+                raise
+            return created
+
     def desired_state(self, source_id: str) -> SensorDesiredState:
         metadata = self.get(source_id)
         return SensorDesiredState(

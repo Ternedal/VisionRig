@@ -70,3 +70,33 @@ def test_failed_persist_rolls_back_in_memory_state(tmp_path, monkeypatch) -> Non
         registry.patch("cam-a", SensorMetadataPatch(display_name="Broken update"))
 
     assert registry.get("cam-a").display_name == "Camera A"
+
+
+def test_first_seen_registration_is_persistent_and_idempotent(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    registry = SensorRegistry(path)
+
+    created = registry.ensure_registered("quest-living-room")
+    assert created.source_id == "quest-living-room"
+    assert created.enabled is True
+
+    registry.patch(
+        "quest-living-room",
+        SensorMetadataPatch(
+            display_name="Kaliv Quest",
+            location="Living room",
+            role="vr",
+            enabled=False,
+        ),
+    )
+
+    same = registry.ensure_registered("quest-living-room")
+    assert same.display_name == "Kaliv Quest"
+    assert same.location == "Living room"
+    assert same.role == "vr"
+    assert same.enabled is False
+
+    restarted = SensorRegistry(path)
+    restored = restarted.get("quest-living-room")
+    assert restored.display_name == "Kaliv Quest"
+    assert restored.enabled is False

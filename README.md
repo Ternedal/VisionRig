@@ -12,7 +12,8 @@ VisionRig includes:
 
 - typed PerceptionEvent/v3 observations
 - local webcam/image/video capture
-- Kinect v2 RGB + hardware depth + infrared capture\n- **managed local webcam/Kinect capture through the shared desired/effective-state contract**
+- Kinect v2 RGB + hardware depth + infrared capture
+- **managed local webcam/Kinect capture through the shared desired/effective-state contract**
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - crash-safe webcam/screen reference producer
@@ -20,8 +21,10 @@ VisionRig includes:
 - authenticated producer heartbeat + declared sensor capabilities
 - **operator-owned sensor catalog metadata for UI/control surfaces**
 - **restart-safe persistent sensor registry with atomic writes**
+- **automatic persistent registration of first-seen sensors**
 - **authenticated per-sensor desired-state control contract**
-- **reference producer that physically closes capture while disabled**\n- **closed-loop desired/effective sensor control convergence in the catalog**
+- **reference producer that physically closes capture while disabled**
+- **closed-loop desired/effective sensor control convergence in the catalog**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -41,7 +44,9 @@ identity.
 
 `GET /api/v1/sensors/catalog` joins runtime state with operator-owned metadata.
 Metadata can be prepared before the sensor is online with
-`PATCH /api/v1/sensors/{source_id}/metadata`.
+`PATCH /api/v1/sensors/{source_id}/metadata`. A previously unknown source is
+automatically persisted on its first valid heartbeat or frame, so it remains
+visible in the catalog after restart even before an operator names it.
 
 Registry metadata is persisted by default to
 `~/.visionrig/sensor-registry.json` using atomic replacement. Override with

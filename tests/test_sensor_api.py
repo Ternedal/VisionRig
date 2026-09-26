@@ -62,7 +62,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v9"
+    assert health["schema"] == "visionrig/health/v10"
     assert health["sensor_ingress"]["runtime"]["accepted_total"] == 2
 
 
@@ -147,3 +147,31 @@ def test_raw_sensor_ingest_rejects_wrong_media_type(monkeypatch) -> None:
     )
     assert response.status_code == 415
     assert client.get("/api/v1/sensors/status").json()["rejected_media_type_total"] == 1
+
+
+def test_frame_ingest_auto_registers_source_without_heartbeat(monkeypatch) -> None:
+    monkeypatch.setattr(sensor_ingress, "OpenCVImageDecoder", lambda: FakeCVDecoder())
+    from visionrig.sensor_registry import SensorRegistry
+
+    registry = SensorRegistry()
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            max_sensor_frame_bytes=1024,
+            sensor_registry=registry,
+        )
+    )
+
+    response = client.post(
+        "/api/v1/frames/ingest",
+        params={
+            "source_id": "screen-new",
+            "source_type": "screen",
+            "frame_sequence": 0,
+        },
+        content=b"encoded-frame",
+        headers={"content-type": "image/jpeg"},
+    )
+    assert response.status_code == 200
+    assert registry.get("screen-new").source_id == "screen-new"
+    assert [entry.source_id for entry in registry.list()] == ["screen-new"]
