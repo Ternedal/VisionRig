@@ -71,7 +71,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v11",
+            "schema": "visionrig/health/v12",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -98,7 +98,7 @@ def create_app(
                 "runtime": asdict(sensor_ingress.stats()),
             },
             "sensor_registry": {
-                "schema": "visionrig/sensor-registry/v2",
+                "schema": "visionrig/sensor-registry/v3",
                 "entries": len(registry.list()),
                 "discovered": len(registry.list_discovery()),
                 "desired_state_schema": "visionrig/sensor-desired-state/v1",
@@ -161,7 +161,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v3",
+            "schema": "visionrig/sensor-catalog/v4",
             "sources": sources,
         }
 
