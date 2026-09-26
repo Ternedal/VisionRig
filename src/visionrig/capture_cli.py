@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import os
 import time
-from dataclasses import replace
 from typing import Callable, Protocol
 
 from .kinect_v2 import KinectV2Source
