@@ -58,6 +58,8 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
         "registered",
         "runtime_changed",
     ]
+    assert [entry["event"]["state_revision"] for entry in first["entries"]] == [1, 1]
+    assert registry.state_revision == 1
     cursor = first["next_cursor"]
 
     # Liveness refresh only: no semantic producer/discovery change.
@@ -68,6 +70,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
     ).json()
     assert quiet["entries"] == []
     assert quiet["next_cursor"] == cursor
+    assert registry.state_revision == 1
 
     changed_discovery = dict(heartbeat)
     changed_discovery["capabilities"] = ["rgb", "depth"]
@@ -82,6 +85,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
     assert [entry["event"]["kind"] for entry in discovery_batch["entries"]] == [
         "discovery_changed"
     ]
+    assert discovery_batch["entries"][0]["event"]["state_revision"] == 2
     cursor = discovery_batch["next_cursor"]
 
     patch = client.patch(
@@ -101,6 +105,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
         "control_changed",
     ]
     assert patch_batch["entries"][1]["event"]["payload"]["revision"] == 1
+    assert [entry["event"]["state_revision"] for entry in patch_batch["entries"]] == [3, 3]
     cursor = patch_batch["next_cursor"]
 
     applied = dict(changed_discovery)
@@ -119,6 +124,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
         "applied_revision": 1,
         "presence": "online",
     }
+    assert runtime_batch["entries"][0]["event"]["state_revision"] == 3
 
 
 def test_sensor_change_feed_tracks_lifecycle_and_forget() -> None:
@@ -203,12 +209,14 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v2"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v3"
+    assert body["sensor_state_revision"] == 1
     assert body["change_stream_id"] == "stream-live"
     assert body["change_cursor"] == 2
     assert body["catalog"]["schema"] == "visionrig/sensor-catalog/v7"
     assert body["catalog"]["sources"][0]["source_id"] == "camera-bootstrap"
-    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v1"
+    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v2"
+    assert body["fleet"]["state_revision"] == 1
     assert body["fleet"]["total"] == 1
 
     changed = client.patch(
@@ -228,6 +236,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
         "control_changed"
     ]
     assert after["entries"][0]["event"]["payload"]["revision"] == 1
+    assert after["entries"][0]["event"]["state_revision"] == 2
 
 
 def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
@@ -242,7 +251,8 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v2"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v3"
+    assert body["sensor_state_revision"] == 0
     assert body["change_stream_id"] == "empty-stream"
     assert body["change_cursor"] == 0
     assert body["catalog"] == {
@@ -250,7 +260,8 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "sources": [],
     }
     assert body["fleet"] == {
-        "schema": "visionrig/sensor-fleet-summary/v1",
+        "schema": "visionrig/sensor-fleet-summary/v2",
+        "state_revision": 0,
         "total": 0,
         "lifecycle": {"active": 0, "retired": 0},
         "presence": {
@@ -499,7 +510,7 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     )
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v22"
+    assert health["schema"] == "visionrig/health/v23"
     assert health["sensor_changes"]["durability"] == "persistent"
     assert health["sensor_changes"]["stream_id"] == "restored-stream"
 
@@ -516,3 +527,53 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     ).json()
     assert batch["stream_reset"] is False
     assert [entry["cursor"] for entry in batch["entries"]] == [1]
+
+
+def test_fleet_revision_exposes_change_feed_drift() -> None:
+    registry = SensorRegistry()
+    journal = SensorChangeJournal(stream_id="drift-stream")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_registry=registry,
+            sensor_change_journal=journal,
+        )
+    )
+
+    initial = client.patch(
+        "/api/v1/sensors/camera-drift/metadata",
+        json={"display_name": "Camera"},
+    )
+    assert initial.status_code == 200
+
+    first_changes = client.get("/api/v1/sensors/changes").json()
+    assert max(
+        entry["event"]["state_revision"]
+        for entry in first_changes["entries"]
+    ) == 1
+    assert client.get("/api/v1/sensors/fleet").json()["state_revision"] == 1
+
+    # Simulate a crash window where registry state persisted but the matching
+    # semantic journal append never happened.
+    registry.patch(
+        "camera-drift",
+        SensorMetadataPatch(location="Office"),
+    )
+    assert registry.state_revision == 2
+
+    unchanged_feed = client.get(
+        "/api/v1/sensors/changes",
+        params={
+            "after_cursor": first_changes["next_cursor"],
+            "stream_id": first_changes["stream_id"],
+        },
+    ).json()
+    assert unchanged_feed["entries"] == []
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["state_revision"] == 2
+    assert fleet["state_revision"] > 1
+
+    bootstrap = client.get("/api/v1/sensors/bootstrap").json()
+    assert bootstrap["sensor_state_revision"] == 2
+    assert bootstrap["fleet"]["state_revision"] == 2
