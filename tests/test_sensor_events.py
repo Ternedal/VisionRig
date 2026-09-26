@@ -480,3 +480,39 @@ def test_persisted_stream_id_mismatch_fails_closed(tmp_path) -> None:
             stream_id="different-stream",
             path=path,
         )
+
+
+def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
+    path = tmp_path / "sensor-changes.json"
+    initial = SensorChangeJournal(
+        stream_id="restored-stream",
+        path=path,
+    )
+    initial.append(kind="registered", source_id="camera-a")
+
+    restored = SensorChangeJournal(path=path)
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_change_journal=restored,
+        )
+    )
+
+    health = client.get("/health").json()
+    assert health["schema"] == "visionrig/health/v22"
+    assert health["sensor_changes"]["durability"] == "persistent"
+    assert health["sensor_changes"]["stream_id"] == "restored-stream"
+
+    bootstrap = client.get("/api/v1/sensors/bootstrap").json()
+    assert bootstrap["change_stream_id"] == "restored-stream"
+    assert bootstrap["change_cursor"] == 1
+
+    batch = client.get(
+        "/api/v1/sensors/changes",
+        params={
+            "after_cursor": 0,
+            "stream_id": "restored-stream",
+        },
+    ).json()
+    assert batch["stream_reset"] is False
+    assert [entry["cursor"] for entry in batch["entries"]] == [1]
