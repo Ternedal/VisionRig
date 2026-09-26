@@ -18,9 +18,10 @@ def test_core_desired_state_defaults_enabled_and_tracks_registry() -> None:
     initial = client.get("/api/v1/sensors/cam-a/desired-state")
     assert initial.status_code == 200
     assert initial.json() == {
-        "schema_id": "visionrig/sensor-desired-state/v1",
+        "schema_id": "visionrig/sensor-desired-state/v2",
         "source_id": "cam-a",
         "enabled": True,
+        "revision": 0,
         "production_authority": False,
     }
 
@@ -28,6 +29,7 @@ def test_core_desired_state_defaults_enabled_and_tracks_registry() -> None:
     changed = client.get("/api/v1/sensors/cam-a/desired-state")
     assert changed.status_code == 200
     assert changed.json()["enabled"] is False
+    assert changed.json()["revision"] == 1
 
 
 def test_producer_fetches_its_own_desired_state() -> None:
@@ -38,9 +40,10 @@ def test_producer_fetches_its_own_desired_state() -> None:
         return httpx.Response(
             200,
             json={
-                "schema_id": "visionrig/sensor-desired-state/v1",
+                "schema_id": "visionrig/sensor-desired-state/v2",
                 "source_id": "quest",
                 "enabled": False,
+                "revision": 3,
                 "production_authority": False,
             },
         )
@@ -57,6 +60,7 @@ def test_producer_fetches_its_own_desired_state() -> None:
 
     assert state.source_id == "quest"
     assert state.enabled is False
+    assert state.revision == 3
     assert state.production_authority is False
 
 
@@ -65,9 +69,10 @@ def test_producer_rejects_desired_state_for_another_source() -> None:
         return httpx.Response(
             200,
             json={
-                "schema_id": "visionrig/sensor-desired-state/v1",
+                "schema_id": "visionrig/sensor-desired-state/v2",
                 "source_id": "other-camera",
                 "enabled": True,
+                "revision": 1,
                 "production_authority": False,
             },
         )
@@ -82,3 +87,23 @@ def test_producer_rejects_desired_state_for_another_source() -> None:
         )
         with pytest.raises(ProducerProtocolError, match="does not match"):
             producer.fetch_desired_state()
+
+
+def test_enabled_revision_changes_only_when_enabled_value_changes() -> None:
+    registry = SensorRegistry()
+
+    assert registry.desired_state("cam").revision == 0
+    registry.patch("cam", SensorMetadataPatch(display_name="Camera"))
+    assert registry.desired_state("cam").revision == 0
+
+    registry.patch("cam", SensorMetadataPatch(enabled=True))
+    assert registry.desired_state("cam").revision == 0
+
+    registry.patch("cam", SensorMetadataPatch(enabled=False))
+    assert registry.desired_state("cam").revision == 1
+
+    registry.patch("cam", SensorMetadataPatch(enabled=False))
+    assert registry.desired_state("cam").revision == 1
+
+    registry.patch("cam", SensorMetadataPatch(enabled=True))
+    assert registry.desired_state("cam").revision == 2
