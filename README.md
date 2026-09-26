@@ -21,6 +21,7 @@ VisionRig includes:
 - **operator-owned sensor catalog metadata for UI/control surfaces**
 - **restart-safe persistent sensor registry with atomic writes**
 - **authenticated per-sensor desired-state control contract**
+- **reference producer that physically closes capture while disabled**
 - optional YOLO ONNX detection + short-term tracking
 - explicit detector label -> entity-kind mapping
 - OCR, pose/hands/face landmarks, relative depth and metric hardware depth
@@ -52,8 +53,10 @@ through the authenticated gateway. V1 intentionally exposes only
 `source_id` + `enabled`; friendly names, location, role, catalog and world
 state are not disclosed to producers.
 
-The reference `GatewayFrameProducer` exposes `fetch_desired_state()` so
-Windows/Quest/Kaliv clients have an executable control-plane reference.
+The reference producer now polls desired state before opening capture. When
+`enabled=false`, an already-open webcam/screen source is closed, no frame
+sequence is consumed, and only heartbeat/control polling continues. When
+re-enabled, capture is reopened and resumes from the durable next sequence.
 
 Remote producers can keep presence current independently of frame rate through
 the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
