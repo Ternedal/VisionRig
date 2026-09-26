@@ -175,3 +175,42 @@ def test_frame_ingest_auto_registers_source_without_heartbeat(monkeypatch) -> No
     assert response.status_code == 200
     assert registry.get("screen-new").source_id == "screen-new"
     assert [entry.source_id for entry in registry.list()] == ["screen-new"]
+
+
+def test_frame_ingress_rejects_reuse_of_source_id_with_different_type(monkeypatch) -> None:
+    monkeypatch.setattr(sensor_ingress, "OpenCVImageDecoder", lambda: FakeCVDecoder())
+    from visionrig.sensor_registry import SensorRegistry
+
+    registry = SensorRegistry()
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            max_sensor_frame_bytes=1024,
+            sensor_registry=registry,
+        )
+    )
+
+    first = client.post(
+        "/api/v1/frames/ingest",
+        params={
+            "source_id": "shared-source",
+            "source_type": "camera",
+            "frame_sequence": 0,
+        },
+        content=b"encoded-frame",
+        headers={"content-type": "image/jpeg"},
+    )
+    assert first.status_code == 200
+
+    conflict = client.post(
+        "/api/v1/frames/ingest",
+        params={
+            "source_id": "shared-source",
+            "source_type": "vr",
+            "frame_sequence": 1,
+        },
+        content=b"encoded-frame",
+        headers={"content-type": "image/jpeg"},
+    )
+    assert conflict.status_code == 409
+    assert registry.get_discovery("shared-source").source_type == "camera"
