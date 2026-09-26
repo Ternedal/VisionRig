@@ -3,11 +3,14 @@ from __future__ import annotations
 
 from collections import deque
 from datetime import datetime, timezone
+import os
+from pathlib import Path
 from threading import Condition, RLock
+import tempfile
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 SensorChangeKind = Literal[
@@ -20,6 +23,10 @@ SensorChangeKind = Literal[
     "forgotten",
     "runtime_changed",
 ]
+
+
+class SensorChangeJournalError(RuntimeError):
+    pass
 
 
 class SensorChangeEvent(BaseModel):
@@ -56,28 +63,119 @@ class SensorChangeBatch(BaseModel):
     stream_reset: bool = False
 
 
+class _SensorChangeJournalFile(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_id: Literal["visionrig/sensor-change-journal-file/v1"] = (
+        "visionrig/sensor-change-journal-file/v1"
+    )
+    stream_id: str = Field(min_length=1, max_length=128)
+    next_cursor: int = Field(ge=1)
+    entries: tuple[SensorChangeEntry, ...] = ()
+
+
 class SensorChangeJournal:
     def __init__(
         self,
         capacity: int = 512,
         *,
         stream_id: str | None = None,
+        path: str | Path | None = None,
     ) -> None:
         if capacity < 1:
             raise ValueError("capacity must be >= 1")
-        selected_stream_id = stream_id or uuid4().hex
-        if not selected_stream_id or len(selected_stream_id) > 128:
+        if stream_id is not None and (not stream_id or len(stream_id) > 128):
             raise ValueError("stream_id must contain 1..128 characters")
-        self._stream_id = selected_stream_id
+
+        self.path = Path(path).expanduser() if path is not None else None
         self._capacity = capacity
+        self._stream_id = stream_id or uuid4().hex
         self._items: deque[SensorChangeEntry] = deque()
         self._next_cursor = 1
         self._lock = RLock()
         self._condition = Condition(self._lock)
 
+        if self.path is not None:
+            self._load(stream_id=stream_id)
+
     @property
     def stream_id(self) -> str:
         return self._stream_id
+
+    @property
+    def persistent(self) -> bool:
+        return self.path is not None
+
+    def _load(self, *, stream_id: str | None) -> None:
+        assert self.path is not None
+        if not self.path.exists():
+            return
+        try:
+            state = _SensorChangeJournalFile.model_validate_json(
+                self.path.read_text(encoding="utf-8")
+            )
+        except (OSError, ValidationError, ValueError) as exc:
+            raise SensorChangeJournalError(
+                f"invalid sensor change journal file: {self.path}"
+            ) from exc
+
+        if stream_id is not None and state.stream_id != stream_id:
+            raise SensorChangeJournalError(
+                "configured sensor change stream_id does not match persisted journal"
+            )
+
+        cursors = [entry.cursor for entry in state.entries]
+        if cursors != sorted(set(cursors)):
+            raise SensorChangeJournalError(
+                f"invalid sensor change journal cursor order: {self.path}"
+            )
+        if cursors and state.next_cursor <= cursors[-1]:
+            raise SensorChangeJournalError(
+                f"invalid sensor change journal next_cursor: {self.path}"
+            )
+
+        self._stream_id = state.stream_id
+        retained = state.entries[-self._capacity :]
+        self._items = deque(retained)
+        self._next_cursor = state.next_cursor
+
+    def _save(self) -> None:
+        if self.path is None:
+            return
+
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        state = _SensorChangeJournalFile(
+            stream_id=self._stream_id,
+            next_cursor=self._next_cursor,
+            entries=tuple(self._items),
+        )
+        temp_name: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.path.parent,
+                prefix=self.path.name + ".",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temp_name = handle.name
+                handle.write(state.model_dump_json(indent=2))
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, self.path)
+            temp_name = None
+        except OSError as exc:
+            raise SensorChangeJournalError(
+                f"unable to persist sensor change journal: {self.path}"
+            ) from exc
+        finally:
+            if temp_name is not None:
+                try:
+                    Path(temp_name).unlink(missing_ok=True)
+                except OSError:
+                    pass
 
     def append(
         self,
@@ -94,12 +192,22 @@ class SensorChangeJournal:
             occurred_utc=timestamp,
             payload=payload or {},
         )
-        with self._lock:
+        with self._condition:
             entry = SensorChangeEntry(cursor=self._next_cursor, event=event)
+            previous_items = tuple(self._items)
+            previous_next_cursor = self._next_cursor
+
             self._next_cursor += 1
             self._items.append(entry)
             while len(self._items) > self._capacity:
                 self._items.popleft()
+            try:
+                self._save()
+            except Exception:
+                self._items = deque(previous_items)
+                self._next_cursor = previous_next_cursor
+                raise
+
             self._condition.notify_all()
             return entry
 
