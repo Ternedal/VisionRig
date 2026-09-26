@@ -28,6 +28,7 @@ from .sensor_ingress import (
     SensorPayloadTooLarge,
     SensorSequenceError,
 )
+from .sensor_packet import SENSOR_PACKET_MEDIA_TYPE
 from .sensor_registry import (
     SensorDesiredState,
     SensorIdentityConflict,
@@ -306,7 +307,12 @@ def create_app(
             "sensor_ingress": {
                 "schema": "visionrig/sensor-ingress/v2",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
-                "media_types": ["image/jpeg", "image/png", "image/webp"],
+                "media_types": [
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                    SENSOR_PACKET_MEDIA_TYPE,
+                ],
                 "overload_policy": "reject",
                 "runtime": asdict(sensor_ingress.stats()),
             },
@@ -711,6 +717,57 @@ def create_app(
             )
             receipt = await run_in_threadpool(
                 sensor_ingress.process_encoded,
+                source_id=source_id,
+                source_type=source_type,
+                frame_sequence=frame_sequence,
+                payload=payload,
+                content_type=content_type,
+                device=device,
+                dropped_frames=dropped_frames,
+            )
+            emit_registration_changes(
+                source_id,
+                was_registered=was_registered,
+                previous_discovery=previous_discovery,
+            )
+            return receipt
+        except SensorIdentityConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SensorIngressBusy as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        except SensorSequenceError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except SensorPayloadTooLarge as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        except SensorMediaTypeError as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
+        except SensorDecodeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/v1/sensor-packets/ingest", response_model=SensorFrameReceipt)
+    async def ingest_sensor_packet(
+        request: Request,
+        source_id: str = Query(min_length=1, max_length=128),
+        source_type: Literal["camera", "screen", "vr", "image"] = Query(),
+        frame_sequence: int = Query(ge=0),
+        device: str | None = Query(default=None, max_length=256),
+        dropped_frames: int = Query(default=0, ge=0),
+    ) -> SensorFrameReceipt:
+        content_type = request.headers.get("content-type", "")
+        payload = await read_bounded_body(request, sensor_ingress.max_payload_bytes)
+        was_registered = registry.contains(source_id)
+        previous_discovery = registry.get_discovery(source_id)
+        try:
+            registry.observe(
+                source_id,
+                source_type=source_type,
+                device=device,
+                capabilities=("rgb", "depth", "infrared"),
+            )
+            receipt = await run_in_threadpool(
+                sensor_ingress.process_packet,
                 source_id=source_id,
                 source_type=source_type,
                 frame_sequence=frame_sequence,
