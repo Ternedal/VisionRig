@@ -931,3 +931,52 @@ def test_fleet_reports_latest_packet_target_recovery() -> None:
         "camera-latest-recovery"
     )
     assert later["packet_target_latest_recovery"]["age_seconds"] == 90.0
+
+
+def test_packet_target_stability_requires_complete_measurement() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+
+    target_only = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v5",
+            "source_id": "camera-target-only",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T20:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+        },
+    )
+    assert target_only.status_code == 200
+
+    measured = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v6",
+            "source_id": "camera-measured",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T20:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": 0.70,
+        },
+    )
+    assert measured.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v19"
+    assert fleet["packet_target_stability"] == {
+        "stable": 1,
+        "recurring": 0,
+        "flapping": 0,
+        "unknown": 1,
+    }
+
+    catalog = client.get("/api/v1/sensors/catalog").json()
+    by_id = {source["source_id"]: source for source in catalog["sources"]}
+    assert by_id["camera-target-only"]["packet_target"]["stability"] == "unknown"
+    assert by_id["camera-measured"]["packet_target"]["stability"] == "stable"
