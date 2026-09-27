@@ -315,3 +315,58 @@ def test_sensor_packet_v2_rejects_corrupt_zlib_plane() -> None:
         assert "zlib" in str(exc) or "decompressed" in str(exc)
     else:
         raise AssertionError("corrupt compressed plane must be rejected")
+
+
+def test_sensor_packet_auto_compression_selects_per_plane() -> None:
+    rng = np.random.default_rng(42)
+    depth = np.zeros((120, 160), dtype=np.uint16)
+    depth[30:90, 40:120] = 1850
+    infrared = rng.integers(
+        0,
+        65536,
+        size=(120, 160),
+        dtype=np.uint16,
+    )
+
+    packet = encode_sensor_packet(
+        rgb_payload=b"jpeg",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        infrared=infrared,
+        compression="auto",
+    )
+    header = inspect_sensor_packet(packet)
+    decoded = decode_sensor_packet(packet)
+
+    assert header.schema_id == "visionrig/sensor-packet/v2"
+    assert header.depth is not None
+    assert header.depth.compression == "zlib"
+    assert header.infrared is not None
+    assert header.infrared.compression == "none"
+    assert header.infrared.byte_length == infrared.nbytes
+    assert header.infrared.raw_byte_length is None
+    assert np.array_equal(decoded.depth_mm, depth)
+    assert np.array_equal(decoded.infrared, infrared)
+
+
+def test_sensor_packet_auto_stays_v2_even_when_plane_is_raw() -> None:
+    rng = np.random.default_rng(7)
+    depth = rng.integers(
+        0,
+        65536,
+        size=(64, 64),
+        dtype=np.uint16,
+    )
+
+    packet = encode_sensor_packet(
+        rgb_payload=b"jpeg",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        compression="auto",
+    )
+    header = inspect_sensor_packet(packet)
+
+    assert header.schema_id == "visionrig/sensor-packet/v2"
+    assert header.depth is not None
+    assert header.depth.compression == "none"
+    assert decode_sensor_packet(packet).depth_mm.tolist() == depth.tolist()
