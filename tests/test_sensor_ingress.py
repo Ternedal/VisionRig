@@ -109,18 +109,21 @@ def test_negotiation_refresh_status_becomes_stale_after_two_intervals() -> None:
         max_payload_bytes=1024,
         clock=lambda: now[0],
     )
+    producer_timestamp = datetime(2020, 1, 1, tzinfo=timezone.utc)
     ingress.heartbeat(
         SensorHeartbeat(
             schema_id="visionrig/sensor-heartbeat/v3",
             source_id="kinect",
             source_type="camera",
             negotiated_max_payload_bytes=1024,
-            capability_refreshed_utc=now[0],
+            capability_refreshed_utc=producer_timestamp,
             capability_refresh_seconds=30.0,
         )
     )
 
     current = ingress.stats().sources[0]
+    assert current.capability_refreshed_utc == producer_timestamp.isoformat()
+    assert current.capability_refresh_observed_utc == now[0].isoformat()
     assert current.capability_refresh_status == "current"
     assert current.capability_refresh_age_seconds == 0.0
 
@@ -128,3 +131,75 @@ def test_negotiation_refresh_status_becomes_stale_after_two_intervals() -> None:
     stale = ingress.stats().sources[0]
     assert stale.capability_refresh_status == "stale"
     assert stale.capability_refresh_age_seconds == 61.0
+
+
+def test_same_reported_refresh_token_does_not_refresh_server_observed_age() -> None:
+    now = [datetime(2026, 9, 27, 7, 0, tzinfo=timezone.utc)]
+    ingress = SensorIngress(
+        VisionRuntime(PerceptionPipeline()),
+        decoder=FakeDecoder(),
+        max_payload_bytes=1024,
+        clock=lambda: now[0],
+    )
+    reported = datetime(2099, 1, 1, tzinfo=timezone.utc)
+    heartbeat = SensorHeartbeat(
+        schema_id="visionrig/sensor-heartbeat/v3",
+        source_id="kinect",
+        source_type="camera",
+        negotiated_max_payload_bytes=1024,
+        capability_refreshed_utc=reported,
+        capability_refresh_seconds=30.0,
+    )
+    ingress.heartbeat(heartbeat)
+
+    now[0] += timedelta(seconds=40)
+    ingress.heartbeat(heartbeat)
+    same = ingress.stats().sources[0]
+    assert same.capability_refresh_observed_utc == "2026-09-27T07:00:00+00:00"
+    assert same.capability_refresh_age_seconds == 40.0
+    assert same.capability_refresh_status == "current"
+
+    now[0] += timedelta(seconds=21)
+    stale = ingress.stats().sources[0]
+    assert stale.capability_refresh_age_seconds == 61.0
+    assert stale.capability_refresh_status == "stale"
+
+
+def test_new_reported_refresh_token_resets_server_observed_age() -> None:
+    now = [datetime(2026, 9, 27, 7, 0, tzinfo=timezone.utc)]
+    ingress = SensorIngress(
+        VisionRuntime(PerceptionPipeline()),
+        decoder=FakeDecoder(),
+        max_payload_bytes=1024,
+        clock=lambda: now[0],
+    )
+    first = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    ingress.heartbeat(
+        SensorHeartbeat(
+            schema_id="visionrig/sensor-heartbeat/v3",
+            source_id="kinect",
+            source_type="camera",
+            negotiated_max_payload_bytes=1024,
+            capability_refreshed_utc=first,
+            capability_refresh_seconds=30.0,
+        )
+    )
+    now[0] += timedelta(seconds=61)
+    assert ingress.stats().sources[0].capability_refresh_status == "stale"
+
+    second = datetime(2020, 1, 1, 0, 0, 30, tzinfo=timezone.utc)
+    ingress.heartbeat(
+        SensorHeartbeat(
+            schema_id="visionrig/sensor-heartbeat/v3",
+            source_id="kinect",
+            source_type="camera",
+            negotiated_max_payload_bytes=1024,
+            capability_refreshed_utc=second,
+            capability_refresh_seconds=30.0,
+        )
+    )
+    refreshed = ingress.stats().sources[0]
+    assert refreshed.capability_refreshed_utc == second.isoformat()
+    assert refreshed.capability_refresh_observed_utc == now[0].isoformat()
+    assert refreshed.capability_refresh_age_seconds == 0.0
+    assert refreshed.capability_refresh_status == "current"

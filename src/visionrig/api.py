@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Literal
+from datetime import datetime
+from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -61,6 +62,7 @@ def create_app(
     modelrig_publisher: ModelRigPerceptionPublisher | None = None,
     sensor_registry: SensorRegistry | None = None,
     sensor_change_journal: SensorChangeJournal | None = None,
+    sensor_clock: Callable[[], datetime] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
@@ -68,11 +70,16 @@ def create_app(
         selected_pipeline,
         event_sinks=((modelrig_publisher,) if modelrig_publisher is not None else ()),
     )
+    sensor_ingress_kwargs: dict[str, object] = {
+        "max_payload_bytes": max_sensor_frame_bytes,
+        "stale_after_seconds": sensor_stale_after_seconds,
+        "offline_after_seconds": sensor_offline_after_seconds,
+    }
+    if sensor_clock is not None:
+        sensor_ingress_kwargs["clock"] = sensor_clock
     sensor_ingress = SensorIngress(
         runtime,
-        max_payload_bytes=max_sensor_frame_bytes,
-        stale_after_seconds=sensor_stale_after_seconds,
-        offline_after_seconds=sensor_offline_after_seconds,
+        **sensor_ingress_kwargs,
     )
     registry = sensor_registry or SensorRegistry()
     sensor_changes = sensor_change_journal or SensorChangeJournal()
@@ -352,7 +359,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v31",
+            "schema": "visionrig/health/v32",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -372,7 +379,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v6",
+                "schema": "visionrig/sensor-ingress/v7",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": [
                     "image/jpeg",
@@ -418,7 +425,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v4",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v5",
             },
         }
 
@@ -525,7 +532,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v7",
+            "schema": "visionrig/sensor-catalog/v8",
             "sources": sources,
         }
 
@@ -536,7 +543,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v4",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v5",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

@@ -26,6 +26,7 @@ VisionRig includes:
 - **negotiated SensorPacket compression strategy with live raw/zlib fallback**
 - **heartbeat v3 observability for negotiated producer budget and refresh freshness**
 - **fleet attention for stale producer capability negotiation**
+- **clock-skew-safe capability freshness using VisionRig-observed refresh time**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
@@ -197,9 +198,12 @@ forced `zlib` when only zlib is available, and raw v2 when only `none` is
 available. A live capability refresh can change that encoder strategy between
 frames without reopening capture or resetting the durable sequence.
 
-Heartbeat v3 reports the currently applied negotiated packet ceiling, the last
-capability refresh timestamp and refresh interval. Runtime/catalog surfaces
-derive `current`, `stale` or `unknown` freshness without persisting that
+Heartbeat v3 reports the currently applied negotiated packet ceiling, the
+producer-reported refresh timestamp and refresh interval. VisionRig also records
+the local UTC time when it first observes each new refresh timestamp. Runtime
+freshness age/status is derived from that **server-observed** time, so producer
+clock skew cannot make a fresh negotiation look stale or keep an old negotiation
+fresh. Both timestamps remain visible for diagnostics without persisting that
 transport telemetry into operator registry state. Fleet v5 counts those states
 and adds only `stale` producers to bounded attention with reason
 `capability_refresh`; legacy/unknown heartbeat-v2 producers are not treated as
