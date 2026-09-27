@@ -76,6 +76,10 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert health["sensor_ingress"]["sensor_packet_transport_schema"] == (
         "visionrig/sensor-packet-transport/v2"
     )
+    assert health["sensor_ingress"]["sensor_packet_payload_thresholds"] == {
+        "warning": 0.8,
+        "critical": 0.95,
+    }
     assert health["sensor_ingress"]["runtime"]["accepted_total"] == 2
 
 
