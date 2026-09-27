@@ -18,7 +18,6 @@ Schema: `visionrig/sensor-runtime-status/v7`.
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
 optional latest accepted SensorPacket transport telemetry, negotiated producer
-payload budget and capability-refresh freshness, negotiated producer
 payload ceiling and capability-refresh freshness,
 `last_seen_utc`, `age_seconds`, `capture_active` and derived `online/stale/offline` presence.
 
