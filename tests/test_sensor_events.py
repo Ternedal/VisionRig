@@ -330,6 +330,13 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "packet_target_recovered_sources": 0,
         "packet_target_recurrence_total": 0,
         "packet_target_recurring_sources": 0,
+        "packet_target_stability": {
+            "stable": 0,
+            "recurring": 0,
+            "flapping": 0,
+            "unknown": 0,
+        },
+        "packet_target_flap_window_seconds": 120.0,
         "attention": [],
         "attention_total": 0,
         "attention_truncated": False,
