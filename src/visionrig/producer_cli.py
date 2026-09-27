@@ -80,8 +80,9 @@ def _encode_packet_with_budget(
             "JPEG quality must satisfy 30 <= min_quality <= initial_quality <= 100"
         )
 
-    target_bytes = int(
-        max_packet_bytes * SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION
+    target_bytes = max(
+        1,
+        int(max_packet_bytes * SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION) - 1,
     )
     quality = initial_quality
     best_packet: bytes | None = None
