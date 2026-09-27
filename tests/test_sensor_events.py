@@ -345,6 +345,12 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "worst_target_utilization": None,
             "worst_observed_utilization": None,
         },
+        "packet_target_sustained_pressure": {
+            "sources": 0,
+            "longest_seconds": None,
+            "longest_source_id": None,
+            "longest_since_utc": None,
+        },
         "attention": [],
         "attention_total": 0,
         "attention_truncated": False,
