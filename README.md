@@ -301,7 +301,7 @@ surfaces enough temporal context to distinguish spikes from persistent producer
 adaptation problems.
 
 
-## VisionRig 0.58.0: sustained pressure episodes
+## VisionRig 0.59.0: sustained pressure episodes
 
 Runtime status v14 now counts sustained packet-target pressure episodes and
 records the latest recovery time after a sustained run. The episode counter
