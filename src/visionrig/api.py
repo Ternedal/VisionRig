@@ -216,6 +216,19 @@ def create_app(
             "journal_state_revision": journal_revision,
         }
 
+    def packet_target_stability_status(runtime_source) -> str:
+        if runtime_source is None:
+            return "unknown"
+        if runtime_source.packet_target_recurrence_count == 0:
+            return "stable"
+        if (
+            runtime_source.packet_target_last_recurrence_seconds is not None
+            and runtime_source.packet_target_last_recurrence_seconds
+            <= packet_target_flap_window_seconds
+        ):
+            return "flapping"
+        return "recurring"
+
     def sensor_fleet_summary_payload() -> dict[str, object]:
         runtime_status = sensor_ingress.stats()
         runtime_by_id = {
@@ -402,19 +415,8 @@ def create_app(
                 if runtime_source.packet_target_recurrence_count > 0:
                     packet_target_recurring_sources += 1
 
-            if runtime_source is None:
-                packet_target_stability_status = "unknown"
-            elif runtime_source.packet_target_recurrence_count == 0:
-                packet_target_stability_status = "stable"
-            elif (
-                runtime_source.packet_target_last_recurrence_seconds is not None
-                and runtime_source.packet_target_last_recurrence_seconds
-                <= packet_target_flap_window_seconds
-            ):
-                packet_target_stability_status = "flapping"
-            else:
-                packet_target_stability_status = "recurring"
-            packet_target_stability_counts[packet_target_stability_status] += 1
+            packet_target_stability = packet_target_stability_status(runtime_source)
+            packet_target_stability_counts[packet_target_stability] += 1
 
             attention_reasons = []
             if control_status == "pending":
@@ -490,9 +492,7 @@ def create_app(
                             if runtime_source is not None
                             else None
                         ),
-                        "packet_target_stability_status": (
-                            packet_target_stability_status
-                        ),
+                        "packet_target_stability_status": packet_target_stability,
                         "capability_refresh_age_seconds": (
                             runtime_source.capability_refresh_age_seconds
                             if runtime_source is not None
@@ -542,7 +542,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v39",
+            "schema": "visionrig/health/v40",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -611,7 +611,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v11",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v12",
             },
         }
 
@@ -680,6 +680,7 @@ def create_app(
             else:
                 control_status = "pending"
             discovery = registry.get_discovery(source_id)
+            packet_target_stability = packet_target_stability_status(runtime_source)
             sources.append(
                 {
                     "source_id": source_id,
@@ -702,6 +703,20 @@ def create_app(
                         if discovery is not None
                         else None
                     ),
+                    "packet_target": {
+                        "stability": packet_target_stability,
+                        "flap_window_seconds": packet_target_flap_window_seconds,
+                        "recurrence_count": (
+                            runtime_source.packet_target_recurrence_count
+                            if runtime_source is not None
+                            else 0
+                        ),
+                        "last_recurrence_seconds": (
+                            runtime_source.packet_target_last_recurrence_seconds
+                            if runtime_source is not None
+                            else None
+                        ),
+                    },
                     "control": {
                         "desired_enabled": metadata.enabled,
                         "desired_revision": desired_revision,
@@ -718,7 +733,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v8",
+            "schema": "visionrig/sensor-catalog/v9",
             "sources": sources,
         }
 
@@ -729,7 +744,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v11",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v12",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

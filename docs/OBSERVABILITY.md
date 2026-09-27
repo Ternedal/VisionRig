@@ -153,7 +153,7 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v8` and adds a bounded control summary:
+`visionrig/sensor-catalog/v9` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
 - `desired_revision`: revision of the current enabled command;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v11` with:
+`visionrig/sensor-bootstrap-snapshot/v12` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v39` and advertises the desired-state
+`GET /health` uses `visionrig/health/v40` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -521,3 +521,23 @@ attention reason or alter capture policy.
 
 Health embeds the same fleet v12 payload. Bootstrap advances with the fleet
 contract so UI clients receive one internally consistent snapshot.
+
+
+### Catalog packet-target stability projection
+
+VisionRig 0.61.0 projects the recurrence stability model into sensor catalog v9.
+Each source now includes a `packet_target` object with:
+
+- `stability`: `stable`, `recurring`, `flapping` or `unknown`;
+- `flap_window_seconds`: the effective configured classification window;
+- `recurrence_count`: sustained recurrences observed in process-local runtime;
+- `last_recurrence_seconds`: latest recovery-to-recurrence interval.
+
+The catalog and fleet use one shared classifier, preventing the same sensor from
+being labelled differently across UI surfaces. A known sensor with no current
+runtime is `unknown`, while an active runtime with no recurrence history is
+`stable`.
+
+Bootstrap v12 embeds catalog v9 alongside fleet v12. Health advances to v40.
+The projection remains process-local transport observability and has no control
+authority.
