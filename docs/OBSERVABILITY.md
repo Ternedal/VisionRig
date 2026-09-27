@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v6` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v7` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -391,3 +391,20 @@ encoded budgeted packet and publishes it on the next heartbeat.
 Observed utilization is transient measurement telemetry. Changes do not emit
 `runtime_changed` events, avoiding change-feed churn from normal frame-to-frame
 size variation.
+
+
+### Fleet packet-target compliance
+
+Fleet summary v7 derives a bounded packet-target status from heartbeat v6
+telemetry:
+
+- `within_target` when the latest observed packet utilization is less than or
+  equal to the negotiated target;
+- `above_target` when the latest observed utilization exceeds the target;
+- `unknown` when either value is unavailable.
+
+An `above_target` source is added to bounded fleet attention with
+`reason = packet_target`. Attention entries expose both target and observed
+utilization plus the derived status. This remains transient transport
+observability; it does not advance registry state, modify desired state, or
+emit semantic change events.
