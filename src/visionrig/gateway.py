@@ -370,6 +370,7 @@ def create_gateway_app(
                 "negotiated_packet_target_utilization": (
                     body.negotiated_packet_target_utilization
                 ),
+                "observed_packet_utilization": body.observed_packet_utilization,
             },
         )
         return _relay(upstream)
