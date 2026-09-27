@@ -44,13 +44,16 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     heartbeat = client.post(
         "/api/v1/sensors/heartbeat",
         json={
-            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "schema_id": "visionrig/sensor-heartbeat/v3",
             "source_id": "kinect-living-room",
             "source_type": "camera",
             "device": "kinect-v2",
             "capabilities": ["rgb", "depth", "infrared"],
             "capture_active": True,
             "applied_revision": 0,
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T06:30:00+00:00",
+            "capability_refresh_seconds": 30.0,
         },
     )
     assert heartbeat.status_code == 200
@@ -78,6 +81,10 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     assert source["source_id"] == "kinect-living-room"
     assert source["runtime"]["presence"] == "online"
     assert source["runtime"]["capabilities"] == ["depth", "infrared", "rgb"]
+    assert source["runtime"]["negotiated_max_payload_bytes"] == 4194304
+    assert source["runtime"]["capability_refreshed_utc"] == (
+        "2026-09-27T06:30:00+00:00"
+    )
     assert source["metadata"] == {
         "source_id": "kinect-living-room",
         "display_name": "Living room Kinect",
@@ -157,7 +164,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v29"
+    assert health["schema"] == "visionrig/health/v30"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -523,7 +530,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v29"
+    assert health["schema"] == "visionrig/health/v30"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
