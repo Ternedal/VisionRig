@@ -625,6 +625,15 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
             "versions_behind": 4,
         },
     ]
+    assert fleet["producer_readiness"] == {
+        "runtime_sources": 2,
+        "heartbeat_v6_sources": 0,
+        "heartbeat_upgrade_required": 2,
+        "heartbeat_v6_ratio": 0.0,
+        "packet_measurement_complete_sources": 0,
+        "packet_measurement_gap_sources": 2,
+        "packet_measurement_complete_ratio": 0.0,
+    }
     assert fleet["packet_target_flap_window_seconds"] == 120.0
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 0,
@@ -728,6 +737,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         health_fleet["heartbeat_upgrade_candidates_truncated"]
         == fleet["heartbeat_upgrade_candidates_truncated"]
     )
+    assert health_fleet["producer_readiness"] == fleet["producer_readiness"]
     assert (
         health_fleet["packet_target_flap_window_seconds"]
         == fleet["packet_target_flap_window_seconds"]
