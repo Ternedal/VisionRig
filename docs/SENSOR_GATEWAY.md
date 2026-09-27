@@ -141,3 +141,18 @@ as an all-or-nothing set; partial negotiation telemetry is rejected.
 Core still accepts heartbeat v2 for backward compatibility. The gateway's
 current forwarding contract uses v3 so remote producers can expose negotiation
 freshness without broadening gateway authority.
+
+
+## Producer heartbeat v3
+
+VisionRig 0.47.0 upgrades the reference producer/gateway heartbeat path to
+`visionrig/sensor-heartbeat/v3`. The gateway accepts and forwards the explicit
+v3 schema plus the all-or-nothing negotiation telemetry tuple:
+
+- `negotiated_max_payload_bytes`;
+- timezone-aware `capability_refreshed_utc`;
+- `capability_refresh_seconds`.
+
+The core continues to accept heartbeat v2 for older producers. Gateway health v6
+advertises the current fixed route set; the heartbeat route remains a bounded,
+explicit proxy and does not expose arbitrary core state.
