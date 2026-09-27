@@ -352,7 +352,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v31",
+            "schema": "visionrig/health/v32",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -372,7 +372,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v6",
+                "schema": "visionrig/sensor-ingress/v7",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": [
                     "image/jpeg",
@@ -418,7 +418,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v4",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v5",
             },
         }
 
@@ -525,7 +525,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v7",
+            "schema": "visionrig/sensor-catalog/v8",
             "sources": sources,
         }
 
