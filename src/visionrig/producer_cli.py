@@ -58,6 +58,7 @@ class _ProducerClient(Protocol):
         capability_refreshed_utc: str | None = None,
         capability_refresh_seconds: float | None = None,
         negotiated_packet_compression: str | None = None,
+        negotiated_packet_target_utilization: float | None = None,
     ): ...
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"): ...
     def send_packet(self, payload: bytes): ...
@@ -319,6 +320,11 @@ def _run_controlled_capture(
                         ),
                         negotiated_packet_compression=(
                             current_packet_compression
+                            if packet_transport_provider is not None
+                            else None
+                        ),
+                        negotiated_packet_target_utilization=(
+                            current_packet_target_utilization
                             if packet_transport_provider is not None
                             else None
                         ),
