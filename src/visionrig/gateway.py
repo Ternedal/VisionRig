@@ -296,7 +296,7 @@ def create_gateway_app(
             "POST",
             "/api/v1/sensors/heartbeat",
             json={
-                "schema_id": "visionrig/sensor-heartbeat/v3",
+                "schema_id": body.schema_id,
                 "source_id": body.source_id,
                 "source_type": body.source_type,
                 "device": body.device,
