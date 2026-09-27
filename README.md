@@ -190,18 +190,12 @@ remote ceiling changes, the next packet uses the new budget without resetting
 the durable frame sequence. A failed refresh stops capture through the existing
 fail-closed cleanup path rather than continuing on stale transport assumptions.
 
-Heartbeat v3 now reports the effective negotiated payload budget, the UTC time
-of the latest successful capability refresh, and the configured refresh
-interval. Runtime status derives `current/stale/unknown` freshness plus age
+Heartbeat v3 reports the effective negotiated payload budget, the UTC time of
+the latest successful capability refresh, and the configured refresh interval.
+Runtime/catalog surfaces derive `current`, `stale` or `unknown` freshness
 without advancing persistent registry state. Budget changes emit a semantic
-`runtime_changed` event; timestamp-only refreshes do not, avoiding change-feed
-heartbeat spam.
-Heartbeat v3 reports the active negotiated packet ceiling, last successful
-capability-refresh UTC and refresh interval back to VisionRig. Runtime/catalog
-surfaces derive `current`, `stale` or `unknown` freshness without
-persisting that transport telemetry into operator registry state. Timestamp-only
-refreshes do not create semantic change-feed events; an actual negotiated-limit
-change does.
+`runtime_changed` event; timestamp-only refreshes do not, avoiding
+change-feed heartbeat spam.
 
 `GET /api/v1/sensors/status` exposes the most recent accepted SensorPacket
 transport telemetry per source: total packet bytes, RGB bytes, raw/wire
