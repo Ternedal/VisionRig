@@ -532,6 +532,12 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "above_target": 0,
         "unknown": 4,
     }
+    assert fleet["packet_target_pressure"] == {
+        "clear": 0,
+        "transient": 0,
+        "sustained": 0,
+        "unknown": 4,
+    }
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -559,6 +565,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert health_fleet["capability_refresh"] == fleet["capability_refresh"]
     assert health_fleet["negotiated_compression"] == fleet["negotiated_compression"]
     assert health_fleet["packet_target"] == fleet["packet_target"]
+    assert health_fleet["packet_target_pressure"] == fleet["packet_target_pressure"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
