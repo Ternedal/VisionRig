@@ -153,7 +153,7 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v12` and adds a bounded control summary:
+`visionrig/sensor-catalog/v13` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
 - `desired_revision`: revision of the current enabled command;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v21` with:
+`visionrig/sensor-bootstrap-snapshot/v22` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v49` and advertises the desired-state
+`GET /health` uses `visionrig/health/v50` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
