@@ -351,6 +351,11 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "longest_source_id": None,
             "longest_since_utc": None,
         },
+        "packet_target_recurrence_hotspot": {
+            "max_recurrence_count": 0,
+            "source_id": None,
+            "last_recurrence_seconds": None,
+        },
         "attention": [],
         "attention_total": 0,
         "attention_truncated": False,
