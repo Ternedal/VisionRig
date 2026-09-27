@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 import pytest
@@ -6,6 +7,7 @@ from visionrig.contracts import SourceDescriptor
 from visionrig.pipeline import PerceptionPipeline
 from visionrig.runtime import VisionRuntime
 from visionrig.sensor_ingress import (
+    SensorHeartbeat,
     SensorIngress,
     SensorIngressBusy,
     SensorMediaTypeError,
@@ -97,3 +99,32 @@ def test_sensor_ingress_fails_fast_when_processing_slot_is_busy() -> None:
             )
     finally:
         ingress._processing.release()
+
+
+def test_negotiation_refresh_status_becomes_stale_after_two_intervals() -> None:
+    now = [datetime(2026, 9, 27, 7, 0, tzinfo=timezone.utc)]
+    ingress = SensorIngress(
+        VisionRuntime(PerceptionPipeline()),
+        decoder=FakeDecoder(),
+        max_payload_bytes=1024,
+        clock=lambda: now[0],
+    )
+    ingress.heartbeat(
+        SensorHeartbeat(
+            schema_id="visionrig/sensor-heartbeat/v3",
+            source_id="kinect",
+            source_type="camera",
+            negotiated_max_payload_bytes=1024,
+            capability_refreshed_utc=now[0],
+            capability_refresh_seconds=30.0,
+        )
+    )
+
+    current = ingress.stats().sources[0]
+    assert current.capability_refresh_status == "current"
+    assert current.capability_refresh_age_seconds == 0.0
+
+    now[0] += timedelta(seconds=61)
+    stale = ingress.stats().sources[0]
+    assert stale.capability_refresh_status == "stale"
+    assert stale.capability_refresh_age_seconds == 61.0
