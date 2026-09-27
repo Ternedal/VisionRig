@@ -24,7 +24,8 @@ payload ceiling, negotiated packet compression and capability-refresh freshness,
 ## Heartbeat
 
 `POST /api/v1/sensors/heartbeat` accepts
-`visionrig/sensor-heartbeat/v2`. Cross-device clients use the same route
+`visionrig/sensor-heartbeat/v2`, `visionrig/sensor-heartbeat/v3` and
+`visionrig/sensor-heartbeat/v4`. Cross-device clients use the same route
 through the authenticated sensor gateway.
 
 Heartbeat v3 adds an optional all-or-nothing producer transport negotiation
