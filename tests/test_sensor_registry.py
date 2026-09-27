@@ -112,6 +112,8 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "stability": "stable",
         "target_utilization": None,
         "observed_utilization": None,
+        "overshoot_delta": None,
+        "overshoot_ratio": None,
         "attention_streak_threshold": 3,
         "above_streak": 0,
         "above_since_utc": None,
@@ -583,6 +585,11 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "unknown": 2,
     }
     assert fleet["packet_target_flap_window_seconds"] == 120.0
+    assert fleet["packet_target_overshoot"] == {
+        "measured_sources": 0,
+        "max_delta": None,
+        "max_ratio": None,
+    }
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -623,6 +630,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         health_fleet["packet_target_flap_window_seconds"]
         == fleet["packet_target_flap_window_seconds"]
     )
+    assert health_fleet["packet_target_overshoot"] == fleet["packet_target_overshoot"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
