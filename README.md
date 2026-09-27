@@ -433,3 +433,14 @@ and server-clock recovery timestamp.
 
 This gives dashboards a direct recovery signal alongside current pressure and
 recurrence hotspot telemetry, without changing attention or capture policy.
+
+
+## VisionRig 0.68.0: latest recovery age
+
+The fleet latest-recovery snapshot now includes `age_seconds`, derived from
+the same server clock used by sensor ingress. Dashboards can therefore render
+"recovered N seconds ago" without comparing timestamps client-side or depending
+on client clock skew.
+
+The age is process-local observability only and does not affect attention,
+capture or adaptation policy.

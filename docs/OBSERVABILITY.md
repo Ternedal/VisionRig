@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v17` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v18` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v18` with:
+`visionrig/sensor-bootstrap-snapshot/v19` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v46` and advertises the desired-state
+`GET /health` uses `visionrig/health/v47` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -685,3 +685,22 @@ source-id processing retains the first source.
 Bootstrap v18 embeds fleet v17 and health advances to v46. The latest-recovery
 summary is process-local operational telemetry only; it creates no semantic
 change event, alert, or control action.
+
+
+### Latest recovery age
+
+VisionRig 0.68.0 extends fleet summary v18 so
+`packet_target_latest_recovery` also exposes `age_seconds`.
+
+The age is computed from the same effective server clock used by
+`SensorIngress`, against the selected source's
+`packet_target_last_recovered_utc`. It is clamped at zero and rounded to three
+decimal places. This avoids client clock skew and keeps recovery age consistent
+with the existing server-clock packet-pressure durations.
+
+If no sustained recovery exists, `source_id`, `recovered_utc` and
+`age_seconds` are all `null`.
+
+Bootstrap v19 embeds fleet v18 and health advances to v47. Recovery age remains
+process-local operational telemetry and creates no semantic event or control
+action.
