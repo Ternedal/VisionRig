@@ -455,3 +455,17 @@ classified as stable, recurring or flapping.
 
 Sources with incomplete packet-target telemetry are reported as `unknown`.
 This avoids presenting missing measurement data as evidence of stability.
+
+
+## VisionRig 0.70.0: packet-target measurement coverage
+
+Fleet telemetry now separates packet-target observability coverage into three
+states: `complete`, `target_only`, and `unavailable`.
+
+This makes an `unknown` compliance/stability result explainable at fleet level:
+dashboards can distinguish producers that advertise a target but have not
+reported observed utilization from older/offline sources with no packet-target
+measurement at all.
+
+The coverage counts are diagnostic only and do not affect attention, capture,
+or adaptation policy.
