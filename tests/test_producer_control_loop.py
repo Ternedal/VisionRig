@@ -253,13 +253,13 @@ def test_packet_budget_adapts_jpeg_quality_below_warning_threshold() -> None:
         encode_jpeg=encode_jpeg,
         initial_quality=80,
         min_quality=30,
-        max_packet_bytes=1000,
+        max_packet_bytes=1024,
     )
 
-    assert quality == 65
-    assert qualities == [80, 75, 70, 65]
-    assert len(packet) == 750
-    assert utilization == 0.75
+    assert quality == 70
+    assert qualities == [80, 75, 70]
+    assert len(packet) == 800
+    assert utilization == 800 / 1024
     assert utilization < 0.80
 
 
@@ -272,12 +272,12 @@ def test_packet_budget_accepts_irreducible_warning_but_not_overflow() -> None:
         encode_jpeg=lambda _payload, q: b"x" * q,
         initial_quality=80,
         min_quality=30,
-        max_packet_bytes=1000,
+        max_packet_bytes=1024,
     )
 
     assert quality == 30
     assert len(packet) == 880
-    assert utilization == 0.88
+    assert utilization == 880 / 1024
 
 
 def test_packet_budget_failure_happens_before_send_and_sequence_reservation() -> None:
