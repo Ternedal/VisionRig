@@ -469,3 +469,15 @@ measurement at all.
 
 The coverage counts are diagnostic only and do not affect attention, capture,
 or adaptation policy.
+
+
+## VisionRig 0.71.0: per-source packet-target measurement state
+
+Sensor catalog now exposes a normalized `measurement` state inside each
+source's `packet_target` block: `complete`, `target_only`, or
+`unavailable`.
+
+The same shared classifier now drives both catalog projection and fleet
+measurement coverage, so dashboards can explain an `unknown` packet-target
+status directly on the affected sensor row without duplicating inference logic
+client-side.
