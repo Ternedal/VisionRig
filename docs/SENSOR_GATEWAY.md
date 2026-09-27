@@ -118,3 +118,13 @@ full core health response.
 The effective advertised payload ceiling is the lower of the gateway and core
 limits. If core health is unavailable, malformed, or lacks the expected bounded
 transport fields, the gateway returns 502 rather than guessing.
+
+
+## Heartbeat v3 forwarding
+
+The gateway validates the heartbeat v3 negotiation tuple before forwarding it to
+loopback core. `negotiated_max_payload_bytes`,
+`capability_refreshed_utc`, and `capability_refresh_seconds` must either all
+be present or all be absent; the refresh timestamp must be timezone-aware.
+Current producers send v3. Core continues to accept v2 for backward
+compatibility.
