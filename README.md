@@ -370,3 +370,20 @@ effective attention/flap thresholds.
 Fleet and catalog share the same compliance, pressure and stability classifiers,
 so operator surfaces can render one consistent per-sensor transport state
 without reconstructing policy client-side.
+
+
+## VisionRig 0.63.0: packet-target overshoot telemetry
+
+Packet-target diagnostics now quantify how far the latest observed packet is
+above its negotiated target instead of exposing only a binary compliance state.
+
+Per-source catalog diagnostics and fleet attention expose
+`overshoot_delta` / `packet_target_overshoot_delta` as
+`max(0, observed - target)`, plus an overshoot ratio relative to the target.
+A compliant measured source reports `0.0`; unavailable target/observed data
+reports `null`.
+
+Fleet summary v13 also exposes a bounded `packet_target_overshoot` aggregate
+with the number of measurable sources and the current maximum delta and ratio.
+This remains diagnostic telemetry only and does not alter capture or adaptation
+policy.
