@@ -980,6 +980,16 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
         "target_only": 1,
         "unavailable": 0,
     }
+    assert fleet["heartbeat_schema_coverage"] == {
+        "runtime_sources": 2,
+        "v2": 0,
+        "v3": 0,
+        "v4": 0,
+        "v5": 1,
+        "v6": 1,
+        "no_heartbeat": 0,
+        "upgrade_required": 1,
+    }
     assert fleet["packet_target_measurement_gap_total"] == 1
     assert fleet["packet_target_measurement_gaps_truncated"] is False
     assert fleet["packet_target_measurement_gaps"] == [
@@ -1033,6 +1043,16 @@ def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
     fleet = client.get("/api/v1/sensors/fleet").json()
     assert fleet["schema"] == "visionrig/sensor-fleet-summary/v23"
     assert fleet["packet_target_measurement_gap_total"] == 40
+    assert fleet["heartbeat_schema_coverage"] == {
+        "runtime_sources": 40,
+        "v2": 0,
+        "v3": 0,
+        "v4": 0,
+        "v5": 40,
+        "v6": 0,
+        "no_heartbeat": 0,
+        "upgrade_required": 40,
+    }
     assert len(fleet["packet_target_measurement_gaps"]) == 32
     assert fleet["packet_target_measurement_gaps_truncated"] is True
     assert fleet["packet_target_measurement_gaps"][0]["source_id"] == "camera-gap-00"
