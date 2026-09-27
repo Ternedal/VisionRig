@@ -206,7 +206,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v50"
+    assert health["schema"] == "visionrig/health/v51"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -533,7 +533,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     response = client.get("/api/v1/sensors/fleet")
     assert response.status_code == 200
     fleet = response.json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v20"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
     assert fleet["state_revision"] == 5
     assert fleet["change_consistency"]["status"] == "synced"
     assert fleet["change_consistency"]["journal_state_revision"] == 5
@@ -618,6 +618,24 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "recovered_utc": None,
         "age_seconds": None,
     }
+    assert fleet["packet_target_measurement_gap_total"] == 2
+    assert fleet["packet_target_measurement_gaps_truncated"] is False
+    assert fleet["packet_target_measurement_gaps"] == [
+        {
+            "source_id": "online-ok",
+            "measurement": "unavailable",
+            "presence": "online",
+            "negotiated_packet_target_utilization": None,
+            "observed_packet_utilization": None,
+        },
+        {
+            "source_id": "pending-camera",
+            "measurement": "unavailable",
+            "presence": "online",
+            "negotiated_packet_target_utilization": None,
+            "observed_packet_utilization": None,
+        },
+    ]
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -634,7 +652,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v50"
+    assert health["schema"] == "visionrig/health/v51"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
@@ -674,6 +692,18 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert (
         health_fleet["packet_target_latest_recovery"]
         == fleet["packet_target_latest_recovery"]
+    )
+    assert (
+        health_fleet["packet_target_measurement_gaps"]
+        == fleet["packet_target_measurement_gaps"]
+    )
+    assert (
+        health_fleet["packet_target_measurement_gap_total"]
+        == fleet["packet_target_measurement_gap_total"]
+    )
+    assert (
+        health_fleet["packet_target_measurement_gaps_truncated"]
+        == fleet["packet_target_measurement_gaps_truncated"]
     )
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
@@ -849,7 +879,7 @@ def test_stale_capability_refresh_enters_fleet_attention() -> None:
 
     now[0] = datetime(2026, 9, 27, 7, 1, 1, tzinfo=timezone.utc)
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v20"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
     assert fleet["capability_refresh"] == {
         "current": 0,
         "stale": 1,

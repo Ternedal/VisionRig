@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v20` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v21` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v22` with:
+`visionrig/sensor-bootstrap-snapshot/v23` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v50` and advertises the desired-state
+`GET /health` uses `visionrig/health/v51` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -765,3 +765,33 @@ row-level and fleet-level observability.
 Bootstrap v22 embeds catalog v13; health advances to v50. This is diagnostic
 projection only and introduces no new attention, semantic event, or control
 behavior.
+
+
+### Packet-target measurement gaps
+
+VisionRig 0.72.0 extends fleet summary v21 with a bounded diagnostics list for
+connected runtime sources whose packet-target `measurement` is not
+`complete`.
+
+The fleet payload exposes:
+
+- `packet_target_measurement_gaps`: up to 32 runtime sources, in deterministic
+  source-id order, with `source_id`, `measurement`, `presence`,
+  `negotiated_packet_target_utilization`, and
+  `observed_packet_utilization`;
+- `packet_target_measurement_gap_total`: total number of connected runtime
+  sources with incomplete packet-target measurement;
+- `packet_target_measurement_gaps_truncated`: whether the bounded list omits
+  additional gap sources.
+
+Catalog-only sources without runtime state are intentionally excluded from this
+list because there is no active producer to remediate. `complete` runtime
+sources are also excluded.
+
+These diagnostics do not contribute to `attention_total` and do not add an
+attention reason. This keeps telemetry-upgrade work visible without treating it
+as an operational incident.
+
+Bootstrap v23 embeds fleet v21 and health advances to v51. The gap list remains
+process-local operational telemetry and creates no semantic event or control
+action.
