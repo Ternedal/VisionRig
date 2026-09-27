@@ -992,6 +992,15 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
     }
     assert fleet["heartbeat_upgrade_candidate_total"] == 1
     assert fleet["heartbeat_upgrade_candidates_truncated"] is False
+    assert fleet["producer_readiness"] == {
+        "runtime_sources": 2,
+        "heartbeat_v6_sources": 1,
+        "heartbeat_upgrade_required": 1,
+        "heartbeat_v6_ratio": 0.5,
+        "packet_measurement_complete_sources": 1,
+        "packet_measurement_gap_sources": 1,
+        "packet_measurement_complete_ratio": 0.5,
+    }
     assert fleet["heartbeat_upgrade_candidates"] == [
         {
             "source_id": "camera-target-only",
@@ -1067,6 +1076,15 @@ def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
         "upgrade_required": 40,
     }
     assert fleet["heartbeat_upgrade_candidate_total"] == 40
+    assert fleet["producer_readiness"] == {
+        "runtime_sources": 40,
+        "heartbeat_v6_sources": 0,
+        "heartbeat_upgrade_required": 40,
+        "heartbeat_v6_ratio": 0.0,
+        "packet_measurement_complete_sources": 0,
+        "packet_measurement_gap_sources": 40,
+        "packet_measurement_complete_ratio": 0.0,
+    }
     assert len(fleet["heartbeat_upgrade_candidates"]) == 32
     assert fleet["heartbeat_upgrade_candidates_truncated"] is True
     assert fleet["heartbeat_upgrade_candidates"][0]["source_id"] == "camera-gap-00"
