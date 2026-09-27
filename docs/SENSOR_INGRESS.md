@@ -117,8 +117,11 @@ The header schema is `visionrig/sensor-packet/v1` or
 recompressed by the packet layer.
 
 v1 depth/IR planes are raw little-endian `uint16`. v2 adds per-plane
-`compression` and `raw_byte_length`; VisionRig 0.40.0 supports `none` and
-`zlib`. Decompression is bounded to the exact declared
+`compression` and `raw_byte_length`; the wire values remain `none` and
+`zlib`. VisionRig 0.41.0 also provides an encoder-side `auto` strategy that
+chooses independently per plane: zlib only when it is smaller, otherwise raw
+`none`. `auto` is not a third wire compression type. Decompression is bounded
+to the exact declared
 `width*height*2` raw size, capped at 32 MiB per plane, and rejects trailing or
 overlong compressed streams.
 
