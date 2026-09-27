@@ -20,4 +20,4 @@ __all__ = [
     "PerceptionPipeline",
 ]
 
-__version__ = "0.67.0"
+__version__ = "0.68.0"
