@@ -9,6 +9,7 @@ from visionrig.sensor_packet import (
     ArrayMetricDepthSampler,
     SensorPacketError,
     decode_sensor_packet,
+    describe_sensor_packet_transport,
     encode_sensor_packet,
     inspect_sensor_packet,
 )
@@ -370,3 +371,92 @@ def test_sensor_packet_auto_stays_v2_even_when_plane_is_raw() -> None:
     assert header.depth is not None
     assert header.depth.compression == "none"
     assert decode_sensor_packet(packet).depth_mm.tolist() == depth.tolist()
+
+
+def test_sensor_packet_transport_description_reports_wire_and_raw_bytes() -> None:
+    depth = np.zeros((32, 32), dtype=np.uint16)
+    depth[8:24, 8:24] = 1800
+    infrared = np.arange(32 * 32, dtype=np.uint16).reshape(32, 32)
+
+    packet = encode_sensor_packet(
+        rgb_payload=b"jpeg-data",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        infrared=infrared,
+        compression="auto",
+    )
+    telemetry = describe_sensor_packet_transport(packet)
+
+    assert telemetry.schema == "visionrig/sensor-packet-transport/v1"
+    assert telemetry.packet_schema == "visionrig/sensor-packet/v2"
+    assert telemetry.packet_bytes == len(packet)
+    assert telemetry.rgb_bytes == len(b"jpeg-data")
+    assert telemetry.depth_raw_bytes == depth.nbytes
+    assert telemetry.infrared_raw_bytes == infrared.nbytes
+    assert telemetry.numeric_raw_bytes == depth.nbytes + infrared.nbytes
+    assert telemetry.numeric_wire_bytes == (
+        telemetry.depth_wire_bytes + telemetry.infrared_wire_bytes
+    )
+    assert telemetry.numeric_compression_ratio == round(
+        telemetry.numeric_wire_bytes / telemetry.numeric_raw_bytes,
+        6,
+    )
+
+
+def test_sensor_status_exposes_packet_transport_and_clears_on_plain_frame(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(sensor_ingress, "OpenCVImageDecoder", lambda: FakeCVDecoder())
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            max_sensor_frame_bytes=1024 * 1024,
+        )
+    )
+    depth = np.zeros((32, 32), dtype=np.uint16)
+    depth[8:24, 8:24] = 1800
+    packet = encode_sensor_packet(
+        rgb_payload=b"rgb",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        compression="auto",
+    )
+
+    response = client.post(
+        "/api/v1/sensor-packets/ingest",
+        params={
+            "source_id": "transport-camera",
+            "source_type": "camera",
+            "frame_sequence": 1,
+        },
+        content=packet,
+        headers={"content-type": SENSOR_PACKET_MEDIA_TYPE},
+    )
+    assert response.status_code == 200
+
+    source = client.get("/api/v1/sensors/status").json()["sources"][0]
+    telemetry = source["packet_transport"]
+    assert telemetry["schema"] == "visionrig/sensor-packet-transport/v1"
+    assert telemetry["packet_schema"] == "visionrig/sensor-packet/v2"
+    assert telemetry["packet_bytes"] == len(packet)
+    assert telemetry["depth_raw_bytes"] == depth.nbytes
+    assert telemetry["numeric_compression_ratio"] < 1.0
+    assert telemetry["payload_utilization"] == round(
+        len(packet) / (1024 * 1024),
+        6,
+    )
+
+    plain = client.post(
+        "/api/v1/frames/ingest",
+        params={
+            "source_id": "transport-camera",
+            "source_type": "camera",
+            "frame_sequence": 2,
+        },
+        content=b"plain-rgb",
+        headers={"content-type": "image/jpeg"},
+    )
+    assert plain.status_code == 200
+
+    refreshed = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert refreshed["packet_transport"] is None

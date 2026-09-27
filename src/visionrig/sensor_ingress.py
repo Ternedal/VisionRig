@@ -8,7 +8,7 @@ sensors without exposing raw image data.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Callable, Literal, Protocol
@@ -22,7 +22,9 @@ from .sensor_packet import (
     ArrayMetricDepthSampler,
     SENSOR_PACKET_MEDIA_TYPE,
     SensorPacketError,
+    SensorPacketTransport,
     decode_sensor_packet,
+    describe_sensor_packet_transport,
 )
 
 
@@ -136,6 +138,7 @@ class SensorSourceStats:
     accepted_frames: int
     heartbeat_count: int
     dropped_frames_total: int
+    packet_transport: dict[str, object] | None
     last_seen_utc: str
 
 
@@ -166,6 +169,7 @@ class _MutableSourceStats:
     accepted_frames: int
     heartbeat_count: int
     dropped_frames_total: int
+    packet_transport: SensorPacketTransport | None
     last_seen: datetime
 
 
@@ -253,6 +257,7 @@ class SensorIngress:
                     accepted_frames=0,
                     heartbeat_count=1,
                     dropped_frames_total=0,
+                    packet_transport=None,
                     last_seen=now,
                 )
             else:
@@ -277,6 +282,7 @@ class SensorIngress:
         device: str | None,
         frame_sequence: int,
         dropped_frames: int,
+        packet_transport: SensorPacketTransport | None = None,
     ) -> None:
         now = self._clock()
         with self._metrics_lock:
@@ -293,6 +299,7 @@ class SensorIngress:
                     accepted_frames=1,
                     heartbeat_count=0,
                     dropped_frames_total=dropped_frames,
+                    packet_transport=packet_transport,
                     last_seen=now,
                 )
                 return
@@ -302,6 +309,7 @@ class SensorIngress:
             current.last_sequence = frame_sequence
             current.accepted_frames += 1
             current.dropped_frames_total += dropped_frames
+            current.packet_transport = packet_transport
             current.last_seen = now
 
     def _presence(self, age_seconds: float) -> SensorPresence:
@@ -333,12 +341,24 @@ class SensorIngress:
                     accepted_frames=state.accepted_frames,
                     heartbeat_count=state.heartbeat_count,
                     dropped_frames_total=state.dropped_frames_total,
+                    packet_transport=(
+                        {
+                            **asdict(state.packet_transport),
+                            "payload_utilization": round(
+                                state.packet_transport.packet_bytes
+                                / self._max_payload_bytes,
+                                6,
+                            ),
+                        }
+                        if state.packet_transport is not None
+                        else None
+                    ),
                     last_seen_utc=state.last_seen.isoformat(),
                 )
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v4",
+                schema="visionrig/sensor-runtime-status/v5",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
@@ -399,6 +419,7 @@ class SensorIngress:
 
             try:
                 packet = decode_sensor_packet(payload)
+                packet_transport = describe_sensor_packet_transport(payload)
                 image = self._decoder.decode(
                     packet.rgb_payload,
                     packet.rgb_content_type,
@@ -436,6 +457,7 @@ class SensorIngress:
                 device=device,
                 frame_sequence=event.frame_sequence,
                 dropped_frames=event.dropped_frames,
+                packet_transport=packet_transport,
             )
             return SensorFrameReceipt(
                 source_id=source_id,

@@ -17,6 +17,7 @@ VisionRig includes:
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
 - **bounded binary SensorPacket v1/v2 transport for RGB + color-aligned metric depth + infrared**
+- **per-source SensorPacket transport telemetry with compression ratio and ingress-limit utilization**
 - **remote Kinect v2 producer with producer-side color/depth alignment**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
@@ -167,6 +168,12 @@ producer host and emits SensorPacket/v2 with adaptive per-plane compression:
 zlib is used only when it makes that depth/IR plane smaller; otherwise the plane
 stays raw. The packet still uses the same durable sequence/backpressure state
 machine as normal frames.
+
+`GET /api/v1/sensors/status` exposes the most recent accepted SensorPacket
+transport telemetry per source: total packet bytes, RGB bytes, raw/wire
+depth+IR bytes, per-plane compression, numeric compression ratio and fraction of
+the configured ingress byte limit. A later accepted non-packet RGB frame clears
+that telemetry so dashboards do not display stale transport data.
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.

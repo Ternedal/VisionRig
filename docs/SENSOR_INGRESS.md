@@ -28,7 +28,7 @@ Content-Type: image/jpeg
 ```
 
 A successful response is a `visionrig/sensor-frame-receipt/v1`, and the
-resulting `PerceptionEvent/v2` is available through the existing bounded
+resulting `PerceptionEvent/v3` is available through the existing bounded
 journal.
 
 ## Backpressure policy
@@ -150,3 +150,26 @@ SensorPacket v1/v2 intentionally does not define calibration transport or
 perform depth alignment server-side. Producers must send a color-aligned depth plane.
 This keeps Kinect/Quest vendor SDK objects outside the network contract and makes
 the server-side sampler deterministic.
+
+
+## Packet transport telemetry
+
+For the most recently accepted SensorPacket on a source,
+`GET /api/v1/sensors/status` includes
+`packet_transport` with schema
+`visionrig/sensor-packet-transport/v1`.
+
+The telemetry contains only transport metadata:
+
+- packet schema and total packet bytes;
+- encoded RGB bytes;
+- depth wire bytes, raw bytes and selected compression;
+- infrared wire bytes, raw bytes and selected compression;
+- combined numeric wire/raw byte totals;
+- `numeric_compression_ratio = numeric_wire_bytes / numeric_raw_bytes`;
+- `payload_utilization = packet_bytes / configured_max_payload_bytes`.
+
+No pixels, depth values, IR values or embeddings are exposed. The telemetry is
+updated only after successful packet processing. A later successfully accepted
+plain JPEG/PNG/WebP frame for the same source clears `packet_transport`, so
+the status surface never presents old multimodal transport figures as current.
