@@ -50,7 +50,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v7"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v8"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -65,8 +65,8 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v31"
-    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v6"
+    assert health["schema"] == "visionrig/health/v32"
+    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v7"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
         "visionrig/sensor-heartbeat/v3",
@@ -122,6 +122,7 @@ def test_sensor_heartbeat_registers_capabilities_without_frame() -> None:
     assert source["applied_revision"] == 2
     assert source["negotiated_max_payload_bytes"] is None
     assert source["capability_refreshed_utc"] is None
+    assert source["capability_refresh_observed_utc"] is None
     assert source["capability_refresh_age_seconds"] is None
     assert source["capability_refresh_status"] == "unknown"
     assert source["presence"] == "online"
@@ -230,18 +231,25 @@ def test_sensor_heartbeat_v3_exposes_negotiated_transport_runtime_state() -> Non
     source = client.get("/api/v1/sensors/status").json()["sources"][0]
     assert source["negotiated_max_payload_bytes"] == 4 * 1024 * 1024
     assert source["capability_refreshed_utc"] == refreshed
+    assert source["capability_refresh_observed_utc"] is not None
     assert source["capability_refresh_age_seconds"] >= 0
     assert source["capability_refresh_status"] == "current"
 
 
-def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
+def test_sensor_heartbeat_v3_ignores_producer_clock_skew_for_freshness() -> None:
+    now = [datetime(2026, 9, 27, 7, 0, tzinfo=timezone.utc)]
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: now[0],
+        )
+    )
 
     response = client.post(
         "/api/v1/sensors/heartbeat",
         json={
             "schema_id": "visionrig/sensor-heartbeat/v3",
-            "source_id": "kinect-stale-capabilities",
+            "source_id": "kinect-clock-skew",
             "source_type": "camera",
             "negotiated_max_payload_bytes": 4 * 1024 * 1024,
             "capability_refreshed_utc": "2020-01-01T00:00:00+00:00",
@@ -251,8 +259,15 @@ def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
     assert response.status_code == 200
 
     source = client.get("/api/v1/sensors/status").json()["sources"][0]
-    assert source["capability_refresh_status"] == "stale"
-    assert source["capability_refresh_age_seconds"] > 60
+    assert source["capability_refreshed_utc"] == "2020-01-01T00:00:00+00:00"
+    assert source["capability_refresh_observed_utc"] == "2026-09-27T07:00:00+00:00"
+    assert source["capability_refresh_status"] == "current"
+    assert source["capability_refresh_age_seconds"] == 0.0
+
+    now[0] = datetime(2026, 9, 27, 7, 1, 1, tzinfo=timezone.utc)
+    stale = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert stale["capability_refresh_status"] == "stale"
+    assert stale["capability_refresh_age_seconds"] == 61.0
 
 
 def test_sensor_heartbeat_v3_rejects_partial_negotiation_telemetry() -> None:
