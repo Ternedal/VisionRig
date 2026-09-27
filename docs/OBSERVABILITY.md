@@ -13,11 +13,12 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v6`.
+Schema: `visionrig/sensor-runtime-status/v7`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
-optional latest accepted SensorPacket transport telemetry,
+optional latest accepted SensorPacket transport telemetry, negotiated producer
+payload ceiling and capability-refresh freshness,
 `last_seen_utc`, `age_seconds`, `capture_active` and derived `online/stale/offline` presence.
 
 ## Heartbeat
@@ -25,6 +26,24 @@ optional latest accepted SensorPacket transport telemetry,
 `POST /api/v1/sensors/heartbeat` accepts
 `visionrig/sensor-heartbeat/v2`. Cross-device clients use the same route
 through the authenticated sensor gateway.
+
+Heartbeat v3 adds an optional all-or-nothing producer transport negotiation
+tuple:
+
+- `negotiated_max_payload_bytes`;
+- timezone-aware `capability_refreshed_utc`;
+- `capability_refresh_seconds`.
+
+Runtime status and the catalog expose those values plus derived
+`capability_refresh_age_seconds` and `capability_refresh_status`:
+`current` while the last successful refresh is no older than twice the
+producer's declared refresh interval, `stale` after that, and `unknown` when
+the producer does not publish negotiation telemetry.
+
+This is transient producer telemetry. It does not advance registry
+`state_revision`, change desired state, or grant authority. The semantic
+change feed emits `runtime_changed` when the negotiated byte ceiling changes,
+but not when only the refresh timestamp advances.
 
 ## Operator sensor catalog
 
@@ -288,7 +307,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v29` and advertises the desired-state
+`GET /health` uses `visionrig/health/v30` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
