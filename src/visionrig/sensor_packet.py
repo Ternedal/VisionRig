@@ -51,6 +51,23 @@ class SensorPacketHeader(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
+class SensorPacketTransport:
+    schema: str
+    packet_schema: str
+    packet_bytes: int
+    rgb_bytes: int
+    depth_wire_bytes: int
+    depth_raw_bytes: int
+    depth_compression: str | None
+    infrared_wire_bytes: int
+    infrared_raw_bytes: int
+    infrared_compression: str | None
+    numeric_wire_bytes: int
+    numeric_raw_bytes: int
+    numeric_compression_ratio: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class DecodedSensorPacket:
     rgb_content_type: str
     rgb_payload: bytes
@@ -160,6 +177,41 @@ def inspect_sensor_packet(payload: bytes) -> SensorPacketHeader:
             ):
                 raise SensorPacketError("SensorPacket/v1 planes must be uncompressed")
     return header
+
+
+def describe_sensor_packet_transport(payload: bytes) -> SensorPacketTransport:
+    header = inspect_sensor_packet(payload)
+
+    def plane_sizes(plane: SensorPacketPlane | None) -> tuple[int, int, str | None]:
+        if plane is None:
+            return 0, 0, None
+        raw = _expected_raw_plane_bytes(plane, label="plane")
+        return plane.byte_length, raw, plane.compression
+
+    depth_wire, depth_raw, depth_compression = plane_sizes(header.depth)
+    ir_wire, ir_raw, ir_compression = plane_sizes(header.infrared)
+    numeric_wire = depth_wire + ir_wire
+    numeric_raw = depth_raw + ir_raw
+    ratio = (
+        round(numeric_wire / numeric_raw, 6)
+        if numeric_raw > 0
+        else None
+    )
+    return SensorPacketTransport(
+        schema="visionrig/sensor-packet-transport/v1",
+        packet_schema=header.schema_id,
+        packet_bytes=len(payload),
+        rgb_bytes=header.rgb_byte_length,
+        depth_wire_bytes=depth_wire,
+        depth_raw_bytes=depth_raw,
+        depth_compression=depth_compression,
+        infrared_wire_bytes=ir_wire,
+        infrared_raw_bytes=ir_raw,
+        infrared_compression=ir_compression,
+        numeric_wire_bytes=numeric_wire,
+        numeric_raw_bytes=numeric_raw,
+        numeric_compression_ratio=ratio,
+    )
 
 
 def decode_sensor_packet(payload: bytes) -> DecodedSensorPacket:
