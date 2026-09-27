@@ -50,7 +50,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v15"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v16"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v51"
+    assert health["schema"] == "visionrig/health/v52"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -442,7 +442,7 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
     assert fleet["packet_target_attention_streak_threshold"] == 3
     assert fleet["packet_target"] == {
         "within_target": 0,
@@ -698,7 +698,7 @@ def test_catalog_exposes_flapping_packet_target_stability() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
 
     catalog = client.get("/api/v1/sensors/catalog").json()
-    assert catalog["schema"] == "visionrig/sensor-catalog/v13"
+    assert catalog["schema"] == "visionrig/sensor-catalog/v14"
     packet_target = catalog["sources"][0]["packet_target"]
     assert packet_target["status"] == "above_target"
     assert packet_target["pressure"] == "sustained"
@@ -777,7 +777,7 @@ def test_packet_target_overshoot_identifies_worst_source() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 3,
         "max_delta": 0.19,
@@ -820,7 +820,7 @@ def test_fleet_reports_longest_sustained_packet_pressure() -> None:
 
     now[0] = datetime(2026, 9, 27, 17, 1, 0, tzinfo=timezone.utc)
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
     assert fleet["packet_target_sustained_pressure"] == {
         "sources": 2,
         "longest_seconds": 60.0,
@@ -865,7 +865,7 @@ def test_fleet_identifies_most_recurrent_packet_target_source() -> None:
     sustained("camera-two-repeats")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
     assert fleet["packet_target_recurrence_total"] == 3
     assert fleet["packet_target_recurring_sources"] == 2
     assert fleet["packet_target_recurrence_hotspot"]["max_recurrence_count"] == 2
@@ -917,7 +917,7 @@ def test_fleet_reports_latest_packet_target_recovery() -> None:
     recover("camera-latest-recovery")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
     assert fleet["packet_target_recovered_sources"] == 2
     assert fleet["packet_target_latest_recovery"] == {
         "source_id": "camera-latest-recovery",
@@ -968,7 +968,7 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
     assert measured.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v21"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
     assert fleet["packet_target_stability"] == {
         "stable": 1,
         "recurring": 0,
@@ -987,6 +987,8 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
             "source_id": "camera-target-only",
             "measurement": "target_only",
             "presence": "online",
+            "heartbeat_schema_id": "visionrig/sensor-heartbeat/v5",
+            "required_schema_id": "visionrig/sensor-heartbeat/v6",
             "negotiated_packet_target_utilization": 0.72,
             "observed_packet_utilization": None,
         }
@@ -995,9 +997,52 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
 
     catalog = client.get("/api/v1/sensors/catalog").json()
     by_id = {source["source_id"]: source for source in catalog["sources"]}
+    assert by_id["camera-target-only"]["runtime"]["heartbeat_schema_id"] == (
+        "visionrig/sensor-heartbeat/v5"
+    )
+    assert by_id["camera-measured"]["runtime"]["heartbeat_schema_id"] == (
+        "visionrig/sensor-heartbeat/v6"
+    )
     assert by_id["camera-target-only"]["packet_target"]["measurement"] == (
         "target_only"
     )
     assert by_id["camera-target-only"]["packet_target"]["stability"] == "unknown"
     assert by_id["camera-measured"]["packet_target"]["measurement"] == "complete"
     assert by_id["camera-measured"]["packet_target"]["stability"] == "stable"
+
+
+def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+
+    for index in range(40):
+        response = client.post(
+            "/api/v1/sensors/heartbeat",
+            json={
+                "schema_id": "visionrig/sensor-heartbeat/v5",
+                "source_id": f"camera-gap-{index:02d}",
+                "source_type": "camera",
+                "negotiated_max_payload_bytes": 4194304,
+                "capability_refreshed_utc": "2026-09-27T20:30:00+00:00",
+                "capability_refresh_seconds": 30.0,
+                "negotiated_packet_compression": "auto",
+                "negotiated_packet_target_utilization": 0.72,
+            },
+        )
+        assert response.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
+    assert fleet["packet_target_measurement_gap_total"] == 40
+    assert len(fleet["packet_target_measurement_gaps"]) == 32
+    assert fleet["packet_target_measurement_gaps_truncated"] is True
+    assert fleet["packet_target_measurement_gaps"][0]["source_id"] == "camera-gap-00"
+    assert fleet["packet_target_measurement_gaps"][-1]["source_id"] == "camera-gap-31"
+    assert all(
+        item["heartbeat_schema_id"] == "visionrig/sensor-heartbeat/v5"
+        for item in fleet["packet_target_measurement_gaps"]
+    )
+    assert all(
+        item["required_schema_id"] == "visionrig/sensor-heartbeat/v6"
+        for item in fleet["packet_target_measurement_gaps"]
+    )
+    assert fleet["attention_total"] == 0

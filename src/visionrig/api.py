@@ -465,6 +465,12 @@ def create_app(
                             "source_id": source_id,
                             "measurement": packet_target_measurement,
                             "presence": runtime_source.presence,
+                            "heartbeat_schema_id": (
+                                runtime_source.heartbeat_schema_id
+                            ),
+                            "required_schema_id": (
+                                "visionrig/sensor-heartbeat/v6"
+                            ),
                             "negotiated_packet_target_utilization": (
                                 target_utilization
                             ),
@@ -665,7 +671,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v21",
+            "schema": "visionrig/sensor-fleet-summary/v22",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -737,7 +743,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v51",
+            "schema": "visionrig/health/v52",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -806,7 +812,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v23",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v24",
             },
         }
 
@@ -987,7 +993,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v13",
+            "schema": "visionrig/sensor-catalog/v14",
             "sources": sources,
         }
 
@@ -998,7 +1004,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v23",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v24",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
