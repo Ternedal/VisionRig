@@ -648,3 +648,43 @@ def test_packet_target_flap_window_must_be_positive() -> None:
 
     with pytest.raises(ValueError, match="packet_target_flap_window_seconds"):
         create_app(PerceptionPipeline(), packet_target_flap_window_seconds=0)
+
+
+def test_catalog_exposes_flapping_packet_target_stability() -> None:
+    now = [datetime(2026, 9, 27, 15, 0, tzinfo=timezone.utc)]
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: now[0],
+            packet_target_flap_window_seconds=60.0,
+        )
+    )
+    heartbeat = {
+        "schema_id": "visionrig/sensor-heartbeat/v6",
+        "source_id": "kinect-catalog-flap",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T15:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+        "observed_packet_utilization": 0.76,
+    }
+
+    for _ in range(3):
+        assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+    heartbeat["observed_packet_utilization"] = 0.70
+    assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+
+    now[0] = datetime(2026, 9, 27, 15, 0, 30, tzinfo=timezone.utc)
+    heartbeat["observed_packet_utilization"] = 0.76
+    for _ in range(3):
+        assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+
+    catalog = client.get("/api/v1/sensors/catalog").json()
+    assert catalog["schema"] == "visionrig/sensor-catalog/v9"
+    packet_target = catalog["sources"][0]["packet_target"]
+    assert packet_target["stability"] == "flapping"
+    assert packet_target["flap_window_seconds"] == 60.0
+    assert packet_target["recurrence_count"] == 1
+    assert packet_target["last_recurrence_seconds"] == 30.0
