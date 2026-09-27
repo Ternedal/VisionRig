@@ -230,6 +230,9 @@ def test_gateway_health_advertises_only_sensor_routes() -> None:
     with TestClient(app) as client:
         body = client.get("/health").json()
     assert body["schema"] == "visionrig/sensor-gateway-health/v8"
+    assert body["producer_capabilities_schema"] == (
+        "visionrig/producer-capabilities/v2"
+    )
     assert body["routes"] == [
         "/api/v1/frames/ingest",
         "/api/v1/sensor-packets/ingest",
