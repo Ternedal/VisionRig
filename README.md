@@ -444,3 +444,14 @@ on client clock skew.
 
 The age is process-local observability only and does not affect attention,
 capture or adaptation policy.
+
+
+## VisionRig 0.69.0: conservative packet-target stability
+
+Packet-target stability no longer labels a source as stable merely because it
+has runtime state and zero recurrence history. A source must now have both a
+negotiated packet target and an observed packet utilization before it can be
+classified as stable, recurring or flapping.
+
+Sources with incomplete packet-target telemetry are reported as `unknown`.
+This avoids presenting missing measurement data as evidence of stability.
