@@ -18,6 +18,7 @@ Schema: `visionrig/sensor-runtime-status/v7`.
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
 optional latest accepted SensorPacket transport telemetry, negotiated producer
+payload budget and capability-refresh freshness, negotiated producer
 payload ceiling and capability-refresh freshness,
 `last_seen_utc`, `age_seconds`, `capture_active` and derived `online/stale/offline` presence.
 
@@ -360,3 +361,23 @@ not mutate registry/control state.
 Heartbeat timestamp-only refreshes do not create semantic change-feed events.
 A changed negotiated payload ceiling does create one `runtime_changed` event
 so UI clients can react immediately to a meaningful transport contract change.
+
+
+### Producer capability negotiation freshness
+
+Heartbeat v3 may carry the producer's effective
+`negotiated_max_payload_bytes`, `capability_refreshed_utc` and
+`capability_refresh_seconds`. Runtime status v7 exposes those values plus:
+
+- `capability_refresh_age_seconds`;
+- `capability_refresh_status`: `current`, `stale`, or `unknown`.
+
+`current` means the last successful negotiation is no older than two refresh
+intervals. The status is time-derived runtime telemetry; it is not persisted in
+the sensor registry and does not advance `state_revision`.
+
+A negotiated budget change is operationally meaningful and emits
+`runtime_changed`. A heartbeat that only advances the successful refresh
+timestamp is intentionally quiet in the semantic change feed. UIs can therefore
+use low-cadence runtime/fleet polling for freshness without receiving heartbeat
+spam through the change journal.
