@@ -24,6 +24,7 @@ from .sources import CameraSource, FrameSource, ImageFileSource
 class PacketTransportPlan:
     max_payload_bytes: int
     compression: Literal["none", "zlib", "auto"]
+    target_utilization: float
     packet_encoder: Callable[[Any, bytes], bytes]
 
 
@@ -109,6 +110,7 @@ def _encode_packet_with_budget(
     initial_quality: int,
     min_quality: int,
     max_packet_bytes: int,
+    target_utilization: float = SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION,
 ) -> tuple[bytes, int, float]:
     if max_packet_bytes < 1024:
         raise ValueError("max_packet_bytes must be >= 1024")
@@ -116,10 +118,12 @@ def _encode_packet_with_budget(
         raise ValueError(
             "JPEG quality must satisfy 30 <= min_quality <= initial_quality <= 100"
         )
+    if not 0.0 < target_utilization < 1.0:
+        raise ValueError("target_utilization must be between 0 and 1")
 
     target_bytes = max(
         1,
-        int(max_packet_bytes * SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION) - 1,
+        int(max_packet_bytes * target_utilization) - 1,
     )
     quality = initial_quality
     best_packet: bytes | None = None
@@ -206,6 +210,7 @@ def _run_controlled_capture(
     current_packet_budget = packet_budget_bytes
     current_packet_encoder = packet_encoder
     current_packet_compression: str | None = None
+    current_packet_target_utilization = SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION
     capability_refreshed_utc: str | None = None
     deadline = monotonic()
     frames = 0
@@ -234,7 +239,11 @@ def _run_controlled_capture(
                     refreshed_budget = plan.max_payload_bytes
                     refreshed_compression = plan.compression
                     refreshed_encoder = plan.packet_encoder
+                    refreshed_target_utilization = plan.target_utilization
                 else:
+                    refreshed_target_utilization = (
+                        SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION
+                    )
                     assert packet_budget_provider is not None
                     refreshed_budget = packet_budget_provider()
 
@@ -247,15 +256,21 @@ def _run_controlled_capture(
                 if verbose and (
                     refreshed_budget != current_packet_budget
                     or refreshed_compression != current_packet_compression
+                    or (
+                        refreshed_target_utilization
+                        != current_packet_target_utilization
+                    )
                 ):
                     print(
                         "producer_capabilities "
                         f"effective_packet_cap={refreshed_budget} "
-                        f"packet_compression={refreshed_compression or 'default'}"
+                        f"packet_compression={refreshed_compression or 'default'} "
+                        f"packet_target_utilization={refreshed_target_utilization:.3f}"
                     )
                 current_packet_budget = refreshed_budget
                 current_packet_encoder = refreshed_encoder
                 current_packet_compression = refreshed_compression
+                current_packet_target_utilization = refreshed_target_utilization
                 capability_refreshed_utc = utcnow().isoformat()
                 next_capability_check = now + capability_refresh_seconds
 
@@ -373,6 +388,7 @@ def _run_controlled_capture(
                         initial_quality=jpeg_quality,
                         min_quality=min_jpeg_quality,
                         max_packet_bytes=current_packet_budget,
+                        target_utilization=current_packet_target_utilization,
                     )
                 )
                 result = producer.send_packet(packet)
@@ -537,12 +553,19 @@ def main() -> None:
             compression = _select_packet_compression(
                 capabilities_contract.sensor_packet_compressions
             )
+            warning_utilization = (
+                capabilities_contract.packet_payload_warning_utilization
+                if capabilities_contract.packet_payload_warning_utilization
+                is not None
+                else SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION
+            )
             return PacketTransportPlan(
                 max_payload_bytes=min(
                     args.max_packet_bytes,
                     capabilities_contract.max_payload_bytes,
                 ),
                 compression=compression,
+                target_utilization=warning_utilization,
                 packet_encoder=(
                     lambda frame, rgb_jpeg, selected=compression: (
                         _encode_kinect_packet(
