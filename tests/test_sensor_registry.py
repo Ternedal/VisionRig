@@ -538,6 +538,8 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "sustained": 0,
         "unknown": 4,
     }
+    assert fleet["packet_target_sustained_episode_total"] == 0
+    assert fleet["packet_target_recovered_sources"] == 0
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -566,6 +568,11 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert health_fleet["negotiated_compression"] == fleet["negotiated_compression"]
     assert health_fleet["packet_target"] == fleet["packet_target"]
     assert health_fleet["packet_target_pressure"] == fleet["packet_target_pressure"]
+    assert (
+        health_fleet["packet_target_sustained_episode_total"]
+        == fleet["packet_target_sustained_episode_total"]
+    )
+    assert health_fleet["packet_target_recovered_sources"] == fleet["packet_target_recovered_sources"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
