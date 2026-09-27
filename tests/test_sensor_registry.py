@@ -618,6 +618,24 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "recovered_utc": None,
         "age_seconds": None,
     }
+    assert fleet["packet_target_measurement_gap_total"] == 2
+    assert fleet["packet_target_measurement_gaps_truncated"] is False
+    assert fleet["packet_target_measurement_gaps"] == [
+        {
+            "source_id": "online-ok",
+            "measurement": "unavailable",
+            "presence": "online",
+            "negotiated_packet_target_utilization": None,
+            "observed_packet_utilization": None,
+        },
+        {
+            "source_id": "pending-camera",
+            "measurement": "unavailable",
+            "presence": "online",
+            "negotiated_packet_target_utilization": None,
+            "observed_packet_utilization": None,
+        },
+    ]
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -674,6 +692,18 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert (
         health_fleet["packet_target_latest_recovery"]
         == fleet["packet_target_latest_recovery"]
+    )
+    assert (
+        health_fleet["packet_target_measurement_gaps"]
+        == fleet["packet_target_measurement_gaps"]
+    )
+    assert (
+        health_fleet["packet_target_measurement_gap_total"]
+        == fleet["packet_target_measurement_gap_total"]
+    )
+    assert (
+        health_fleet["packet_target_measurement_gaps_truncated"]
+        == fleet["packet_target_measurement_gaps_truncated"]
     )
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
