@@ -1,7 +1,8 @@
 """Bounded binary multimodal sensor packet contract.
 
-SensorPacket/v1 transports one encoded RGB frame plus optional color-aligned
-uint16 metric depth and uint16 infrared planes without base64 expansion.
+SensorPacket v1/v2 transports one encoded RGB frame plus optional color-aligned
+uint16 metric depth and uint16 infrared planes without base64 expansion. V2 can
+compress numeric planes with bounded zlib decompression.
 """
 from __future__ import annotations
 
