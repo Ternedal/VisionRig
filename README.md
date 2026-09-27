@@ -327,3 +327,21 @@ Fleet summary v11 aggregates total recurrences and the number of sources that
 have recurred at least once. This distinguishes a sensor with one historical
 incident from a sensor whose transport adaptation repeatedly falls back into
 sustained pressure.
+
+
+## VisionRig 0.60.0: packet-target stability classification
+
+Fleet summary v12 adds a configurable recurrence stability view. The default
+`packet_target_flap_window_seconds` is 120 seconds and can be overridden when
+constructing the service.
+
+Each known/runtime source is classified as:
+
+- `stable`: no sustained recurrence has been observed;
+- `flapping`: the latest sustained recurrence crossed the threshold within the
+  configured flap window after recovery;
+- `recurring`: sustained pressure returned, but outside the flap window;
+- `unknown`: no runtime source is available.
+
+This is descriptive transport observability only. It does not change desired
+capture state or producer authority.

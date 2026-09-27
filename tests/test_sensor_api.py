@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v38"
+    assert health["schema"] == "visionrig/health/v39"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -442,7 +442,7 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v11"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v12"
     assert fleet["packet_target_attention_streak_threshold"] == 3
     assert fleet["packet_target"] == {
         "within_target": 0,
@@ -588,3 +588,63 @@ def test_packet_target_sustained_episode_count_increments_once_per_episode() -> 
     assert fleet["packet_target_recovered_sources"] == 1
     assert fleet["packet_target_recurrence_total"] == 1
     assert fleet["packet_target_recurring_sources"] == 1
+    assert fleet["packet_target_stability"] == {
+        "stable": 0,
+        "recurring": 0,
+        "flapping": 1,
+        "unknown": 0,
+    }
+    assert fleet["packet_target_flap_window_seconds"] == 120.0
+
+
+def test_packet_target_stability_marks_delayed_recurrence_as_recurring() -> None:
+    now = [datetime(2026, 9, 27, 14, 0, tzinfo=timezone.utc)]
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: now[0],
+            packet_target_flap_window_seconds=60.0,
+        )
+    )
+    heartbeat = {
+        "schema_id": "visionrig/sensor-heartbeat/v6",
+        "source_id": "kinect-delayed-recurrence",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T14:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+        "observed_packet_utilization": 0.76,
+    }
+
+    for _ in range(3):
+        assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+
+    heartbeat["observed_packet_utilization"] = 0.70
+    assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+
+    now[0] = datetime(2026, 9, 27, 14, 2, tzinfo=timezone.utc)
+    heartbeat["observed_packet_utilization"] = 0.76
+    for _ in range(3):
+        assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+
+    runtime = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert runtime["packet_target_recurrence_count"] == 1
+    assert runtime["packet_target_last_recurrence_seconds"] == 120.0
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["packet_target_flap_window_seconds"] == 60.0
+    assert fleet["packet_target_stability"] == {
+        "stable": 0,
+        "recurring": 1,
+        "flapping": 0,
+        "unknown": 0,
+    }
+
+
+def test_packet_target_flap_window_must_be_positive() -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="packet_target_flap_window_seconds"):
+        create_app(PerceptionPipeline(), packet_target_flap_window_seconds=0)

@@ -60,11 +60,15 @@ def create_app(
     max_sensor_frame_bytes: int = 8 * 1024 * 1024,
     sensor_stale_after_seconds: float = 15.0,
     sensor_offline_after_seconds: float = 60.0,
+    packet_target_flap_window_seconds: float = 120.0,
     modelrig_publisher: ModelRigPerceptionPublisher | None = None,
     sensor_registry: SensorRegistry | None = None,
     sensor_change_journal: SensorChangeJournal | None = None,
     sensor_clock: Callable[[], datetime] | None = None,
 ) -> FastAPI:
+    if packet_target_flap_window_seconds <= 0:
+        raise ValueError("packet_target_flap_window_seconds must be > 0")
+    packet_target_flap_window_seconds = float(packet_target_flap_window_seconds)
     app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
     runtime = VisionRuntime(
@@ -271,6 +275,12 @@ def create_app(
         packet_target_recovered_sources = 0
         packet_target_recurrence_total = 0
         packet_target_recurring_sources = 0
+        packet_target_stability_counts = {
+            "stable": 0,
+            "recurring": 0,
+            "flapping": 0,
+            "unknown": 0,
+        }
         attention = []
         attention_total = 0
 
@@ -392,6 +402,20 @@ def create_app(
                 if runtime_source.packet_target_recurrence_count > 0:
                     packet_target_recurring_sources += 1
 
+            if runtime_source is None:
+                packet_target_stability_status = "unknown"
+            elif runtime_source.packet_target_recurrence_count == 0:
+                packet_target_stability_status = "stable"
+            elif (
+                runtime_source.packet_target_last_recurrence_seconds is not None
+                and runtime_source.packet_target_last_recurrence_seconds
+                <= packet_target_flap_window_seconds
+            ):
+                packet_target_stability_status = "flapping"
+            else:
+                packet_target_stability_status = "recurring"
+            packet_target_stability_counts[packet_target_stability_status] += 1
+
             attention_reasons = []
             if control_status == "pending":
                 attention_reasons.append("control_pending")
@@ -466,6 +490,9 @@ def create_app(
                             if runtime_source is not None
                             else None
                         ),
+                        "packet_target_stability_status": (
+                            packet_target_stability_status
+                        ),
                         "capability_refresh_age_seconds": (
                             runtime_source.capability_refresh_age_seconds
                             if runtime_source is not None
@@ -482,7 +509,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v11",
+            "schema": "visionrig/sensor-fleet-summary/v12",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -503,6 +530,8 @@ def create_app(
             "packet_target_recovered_sources": packet_target_recovered_sources,
             "packet_target_recurrence_total": packet_target_recurrence_total,
             "packet_target_recurring_sources": packet_target_recurring_sources,
+            "packet_target_stability": packet_target_stability_counts,
+            "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -513,7 +542,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v38",
+            "schema": "visionrig/health/v39",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -582,7 +611,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v10",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v11",
             },
         }
 
@@ -700,7 +729,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v10",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v11",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
