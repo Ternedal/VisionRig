@@ -975,6 +975,11 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
         "flapping": 0,
         "unknown": 1,
     }
+    assert fleet["packet_target_measurement_coverage"] == {
+        "complete": 1,
+        "target_only": 1,
+        "unavailable": 0,
+    }
 
     catalog = client.get("/api/v1/sensors/catalog").json()
     by_id = {source["source_id"]: source for source in catalog["sources"]}
