@@ -16,7 +16,7 @@ from urllib.parse import quote, urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from .http_io import read_bounded_body
 
@@ -38,12 +38,26 @@ class GatewayHeartbeat(BaseModel):
         ge=1024,
         le=64 * 1024 * 1024,
     )
-    capability_refreshed_utc: str | None = Field(default=None, max_length=64)
+    capability_refreshed_utc: AwareDatetime | None = None
     capability_refresh_seconds: float | None = Field(
         default=None,
         ge=1.0,
         le=3600.0,
     )
+
+    @model_validator(mode="after")
+    def validate_negotiation_telemetry(self) -> "GatewayHeartbeat":
+        fields = (
+            self.negotiated_max_payload_bytes,
+            self.capability_refreshed_utc,
+            self.capability_refresh_seconds,
+        )
+        supplied = [value is not None for value in fields]
+        if any(supplied) and not all(supplied):
+            raise ValueError(
+                "negotiation telemetry fields must be supplied together"
+            )
+        return self
 
 
 def _validate_loopback_target(value: str) -> str:
@@ -273,7 +287,11 @@ def create_gateway_app(
                 "negotiated_max_payload_bytes": (
                     body.negotiated_max_payload_bytes
                 ),
-                "capability_refreshed_utc": body.capability_refreshed_utc,
+                "capability_refreshed_utc": (
+                    body.capability_refreshed_utc.isoformat()
+                    if body.capability_refreshed_utc is not None
+                    else None
+                ),
                 "capability_refresh_seconds": body.capability_refresh_seconds,
             },
         )
