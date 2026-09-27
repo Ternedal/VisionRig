@@ -290,7 +290,7 @@ over-target heartbeat-v6 observations, while fleet summary v8 raises
 or unknown measurement resets the streak immediately.
 
 
-## VisionRig 0.57.0: packet-target pressure duration
+## VisionRig 0.58.0: packet-target pressure duration
 
 Runtime status v13 now exposes when a consecutive over-target run started, how
 many seconds it has remained active, and when an over-target measurement was
