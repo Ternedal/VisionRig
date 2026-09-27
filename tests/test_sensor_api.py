@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 import visionrig.sensor_ingress as sensor_ingress
 from visionrig.api import create_app
 from visionrig.pipeline import PerceptionPipeline
+from visionrig.runtime import VisionRuntime
+from visionrig.sensor_ingress import SensorHeartbeat, SensorIngress
 
 
 class FakeCVDecoder:
@@ -360,3 +362,49 @@ def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
     assert source["negotiated_max_payload_bytes"] == 2097152
     assert source["capability_refresh_status"] == "stale"
     assert source["capability_refresh_age_seconds"] > 60.0
+
+
+def test_negotiation_refresh_status_becomes_stale_from_time_only() -> None:
+    now = [datetime(2026, 9, 27, 6, 30, tzinfo=timezone.utc)]
+    ingress = SensorIngress(
+        VisionRuntime(PerceptionPipeline()),
+        clock=lambda: now[0],
+    )
+    ingress.heartbeat(
+        SensorHeartbeat(
+            schema_id="visionrig/sensor-heartbeat/v3",
+            source_id="remote-kinect",
+            source_type="camera",
+            negotiated_max_payload_bytes=4194304,
+            capability_refreshed_utc=now[0],
+            capability_refresh_seconds=30.0,
+        )
+    )
+
+    current = ingress.stats().sources[0]
+    assert current.capability_refresh_status == "current"
+    assert current.capability_refresh_age_seconds == 0.0
+
+    now[0] = datetime(2026, 9, 27, 6, 31, 1, tzinfo=timezone.utc)
+    stale = ingress.stats().sources[0]
+    assert stale.capability_refresh_status == "stale"
+    assert stale.capability_refresh_age_seconds == 61.0
+    assert stale.negotiated_max_payload_bytes == 4194304
+
+
+def test_sensor_heartbeat_v2_remains_backward_compatible() -> None:
+    ingress = SensorIngress(VisionRuntime(PerceptionPipeline()))
+    receipt = ingress.heartbeat(
+        SensorHeartbeat(
+            schema_id="visionrig/sensor-heartbeat/v2",
+            source_id="legacy-producer",
+            source_type="camera",
+            capture_active=True,
+            applied_revision=1,
+        )
+    )
+
+    assert receipt.status == "accepted"
+    source = ingress.stats().sources[0]
+    assert source.negotiated_max_payload_bytes is None
+    assert source.capability_refresh_status == "unknown"
