@@ -163,8 +163,10 @@ bounded decompression and explicit raw-length validation.
 Depth is required to be color-aligned and is exposed frame-locally as both
 `depth_mm` and a metric sampler; raw planes still do not cross into
 PerceptionEvent/Consciousness Core. `visionrig-producer --kinect-v2` performs Kinect color/depth alignment on the
-producer host and emits zlib-compressed SensorPacket/v2 by default through the
-same durable sequence/backpressure state machine as normal frames.
+producer host and emits SensorPacket/v2 with adaptive per-plane compression:
+zlib is used only when it makes that depth/IR plane smaller; otherwise the plane
+stays raw. The packet still uses the same durable sequence/backpressure state
+machine as normal frames.
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.
