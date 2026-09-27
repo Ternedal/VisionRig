@@ -67,6 +67,10 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     health = client.get("/health").json()
     assert health["schema"] == "visionrig/health/v30"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v6"
+    assert health["sensor_ingress"]["heartbeat_schemas"] == [
+        "visionrig/sensor-heartbeat/v2",
+        "visionrig/sensor-heartbeat/v3",
+    ]
     assert health["sensor_ingress"]["sensor_packet_schemas"] == [
         "visionrig/sensor-packet/v1",
         "visionrig/sensor-packet/v2",
