@@ -524,3 +524,17 @@ measurement telemetry.
 
 This is upgrade/remediation telemetry only. It does not change attention,
 capture authority, or producer negotiation policy.
+
+
+## VisionRig 0.75.0: heartbeat upgrade candidates
+
+Fleet observability now exposes a bounded list of runtime producers that still
+require a heartbeat contract upgrade to v6.
+
+Each candidate includes its source id, current presence, current heartbeat
+schema, required v6 schema, and current packet-target measurement state. The
+list is capped at 32 entries in deterministic source-id order, while total and
+truncation fields describe the full runtime fleet.
+
+This is remediation telemetry only and remains separate from operational
+attention and control policy.
