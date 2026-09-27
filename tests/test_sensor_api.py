@@ -980,6 +980,18 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
         "target_only": 1,
         "unavailable": 0,
     }
+    assert fleet["packet_target_measurement_gap_total"] == 1
+    assert fleet["packet_target_measurement_gaps_truncated"] is False
+    assert fleet["packet_target_measurement_gaps"] == [
+        {
+            "source_id": "camera-target-only",
+            "measurement": "target_only",
+            "presence": "online",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": None,
+        }
+    ]
+    assert fleet["attention_total"] == 0
 
     catalog = client.get("/api/v1/sensors/catalog").json()
     by_id = {source["source_id"]: source for source in catalog["sources"]}
