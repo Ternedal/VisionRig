@@ -30,6 +30,8 @@ from .sensor_ingress import (
 )
 from .sensor_packet import (
     SENSOR_PACKET_MEDIA_TYPE,
+    SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION,
+    SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION,
     SensorPacketError,
     inspect_sensor_packet,
 )
@@ -351,6 +353,10 @@ def create_app(
                 "sensor_packet_transport_schema": (
                     "visionrig/sensor-packet-transport/v2"
                 ),
+                "sensor_packet_payload_thresholds": {
+                    "warning": SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION,
+                    "critical": SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION,
+                },
                 "overload_policy": "reject",
                 "runtime": asdict(sensor_ingress.stats()),
             },
