@@ -903,3 +903,34 @@ was cut. The ordering is remediation metadata only and does not alter
 `attention_total`, desired state, capture authority, or semantic events.
 
 Bootstrap v27 embeds fleet v25 and health advances to v55.
+
+
+### Producer readiness summary
+
+VisionRig 0.77.0 extends fleet summary v26 with `producer_readiness`, a
+compact UI-facing projection of existing producer telemetry.
+
+It exposes:
+
+- `runtime_sources`;
+- `heartbeat_v6_sources`;
+- `heartbeat_upgrade_required`;
+- `heartbeat_v6_ratio`;
+- `packet_measurement_complete_sources`;
+- `packet_measurement_gap_sources`;
+- `packet_measurement_complete_ratio`.
+
+Heartbeat readiness is derived from the same v2-v6 runtime coverage used by
+`heartbeat_schema_coverage`. Packet-measurement readiness is derived only from
+runtime sources: complete sources equal runtime sources minus the existing
+runtime measurement-gap total. Catalog-only known sensors therefore do not
+artificially reduce producer readiness ratios.
+
+Ratios are rounded to six decimal places and are `null` when
+`runtime_sources == 0`.
+
+The summary intentionally contains no aggregate health verdict, score, alert,
+or automatic action. It is a convenience projection so UI clients do not need
+to reconstruct migration progress from several separate fleet fields.
+
+Bootstrap v28 embeds fleet v26 and health advances to v56.
