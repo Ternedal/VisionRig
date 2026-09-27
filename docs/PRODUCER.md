@@ -210,3 +210,20 @@ unavailable, malformed, unauthorized, or loses required SensorPacket/v2
 support, the error propagates through the existing controlled-capture
 `finally` path and closes the capture source. The producer does not continue
 indefinitely using a stale remembered limit.
+
+
+## Negotiation heartbeat telemetry
+
+VisionRig 0.47.0 extends producer heartbeat to
+`visionrig/sensor-heartbeat/v3`. Remote Kinect publishes the effective
+negotiated packet budget together with the UTC timestamp of the most recent
+successful capability refresh and the configured refresh interval.
+
+The tuple is sent on the normal control heartbeat after a successful
+negotiation/refresh. Core runtime status can therefore distinguish a currently
+refreshed transport contract from a stale one without trusting the age of the
+last video frame.
+
+Heartbeat v2 remains accepted for older producers. V2 has no negotiation
+telemetry and appears as `capability_refresh_status=unknown`. V3 negotiation
+fields are all-or-nothing; partial tuples are rejected rather than interpreted.

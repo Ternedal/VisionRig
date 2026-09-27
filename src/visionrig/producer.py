@@ -192,16 +192,23 @@ class GatewayFrameProducer:
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
         applied_revision: int | None = None,
+        negotiated_max_payload_bytes: int | None = None,
+        capability_refreshed_utc: str | None = None,
+        capability_refresh_seconds: float | None = None,
     ) -> SensorHeartbeatReceipt:
         """Publish producer liveness without capturing or sending a frame."""
         target = self._base_url + "/api/v1/sensors/heartbeat"
         payload = {
+            "schema_id": "visionrig/sensor-heartbeat/v3",
             "source_id": self._source_id,
             "source_type": self._source_type,
             "device": self._device,
             "capabilities": list(capabilities),
             "capture_active": capture_active,
             "applied_revision": applied_revision,
+            "negotiated_max_payload_bytes": negotiated_max_payload_bytes,
+            "capability_refreshed_utc": capability_refreshed_utc,
+            "capability_refresh_seconds": capability_refresh_seconds,
         }
         kwargs = {
             "json": payload,

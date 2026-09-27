@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
 import visionrig.sensor_ingress as sensor_ingress
@@ -48,7 +50,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v6"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v7"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -63,8 +65,12 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v29"
-    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v5"
+    assert health["schema"] == "visionrig/health/v30"
+    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v6"
+    assert health["sensor_ingress"]["heartbeat_schemas"] == [
+        "visionrig/sensor-heartbeat/v2",
+        "visionrig/sensor-heartbeat/v3",
+    ]
     assert health["sensor_ingress"]["sensor_packet_schemas"] == [
         "visionrig/sensor-packet/v1",
         "visionrig/sensor-packet/v2",
@@ -114,6 +120,10 @@ def test_sensor_heartbeat_registers_capabilities_without_frame() -> None:
     assert source["heartbeat_count"] == 1
     assert source["capabilities"] == ["depth", "infrared", "rgb"]
     assert source["applied_revision"] == 2
+    assert source["negotiated_max_payload_bytes"] is None
+    assert source["capability_refreshed_utc"] is None
+    assert source["capability_refresh_age_seconds"] is None
+    assert source["capability_refresh_status"] == "unknown"
     assert source["presence"] == "online"
 
 
@@ -194,3 +204,68 @@ def test_frame_ingest_auto_registers_source_without_heartbeat(monkeypatch) -> No
     assert response.status_code == 200
     assert registry.get("screen-new").source_id == "screen-new"
     assert [entry.source_id for entry in registry.list()] == ["screen-new"]
+
+
+def test_sensor_heartbeat_v3_exposes_negotiated_transport_runtime_state() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    refreshed = datetime.now(timezone.utc).isoformat()
+
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v3",
+            "source_id": "kinect-negotiated",
+            "source_type": "camera",
+            "device": "kinect-v2",
+            "capabilities": ["rgb", "depth", "infrared"],
+            "capture_active": True,
+            "applied_revision": 3,
+            "negotiated_max_payload_bytes": 4 * 1024 * 1024,
+            "capability_refreshed_utc": refreshed,
+            "capability_refresh_seconds": 30.0,
+        },
+    )
+    assert response.status_code == 200
+
+    source = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert source["negotiated_max_payload_bytes"] == 4 * 1024 * 1024
+    assert source["capability_refreshed_utc"] == refreshed
+    assert source["capability_refresh_age_seconds"] >= 0
+    assert source["capability_refresh_status"] == "current"
+
+
+def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v3",
+            "source_id": "kinect-stale-capabilities",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4 * 1024 * 1024,
+            "capability_refreshed_utc": "2020-01-01T00:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+        },
+    )
+    assert response.status_code == 200
+
+    source = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert source["capability_refresh_status"] == "stale"
+    assert source["capability_refresh_age_seconds"] > 60
+
+
+def test_sensor_heartbeat_v3_rejects_partial_negotiation_telemetry() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v3",
+            "source_id": "broken-negotiation",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4 * 1024 * 1024,
+        },
+    )
+
+    assert response.status_code == 422

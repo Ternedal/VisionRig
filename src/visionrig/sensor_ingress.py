@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Callable, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from .contracts import PerceptionEvent, SourceDescriptor
 from .pipeline import Frame
@@ -101,15 +101,45 @@ class SensorFrameReceipt(BaseModel):
 class SensorHeartbeat(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_id: Literal["visionrig/sensor-heartbeat/v2"] = (
-        "visionrig/sensor-heartbeat/v2"
-    )
+    schema_id: Literal[
+        "visionrig/sensor-heartbeat/v2",
+        "visionrig/sensor-heartbeat/v3",
+    ] = "visionrig/sensor-heartbeat/v3"
     source_id: str = Field(min_length=1, max_length=128)
     source_type: SensorSourceType
     device: str | None = Field(default=None, max_length=256)
     capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
     capture_active: bool | None = None
     applied_revision: int | None = Field(default=None, ge=0)
+    negotiated_max_payload_bytes: int | None = Field(
+        default=None,
+        ge=1024,
+        le=64 * 1024 * 1024,
+    )
+    capability_refreshed_utc: AwareDatetime | None = None
+    capability_refresh_seconds: float | None = Field(
+        default=None,
+        ge=1.0,
+        le=3600.0,
+    )
+
+    @model_validator(mode="after")
+    def validate_negotiation_telemetry(self) -> "SensorHeartbeat":
+        fields = (
+            self.negotiated_max_payload_bytes,
+            self.capability_refreshed_utc,
+            self.capability_refresh_seconds,
+        )
+        supplied = [value is not None for value in fields]
+        if any(supplied) and not all(supplied):
+            raise ValueError(
+                "negotiation telemetry fields must be supplied together"
+            )
+        if self.schema_id == "visionrig/sensor-heartbeat/v2" and any(supplied):
+            raise ValueError(
+                "sensor-heartbeat/v2 does not support negotiation telemetry"
+            )
+        return self
 
 
 class SensorHeartbeatReceipt(BaseModel):
@@ -132,6 +162,10 @@ class SensorSourceStats:
     capabilities: tuple[str, ...]
     capture_active: bool | None
     applied_revision: int | None
+    negotiated_max_payload_bytes: int | None
+    capability_refreshed_utc: str | None
+    capability_refresh_age_seconds: float | None
+    capability_refresh_status: str
     presence: SensorPresence
     age_seconds: float
     last_sequence: int | None
@@ -165,6 +199,9 @@ class _MutableSourceStats:
     capabilities: tuple[str, ...]
     capture_active: bool | None
     applied_revision: int | None
+    negotiated_max_payload_bytes: int | None
+    capability_refreshed_utc: datetime | None
+    capability_refresh_seconds: float | None
     last_sequence: int | None
     accepted_frames: int
     heartbeat_count: int
@@ -253,6 +290,9 @@ class SensorIngress:
                     capabilities=capabilities,
                     capture_active=heartbeat.capture_active,
                     applied_revision=heartbeat.applied_revision,
+                    negotiated_max_payload_bytes=heartbeat.negotiated_max_payload_bytes,
+                    capability_refreshed_utc=heartbeat.capability_refreshed_utc,
+                    capability_refresh_seconds=heartbeat.capability_refresh_seconds,
                     last_sequence=None,
                     accepted_frames=0,
                     heartbeat_count=1,
@@ -266,6 +306,11 @@ class SensorIngress:
                 current.capabilities = capabilities
                 current.capture_active = heartbeat.capture_active
                 current.applied_revision = heartbeat.applied_revision
+                current.negotiated_max_payload_bytes = (
+                    heartbeat.negotiated_max_payload_bytes
+                )
+                current.capability_refreshed_utc = heartbeat.capability_refreshed_utc
+                current.capability_refresh_seconds = heartbeat.capability_refresh_seconds
                 current.heartbeat_count += 1
                 current.last_seen = now
         return SensorHeartbeatReceipt(
@@ -295,6 +340,9 @@ class SensorIngress:
                     capabilities=(),
                     capture_active=True,
                     applied_revision=None,
+                    negotiated_max_payload_bytes=None,
+                    capability_refreshed_utc=None,
+                    capability_refresh_seconds=None,
                     last_sequence=frame_sequence,
                     accepted_frames=1,
                     heartbeat_count=0,
@@ -330,6 +378,43 @@ class SensorIngress:
                     capabilities=state.capabilities,
                     capture_active=state.capture_active,
                     applied_revision=state.applied_revision,
+                    negotiated_max_payload_bytes=state.negotiated_max_payload_bytes,
+                    capability_refreshed_utc=(
+                        state.capability_refreshed_utc.isoformat()
+                        if state.capability_refreshed_utc is not None
+                        else None
+                    ),
+                    capability_refresh_age_seconds=(
+                        round(
+                            max(
+                                0.0,
+                                (
+                                    now - state.capability_refreshed_utc
+                                ).total_seconds(),
+                            ),
+                            3,
+                        )
+                        if state.capability_refreshed_utc is not None
+                        else None
+                    ),
+                    capability_refresh_status=(
+                        (
+                            "current"
+                            if max(
+                                0.0,
+                                (
+                                    now - state.capability_refreshed_utc
+                                ).total_seconds(),
+                            )
+                            <= 2.0 * state.capability_refresh_seconds
+                            else "stale"
+                        )
+                        if (
+                            state.capability_refreshed_utc is not None
+                            and state.capability_refresh_seconds is not None
+                        )
+                        else "unknown"
+                    ),
                     presence=self._presence(
                         max(0.0, (now - state.last_seen).total_seconds())
                     ),
@@ -351,7 +436,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v6",
+                schema="visionrig/sensor-runtime-status/v7",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,

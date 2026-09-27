@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import os
 import time
 from pathlib import Path
@@ -27,6 +28,9 @@ class _ProducerClient(Protocol):
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
         applied_revision: int | None = None,
+        negotiated_max_payload_bytes: int | None = None,
+        capability_refreshed_utc: str | None = None,
+        capability_refresh_seconds: float | None = None,
     ): ...
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"): ...
     def send_packet(self, payload: bytes): ...
@@ -139,6 +143,7 @@ def _run_controlled_capture(
     capability_refresh_seconds: float = 30.0,
     min_jpeg_quality: int = 30,
     monotonic: Callable[[], float] = time.monotonic,
+    utcnow: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
     """Run capture while respecting the remote desired-state contract.
@@ -157,6 +162,7 @@ def _run_controlled_capture(
     next_control_check = 0.0
     next_capability_check = 0.0
     current_packet_budget = packet_budget_bytes
+    capability_refreshed_utc: str | None = None
     deadline = monotonic()
     frames = 0
     source: FrameSource | None = None
@@ -184,6 +190,7 @@ def _run_controlled_capture(
                         f"effective_packet_cap={refreshed_budget}"
                     )
                 current_packet_budget = refreshed_budget
+                capability_refreshed_utc = utcnow().isoformat()
                 next_capability_check = now + capability_refresh_seconds
 
             if enabled is None or now >= next_control_check:
@@ -201,6 +208,21 @@ def _run_controlled_capture(
                         capabilities=capabilities,
                         capture_active=False,
                         applied_revision=desired.revision,
+                        negotiated_max_payload_bytes=(
+                            current_packet_budget
+                            if packet_budget_provider is not None
+                            else None
+                        ),
+                        capability_refreshed_utc=(
+                            capability_refreshed_utc
+                            if packet_budget_provider is not None
+                            else None
+                        ),
+                        capability_refresh_seconds=(
+                            capability_refresh_seconds
+                            if packet_budget_provider is not None
+                            else None
+                        ),
                     )
                     sleep(control_poll_seconds)
                     continue
@@ -215,6 +237,21 @@ def _run_controlled_capture(
                     capabilities=capabilities,
                     capture_active=True,
                     applied_revision=desired.revision,
+                    negotiated_max_payload_bytes=(
+                        current_packet_budget
+                        if packet_budget_provider is not None
+                        else None
+                    ),
+                    capability_refreshed_utc=(
+                        capability_refreshed_utc
+                        if packet_budget_provider is not None
+                        else None
+                    ),
+                    capability_refresh_seconds=(
+                        capability_refresh_seconds
+                        if packet_budget_provider is not None
+                        else None
+                    ),
                 )
 
             if source is None:
