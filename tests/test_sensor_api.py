@@ -430,6 +430,12 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
         runtime = client.get("/api/v1/sensors/status").json()["sources"][0]
         assert runtime["packet_target_above_streak"] == expected_streak
         fleet = client.get("/api/v1/sensors/fleet").json()
+        assert fleet["packet_target_pressure"] == {
+            "clear": 0,
+            "transient": 1,
+            "sustained": 0,
+            "unknown": 0,
+        }
         assert fleet["attention_total"] == 0
 
     response = client.post("/api/v1/sensors/heartbeat", json=heartbeat)
@@ -443,11 +449,21 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
         "above_target": 1,
         "unknown": 0,
     }
+    assert fleet["packet_target_pressure"] == {
+        "clear": 0,
+        "transient": 0,
+        "sustained": 1,
+        "unknown": 0,
+    }
     assert fleet["attention_total"] == 1
     item = fleet["attention"][0]
     assert item["source_id"] == "kinect-over-target"
     assert item["packet_target_status"] == "above_target"
+    assert item["packet_target_pressure_status"] == "sustained"
     assert item["packet_target_above_streak"] == 3
+    assert item["packet_target_above_since_utc"] is not None
+    assert item["packet_target_above_seconds"] is not None
+    assert item["packet_target_last_above_utc"] is not None
     assert item["negotiated_packet_target_utilization"] == 0.72
     assert item["observed_packet_utilization"] == 0.76
     assert "packet_target" in item["reasons"]
@@ -479,6 +495,12 @@ def test_fleet_packet_target_within_target_does_not_raise_attention() -> None:
         "above_target": 0,
         "unknown": 0,
     }
+    assert fleet["packet_target_pressure"] == {
+        "clear": 1,
+        "transient": 0,
+        "sustained": 0,
+        "unknown": 0,
+    }
     assert fleet["attention_total"] == 0
 
 
@@ -504,6 +526,9 @@ def test_packet_target_streak_resets_after_compliant_measurement() -> None:
 
     runtime = client.get("/api/v1/sensors/status").json()["sources"][0]
     assert runtime["packet_target_above_streak"] == 0
+    assert runtime["packet_target_above_since_utc"] is None
+    assert runtime["packet_target_above_seconds"] is None
+    assert runtime["packet_target_last_above_utc"] is not None
     fleet = client.get("/api/v1/sensors/fleet").json()
     assert fleet["packet_target"]["within_target"] == 1
     assert fleet["attention_total"] == 0
