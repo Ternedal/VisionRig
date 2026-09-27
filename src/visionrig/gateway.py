@@ -27,6 +27,9 @@ class GatewayConfigError(RuntimeError):
 
 class GatewayHeartbeat(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    schema_id: Literal["visionrig/sensor-heartbeat/v3"] = (
+        "visionrig/sensor-heartbeat/v3"
+    )
     source_id: str = Field(min_length=1, max_length=128)
     source_type: Literal["camera", "screen", "vr", "image"]
     device: str | None = Field(default=None, max_length=256)
