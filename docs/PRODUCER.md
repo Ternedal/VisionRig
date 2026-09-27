@@ -227,17 +227,3 @@ last video frame.
 Heartbeat v2 remains accepted for older producers. V2 has no negotiation
 telemetry and appears as `capability_refresh_status=unknown`. V3 negotiation
 fields are all-or-nothing; partial tuples are rejected rather than interpreted.
-
-
-## Negotiation heartbeat telemetry
-
-VisionRig 0.47.0 reports the active negotiated packet budget back through
-heartbeat v3. Each controlled heartbeat includes the effective packet ceiling,
-the UTC time of the latest successful capability refresh, and the configured
-refresh interval.
-
-This allows core/UI runtime status to distinguish a producer that is online
-from one whose transport contract has stopped refreshing. The status becomes
-`stale` after two missed refresh intervals. Timestamp-only refreshes are kept
-out of the semantic sensor change feed; a changed effective packet ceiling is
-surfaced as a runtime change.
