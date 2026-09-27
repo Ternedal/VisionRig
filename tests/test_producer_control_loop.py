@@ -5,9 +5,11 @@ import numpy as np
 from visionrig.contracts import SourceDescriptor
 from visionrig.pipeline import Frame
 from visionrig.producer_cli import (
+    PacketTransportPlan,
     _encode_kinect_packet,
     _encode_packet_with_budget,
     _run_controlled_capture,
+    _select_packet_compression,
 )
 from visionrig.sensor_packet import decode_sensor_packet, inspect_sensor_packet
 
@@ -428,3 +430,81 @@ def test_packet_budget_provider_requires_packet_encoder() -> None:
         assert "requires packet_encoder" in str(exc)
     else:
         raise AssertionError("packet budget provider without packet encoder must fail")
+
+
+def test_select_packet_compression_uses_only_negotiated_modes() -> None:
+    assert _select_packet_compression(("none", "zlib")) == "auto"
+    assert _select_packet_compression(("zlib",)) == "zlib"
+    assert _select_packet_compression(("none",)) == "none"
+
+
+def test_encode_kinect_packet_raw_mode_stays_sensor_packet_v2() -> None:
+    depth = np.array([[1000, 1500], [2000, 2500]], dtype=np.uint16)
+    frame = Frame(
+        source=SourceDescriptor(
+            source_id="kinect",
+            source_type="camera",
+            device="kinect-v2",
+        ),
+        sequence=0,
+        payload=np.zeros((2, 2, 3), dtype=np.uint8),
+        sensor_data={"color_aligned_depth_mm": depth},
+    )
+
+    packet = _encode_kinect_packet(
+        frame,
+        b"jpeg",
+        compression="none",
+    )
+    header = inspect_sensor_packet(packet)
+
+    assert header.schema_id == "visionrig/sensor-packet/v2"
+    assert header.depth is not None
+    assert header.depth.compression == "none"
+
+
+def test_live_transport_refresh_can_change_packet_encoder_strategy() -> None:
+    clock = FakeClock()
+    producer = FakeProducer([True, True])
+    source = FakeSource("kinect")
+    plans = iter(
+        [
+            PacketTransportPlan(
+                max_payload_bytes=2048,
+                compression="auto",
+                packet_encoder=lambda _frame, jpeg: b"auto:" + jpeg,
+            ),
+            PacketTransportPlan(
+                max_payload_bytes=2048,
+                compression="none",
+                packet_encoder=lambda _frame, jpeg: b"raw:" + jpeg,
+            ),
+        ]
+    )
+
+    frames = _run_controlled_capture(
+        producer=producer,
+        source_factory=lambda: source,
+        source_type="camera",
+        capabilities=("rgb", "depth", "infrared"),
+        fps=1.0,
+        jpeg_quality=80,
+        max_frames=2,
+        control_poll_seconds=1.0,
+        verbose=False,
+        encode_jpeg=lambda payload, _quality: b"jpeg:" + payload,
+        packet_encoder=lambda _frame, jpeg: b"initial:" + jpeg,
+        packet_transport_provider=lambda: next(plans),
+        capability_refresh_seconds=1.0,
+        min_jpeg_quality=30,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+
+    assert frames == 2
+    assert producer.sent_packets == [
+        b"auto:jpeg:frame-kinect-1",
+        b"raw:jpeg:frame-kinect-2",
+    ]
+    assert producer.negotiation_heartbeats[0][0] == 2048
+    assert producer.negotiation_heartbeats[1][0] == 2048
