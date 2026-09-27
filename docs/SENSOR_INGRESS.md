@@ -182,3 +182,11 @@ Warning and critical packet status is observability only. It does not change
 desired sensor state, reject an otherwise valid packet, or grant new control
 authority. The fleet summary surfaces warning/critical sources in its bounded
 attention list with reason `packet_transport`.
+
+
+### Explicit uncompressed v2
+
+The encoder accepts an explicit v2 packet version with `compression=none`.
+This produces SensorPacket/v2 framing and per-plane `compression=none` rather
+than falling back to v1. It is used by negotiated producers when a peer supports
+v2 plus raw numeric planes but does not advertise zlib.
