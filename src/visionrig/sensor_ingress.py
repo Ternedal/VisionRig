@@ -8,7 +8,7 @@ sensors without exposing raw image data.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Any, Callable, Literal, Protocol
@@ -309,8 +309,7 @@ class SensorIngress:
             current.last_sequence = frame_sequence
             current.accepted_frames += 1
             current.dropped_frames_total += dropped_frames
-            if packet_transport is not None:
-                current.packet_transport = packet_transport
+            current.packet_transport = packet_transport
             current.last_seen = now
 
     def _presence(self, age_seconds: float) -> SensorPresence:
@@ -344,7 +343,7 @@ class SensorIngress:
                     dropped_frames_total=state.dropped_frames_total,
                     packet_transport=(
                         {
-                            **state.packet_transport.__dict__,
+                            **asdict(state.packet_transport),
                             "payload_utilization": round(
                                 state.packet_transport.packet_bytes
                                 / self._max_payload_bytes,
