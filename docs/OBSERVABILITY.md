@@ -795,3 +795,29 @@ as an operational incident.
 Bootstrap v23 embeds fleet v21 and health advances to v51. The gap list remains
 process-local operational telemetry and creates no semantic event or control
 action.
+
+
+### Measurement-gap remediation metadata
+
+VisionRig 0.73.0 advances runtime status to v16 and fleet summary to v22.
+
+Each runtime source now retains `heartbeat_schema_id`, representing the most
+recent heartbeat contract accepted for that producer. Frame-only runtime
+sources expose `null` until a heartbeat is observed.
+
+Each `packet_target_measurement_gaps` item now additionally exposes:
+
+- `heartbeat_schema_id`: producer contract currently observed;
+- `required_schema_id`: `visionrig/sensor-heartbeat/v6`, the contract that
+  supports observed packet utilization and therefore complete packet-target
+  measurement.
+
+The gap list remains capped at 32 entries in deterministic source-id order.
+`packet_target_measurement_gap_total` remains unbounded, and
+`packet_target_measurement_gaps_truncated` indicates omitted rows. The
+diagnostic list still does not contribute to `attention_total`.
+
+Sensor catalog advances to v14 because its nested runtime projection now
+includes `heartbeat_schema_id`. Bootstrap v24 embeds fleet v22 and catalog
+v14; health advances to v52. These fields remain process-local diagnostics and
+do not create semantic events or control changes.
