@@ -593,6 +593,16 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "target_only": 0,
         "unavailable": 4,
     }
+    assert fleet["heartbeat_schema_coverage"] == {
+        "runtime_sources": 2,
+        "v2": 2,
+        "v3": 0,
+        "v4": 0,
+        "v5": 0,
+        "v6": 0,
+        "no_heartbeat": 0,
+        "upgrade_required": 2,
+    }
     assert fleet["packet_target_flap_window_seconds"] == 120.0
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 0,
@@ -679,6 +689,10 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert (
         health_fleet["packet_target_measurement_coverage"]
         == fleet["packet_target_measurement_coverage"]
+    )
+    assert (
+        health_fleet["heartbeat_schema_coverage"]
+        == fleet["heartbeat_schema_coverage"]
     )
     assert (
         health_fleet["packet_target_flap_window_seconds"]
