@@ -538,3 +538,18 @@ truncation fields describe the full runtime fleet.
 
 This is remediation telemetry only and remains separate from operational
 attention and control policy.
+
+
+## VisionRig 0.76.0: heartbeat upgrade distance
+
+Heartbeat upgrade candidates now include an objective migration distance:
+`versions_behind` reports how many heartbeat contract versions a producer is
+behind v6, while `upgrade_stage` distinguishes normal contract upgrades from
+runtime sources that have not published a heartbeat yet.
+
+The candidate list is prioritized before bounding: known contracts are ordered
+by largest version gap first, then by source id. Frame-only/no-heartbeat sources
+follow the known-version candidates and use `versions_behind = null`.
+
+This keeps migration ordering deterministic and explainable without introducing
+an opaque score, alert policy, or automatic producer upgrade behavior.
