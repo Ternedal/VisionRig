@@ -399,3 +399,15 @@ This lets dashboards link a fleet-wide overshoot indicator directly to the
 sensor row that needs inspection instead of scanning the catalog client-side.
 When several measured sources have the same maximum delta, the deterministic
 sorted source order keeps the first source as the representative.
+
+
+## VisionRig 0.65.0: sustained pressure age
+
+Fleet packet-target telemetry now exposes the longest currently sustained
+pressure episode across the sensor fleet. The summary reports how many sources
+are currently sustained, which source has the longest active run, when that run
+started, and its current server-clock duration.
+
+This gives dashboards a direct distinction between newly sustained pressure and
+a source that has remained over target for a long period, without introducing a
+new alert or capture policy.
