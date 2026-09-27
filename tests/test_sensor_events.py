@@ -351,6 +351,9 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "no_heartbeat": 0,
             "upgrade_required": 0,
         },
+        "heartbeat_upgrade_candidates": [],
+        "heartbeat_upgrade_candidate_total": 0,
+        "heartbeat_upgrade_candidates_truncated": False,
         "packet_target_flap_window_seconds": 120.0,
         "packet_target_overshoot": {
             "measured_sources": 0,
