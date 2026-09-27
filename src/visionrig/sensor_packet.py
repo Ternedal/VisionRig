@@ -106,7 +106,13 @@ def _decode_plane_bytes(
     try:
         decoder = zlib.decompressobj()
         raw = decoder.decompress(payload, expected + 1)
-        raw += decoder.flush()
+        if len(raw) > expected or decoder.unconsumed_tail:
+            raise SensorPacketError(f"{label} decompressed payload exceeds declared size")
+        remaining = expected - len(raw)
+        if remaining:
+            raw += decoder.flush(remaining)
+        else:
+            decoder.flush(1)
     except zlib.error as exc:
         raise SensorPacketError(f"{label} zlib payload is invalid") from exc
     if len(raw) != expected:
