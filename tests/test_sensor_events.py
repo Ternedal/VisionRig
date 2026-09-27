@@ -125,7 +125,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
     assert runtime_batch["entries"][0]["event"]["payload"] == {
         "capture_active": False,
         "applied_revision": 1,
-        "negotiated_max_payload_bytes": None,
+        "negotiated_max_payload_bytes": 4194304,
         "presence": "online",
     }
     assert runtime_batch["entries"][0]["event"]["state_revision"] == 3
