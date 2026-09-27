@@ -556,7 +556,7 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     )
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v29"
+    assert health["schema"] == "visionrig/health/v30"
     assert health["sensor_changes"]["durability"] == "persistent"
     assert health["sensor_changes"]["stream_id"] == "restored-stream"
 
