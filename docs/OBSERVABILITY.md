@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v19` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v20` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v20` with:
+`visionrig/sensor-bootstrap-snapshot/v21` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v48` and advertises the desired-state
+`GET /health` uses `visionrig/health/v49` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -725,3 +725,24 @@ therefore remain `unknown`.
 Bootstrap v20 embeds catalog v12 and fleet v19; health advances to v48. The
 change affects classification only and introduces no new attention, semantic
 events or control behavior.
+
+
+### Packet-target measurement coverage
+
+VisionRig 0.70.0 extends fleet summary v20 with
+`packet_target_measurement_coverage`:
+
+- `complete`: both negotiated target utilization and observed utilization are
+  present;
+- `target_only`: a negotiated target exists but observed utilization is
+  missing;
+- `unavailable`: no negotiated packet target is available, including legacy
+  runtime sources and known sensors without runtime telemetry.
+
+The three counters are mutually exclusive and sum to the fleet source total.
+They explain why compliance, pressure, or stability may be `unknown` without
+changing those classifiers themselves.
+
+Bootstrap v21 embeds fleet v20 and health advances to v49. Measurement coverage
+is process-local operational telemetry only and creates no semantic event or
+control action.
