@@ -386,3 +386,37 @@ def test_producer_rejects_v2_capabilities_without_thresholds() -> None:
         )
         with pytest.raises(ProducerProtocolError, match="invalid VisionRig"):
             producer.fetch_capabilities()
+
+
+def test_producer_uses_heartbeat_v5_for_target_utilization() -> None:
+    seen = {}
+    def handler(request: httpx.Request) -> httpx.Response:
+        import json
+        seen["body"] = json.loads(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "schema_id": "visionrig/sensor-heartbeat-receipt/v1",
+                "status": "accepted",
+                "source_id": "kinect",
+                "seen_utc": "2026-09-27T10:00:00+00:00",
+                "production_authority": False,
+            },
+        )
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="kinect",
+            source_type="camera",
+            client=client,
+        )
+        producer.send_heartbeat(
+            negotiated_max_payload_bytes=4194304,
+            capability_refreshed_utc="2026-09-27T10:00:00+00:00",
+            capability_refresh_seconds=30.0,
+            negotiated_packet_compression="auto",
+            negotiated_packet_target_utilization=0.72,
+        )
+    assert seen["body"]["schema_id"] == "visionrig/sensor-heartbeat/v5"
+    assert seen["body"]["negotiated_packet_target_utilization"] == 0.72
