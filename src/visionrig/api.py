@@ -171,6 +171,10 @@ def create_app(
                 previous_runtime.negotiated_packet_compression
                 != current_runtime.negotiated_packet_compression
             )
+            or (
+                previous_runtime.negotiated_packet_target_utilization
+                != current_runtime.negotiated_packet_target_utilization
+            )
         ):
             append_sensor_change(
                 kind="runtime_changed",
@@ -183,6 +187,9 @@ def create_app(
                     ),
                     "negotiated_packet_compression": (
                         current_runtime.negotiated_packet_compression
+                    ),
+                    "negotiated_packet_target_utilization": (
+                        current_runtime.negotiated_packet_target_utilization
                     ),
                     "presence": current_runtime.presence,
                 },
@@ -351,6 +358,11 @@ def create_app(
                             if runtime_source is not None
                             else None
                         ),
+                        "negotiated_packet_target_utilization": (
+                            runtime_source.negotiated_packet_target_utilization
+                            if runtime_source is not None
+                            else None
+                        ),
                         "capability_refresh_age_seconds": (
                             runtime_source.capability_refresh_age_seconds
                             if runtime_source is not None
@@ -387,7 +399,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v33",
+            "schema": "visionrig/health/v34",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -407,7 +419,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v8",
+                "schema": "visionrig/sensor-ingress/v9",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": [
                     "image/jpeg",
@@ -419,6 +431,7 @@ def create_app(
                     "visionrig/sensor-heartbeat/v2",
                     "visionrig/sensor-heartbeat/v3",
                     "visionrig/sensor-heartbeat/v4",
+                    "visionrig/sensor-heartbeat/v5",
                 ],
                 "sensor_packet_schemas": [
                     "visionrig/sensor-packet/v1",
