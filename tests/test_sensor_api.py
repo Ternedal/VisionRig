@@ -999,6 +999,8 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
             "current_schema_id": "visionrig/sensor-heartbeat/v5",
             "required_schema_id": "visionrig/sensor-heartbeat/v6",
             "measurement": "target_only",
+            "upgrade_stage": "contract_upgrade",
+            "versions_behind": 1,
         }
     ]
     assert fleet["packet_target_measurement_gap_total"] == 1
@@ -1073,6 +1075,14 @@ def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
         item["current_schema_id"] == "visionrig/sensor-heartbeat/v5"
         for item in fleet["heartbeat_upgrade_candidates"]
     )
+    assert all(
+        item["upgrade_stage"] == "contract_upgrade"
+        for item in fleet["heartbeat_upgrade_candidates"]
+    )
+    assert all(
+        item["versions_behind"] == 1
+        for item in fleet["heartbeat_upgrade_candidates"]
+    )
     assert len(fleet["packet_target_measurement_gaps"]) == 32
     assert fleet["packet_target_measurement_gaps_truncated"] is True
     assert fleet["packet_target_measurement_gaps"][0]["source_id"] == "camera-gap-00"
@@ -1085,4 +1095,54 @@ def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
         item["required_schema_id"] == "visionrig/sensor-heartbeat/v6"
         for item in fleet["packet_target_measurement_gaps"]
     )
+    assert fleet["attention_total"] == 0
+
+
+def test_heartbeat_upgrade_candidates_prioritize_versions_behind() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+
+    payloads = (
+        {
+            "schema_id": "visionrig/sensor-heartbeat/v5",
+            "source_id": "camera-a-v5",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T21:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+        },
+        {
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "camera-z-v2",
+            "source_type": "camera",
+        },
+        {
+            "schema_id": "visionrig/sensor-heartbeat/v4",
+            "source_id": "camera-m-v4",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T21:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+        },
+    )
+    for payload in payloads:
+        assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v25"
+    candidates = fleet["heartbeat_upgrade_candidates"]
+    assert [item["source_id"] for item in candidates] == [
+        "camera-z-v2",
+        "camera-m-v4",
+        "camera-a-v5",
+    ]
+    assert [item["versions_behind"] for item in candidates] == [4, 2, 1]
+    assert all(
+        item["upgrade_stage"] == "contract_upgrade"
+        for item in candidates
+    )
+    assert fleet["heartbeat_upgrade_candidate_total"] == 3
+    assert fleet["heartbeat_upgrade_candidates_truncated"] is False
     assert fleet["attention_total"] == 0
