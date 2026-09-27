@@ -301,7 +301,7 @@ surfaces enough temporal context to distinguish spikes from persistent producer
 adaptation problems.
 
 
-## VisionRig 0.59.0: sustained pressure episodes
+## VisionRig 0.58.0: sustained pressure episodes
 
 Runtime status v14 now counts sustained packet-target pressure episodes and
 records the latest recovery time after a sustained run. The episode counter
@@ -313,3 +313,17 @@ unknown measurement.
 Fleet summary v10 exposes the aggregate sustained-episode count and how many
 sources have recovered from at least one sustained episode. Attention entries
 also include each source's episode count and last recovery timestamp.
+
+
+## VisionRig 0.59.0: pressure recurrence telemetry
+
+Runtime status v15 now tracks whether sustained packet-target pressure returns
+after recovery. `packet_target_recurrence_count` increments only when a new
+sustained episode starts after a recorded sustained recovery, while
+`packet_target_last_recurrence_seconds` records the server-clock interval from
+that recovery to the recurrence threshold crossing.
+
+Fleet summary v11 aggregates total recurrences and the number of sources that
+have recurred at least once. This distinguishes a sensor with one historical
+incident from a sensor whose transport adaptation repeatedly falls back into
+sustained pressure.
