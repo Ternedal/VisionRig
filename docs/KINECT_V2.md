@@ -93,3 +93,18 @@ cross the VisionRig boundary. Spatial fusion may use metric distances to emit
 If the optional driver is absent, the Kinect adapter fails with a targeted
 installation message. If the sensor cannot open, VisionRig reports the SDK /
 power / USB 3.0 prerequisites instead of silently falling back to webcam input.
+
+
+## Remote packet budget
+
+VisionRig 0.44.0 adds producer-side packet budgeting to remote Kinect mode.
+`--max-packet-bytes` defaults to 8 MiB and may also be supplied through
+`VISIONRIG_PRODUCER_MAX_PACKET_BYTES`. The producer attempts to keep packets
+below the 80% warning threshold by lowering RGB JPEG quality from the configured
+`--jpeg-quality` toward `--min-jpeg-quality` in 5-point steps. Metric depth
+and IR are left byte-for-byte semantically intact apart from the existing
+lossless per-plane compression.
+
+Budget adaptation happens before the durable producer sequence reservation.
+An irreducibly oversized packet therefore stops visibly instead of consuming a
+sequence that was never sent.
