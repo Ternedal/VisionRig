@@ -387,3 +387,15 @@ Fleet summary v13 also exposes a bounded `packet_target_overshoot` aggregate
 with the number of measurable sources and the current maximum delta and ratio.
 This remains diagnostic telemetry only and does not alter capture or adaptation
 policy.
+
+
+## VisionRig 0.64.0: worst packet-target source
+
+Fleet overshoot telemetry now identifies the source responsible for the current
+maximum packet-target deviation. The aggregate includes the source id plus the
+target and observed utilization that produced the maximum delta.
+
+This lets dashboards link a fleet-wide overshoot indicator directly to the
+sensor row that needs inspection instead of scanning the catalog client-side.
+When several measured sources have the same maximum delta, the deterministic
+sorted source order keeps the first source as the representative.
