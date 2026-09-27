@@ -288,3 +288,14 @@ sustained producer-side adaptation problem. Runtime status v12 tracks consecutiv
 over-target heartbeat-v6 observations, while fleet summary v8 raises
 `packet_target` attention only after three consecutive exceedances. A compliant
 or unknown measurement resets the streak immediately.
+
+
+## VisionRig 0.57.0: packet-target pressure duration
+
+Runtime status v13 now exposes when a consecutive over-target run started, how
+many seconds it has remained active, and when an over-target measurement was
+last observed. Fleet summary v9 classifies target pressure as `clear`,
+`transient`, `sustained` or `unknown`; only sustained pressure enters the
+existing bounded attention list. This keeps alerting quiet while giving control
+surfaces enough temporal context to distinguish spikes from persistent producer
+adaptation problems.

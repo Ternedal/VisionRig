@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v12`.
+Schema: `visionrig/sensor-runtime-status/v13`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v8` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v9` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v7` with:
+`visionrig/sensor-bootstrap-snapshot/v8` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v35` and advertises the desired-state
+`GET /health` uses `visionrig/health/v36` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -426,3 +426,23 @@ resets the streak to zero immediately.
 
 This debounce state is process-local transport telemetry. It does not advance
 registry state, alter desired capture state, or emit semantic change events.
+
+
+### Packet-target pressure duration
+
+VisionRig 0.57.0 adds temporal context to the packet-target debounce signal.
+Runtime status v13 exposes:
+
+- `packet_target_above_since_utc` while a consecutive over-target run is active;
+- `packet_target_above_seconds`, derived from the server clock;
+- `packet_target_last_above_utc`, retained after recovery for diagnosis.
+
+Fleet summary v9 aggregates the current pressure state as `clear`,
+`transient`, `sustained` or `unknown`. `transient` means the latest
+measurement is above target but the configured three-heartbeat attention
+threshold has not yet been reached. `sustained` means the threshold has been
+reached and the source is eligible for `packet_target` attention.
+
+The timestamps and duration are process-local transport telemetry. They do not
+advance registry state, alter desired capture state, or generate semantic
+change-feed events.

@@ -221,6 +221,9 @@ class SensorSourceStats:
     negotiated_packet_target_utilization: float | None
     observed_packet_utilization: float | None
     packet_target_above_streak: int
+    packet_target_above_since_utc: str | None
+    packet_target_above_seconds: float | None
+    packet_target_last_above_utc: str | None
     capability_refreshed_utc: str | None
     capability_refresh_observed_utc: str | None
     capability_refresh_age_seconds: float | None
@@ -263,6 +266,8 @@ class _MutableSourceStats:
     negotiated_packet_target_utilization: float | None
     observed_packet_utilization: float | None
     packet_target_above_streak: int
+    packet_target_above_since_utc: datetime | None
+    packet_target_last_above_utc: datetime | None
     capability_refreshed_utc: datetime | None
     capability_refresh_observed_utc: datetime | None
     capability_refresh_seconds: float | None
@@ -370,6 +375,26 @@ class SensorIngress:
                         )
                         else 0
                     ),
+                    packet_target_above_since_utc=(
+                        now
+                        if (
+                            heartbeat.negotiated_packet_target_utilization is not None
+                            and heartbeat.observed_packet_utilization is not None
+                            and heartbeat.observed_packet_utilization
+                            > heartbeat.negotiated_packet_target_utilization
+                        )
+                        else None
+                    ),
+                    packet_target_last_above_utc=(
+                        now
+                        if (
+                            heartbeat.negotiated_packet_target_utilization is not None
+                            and heartbeat.observed_packet_utilization is not None
+                            and heartbeat.observed_packet_utilization
+                            > heartbeat.negotiated_packet_target_utilization
+                        )
+                        else None
+                    ),
                     capability_refreshed_utc=heartbeat.capability_refreshed_utc,
                     capability_refresh_observed_utc=(
                         now if heartbeat.capability_refreshed_utc is not None else None
@@ -404,9 +429,13 @@ class SensorIngress:
                     and heartbeat.observed_packet_utilization
                     > heartbeat.negotiated_packet_target_utilization
                 ):
+                    if current.packet_target_above_streak == 0:
+                        current.packet_target_above_since_utc = now
                     current.packet_target_above_streak += 1
+                    current.packet_target_last_above_utc = now
                 else:
                     current.packet_target_above_streak = 0
+                    current.packet_target_above_since_utc = None
                 if heartbeat.capability_refreshed_utc is None:
                     current.capability_refresh_observed_utc = None
                 elif (
@@ -450,6 +479,8 @@ class SensorIngress:
                     negotiated_packet_target_utilization=None,
                     observed_packet_utilization=None,
                     packet_target_above_streak=0,
+                    packet_target_above_since_utc=None,
+                    packet_target_last_above_utc=None,
                     capability_refreshed_utc=None,
                     capability_refresh_observed_utc=None,
                     capability_refresh_seconds=None,
@@ -495,6 +526,27 @@ class SensorIngress:
                     ),
                     observed_packet_utilization=state.observed_packet_utilization,
                     packet_target_above_streak=state.packet_target_above_streak,
+                    packet_target_above_since_utc=(
+                        state.packet_target_above_since_utc.isoformat()
+                        if state.packet_target_above_since_utc is not None
+                        else None
+                    ),
+                    packet_target_above_seconds=(
+                        round(
+                            max(
+                                0.0,
+                                (now - state.packet_target_above_since_utc).total_seconds(),
+                            ),
+                            3,
+                        )
+                        if state.packet_target_above_since_utc is not None
+                        else None
+                    ),
+                    packet_target_last_above_utc=(
+                        state.packet_target_last_above_utc.isoformat()
+                        if state.packet_target_last_above_utc is not None
+                        else None
+                    ),
                     capability_refreshed_utc=(
                         state.capability_refreshed_utc.isoformat()
                         if state.capability_refreshed_utc is not None
@@ -557,7 +609,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v12",
+                schema="visionrig/sensor-runtime-status/v13",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
