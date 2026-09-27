@@ -501,6 +501,12 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "pending": 1,
         "unknown": 2,
     }
+    assert fleet["transport"] == {
+        "normal": 0,
+        "warning": 0,
+        "critical": 0,
+        "unknown": 4,
+    }
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -524,6 +530,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert health_fleet["lifecycle"] == fleet["lifecycle"]
     assert health_fleet["presence"] == fleet["presence"]
     assert health_fleet["control"] == fleet["control"]
+    assert health_fleet["transport"] == fleet["transport"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
@@ -546,6 +553,12 @@ def test_sensor_fleet_attention_is_bounded() -> None:
     assert fleet["change_consistency"]["status"] == "registry_ahead"
     assert fleet["change_consistency"]["journal_state_revision"] == 0
     assert fleet["total"] == 40
+    assert fleet["transport"] == {
+        "normal": 0,
+        "warning": 0,
+        "critical": 0,
+        "unknown": 40,
+    }
     assert fleet["attention_total"] == 40
     assert len(fleet["attention"]) == 32
     assert fleet["attention_truncated"] is True
