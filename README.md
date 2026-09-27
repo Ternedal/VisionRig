@@ -23,8 +23,7 @@ VisionRig includes:
 - **producer-side Kinect packet budgeting with adaptive RGB JPEG quality**
 - **authenticated gateway/core transport capability negotiation for remote producers**
 - **live capability refresh so remote Kinect adapts to payload-limit changes without restart**
-- **heartbeat v3 negotiation telemetry with negotiated budget freshness observability**
-- **heartbeat v3 negotiation telemetry with current/stale runtime status**
+- **heartbeat v3 negotiated-budget telemetry with current/stale refresh status**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
