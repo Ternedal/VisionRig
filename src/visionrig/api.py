@@ -366,6 +366,16 @@ def create_app(
         packet_target_latest_recovery_age_seconds = None
         packet_target_measurement_gaps = []
         packet_target_measurement_gap_total = 0
+        heartbeat_schema_coverage = {
+            "runtime_sources": 0,
+            "v2": 0,
+            "v3": 0,
+            "v4": 0,
+            "v5": 0,
+            "v6": 0,
+            "no_heartbeat": 0,
+            "upgrade_required": 0,
+        }
         attention = []
         attention_total = 0
 
@@ -454,6 +464,20 @@ def create_app(
                 runtime_source
             )
             packet_target_measurement_coverage[packet_target_measurement] += 1
+            if runtime_source is not None:
+                heartbeat_schema_coverage["runtime_sources"] += 1
+                heartbeat_schema_id = runtime_source.heartbeat_schema_id
+                heartbeat_version = (
+                    heartbeat_schema_id.rsplit("/", 1)[-1]
+                    if heartbeat_schema_id is not None
+                    else None
+                )
+                if heartbeat_version in {"v2", "v3", "v4", "v5", "v6"}:
+                    heartbeat_schema_coverage[heartbeat_version] += 1
+                else:
+                    heartbeat_schema_coverage["no_heartbeat"] += 1
+                if heartbeat_schema_id != "visionrig/sensor-heartbeat/v6":
+                    heartbeat_schema_coverage["upgrade_required"] += 1
             if (
                 runtime_source is not None
                 and packet_target_measurement != "complete"
@@ -671,7 +695,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v22",
+            "schema": "visionrig/sensor-fleet-summary/v23",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -694,6 +718,7 @@ def create_app(
             "packet_target_recurring_sources": packet_target_recurring_sources,
             "packet_target_stability": packet_target_stability_counts,
             "packet_target_measurement_coverage": packet_target_measurement_coverage,
+            "heartbeat_schema_coverage": heartbeat_schema_coverage,
             "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
             "packet_target_overshoot": {
                 "measured_sources": packet_target_overshoot_measured_sources,
@@ -743,7 +768,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v52",
+            "schema": "visionrig/health/v53",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -812,7 +837,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v24",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v25",
             },
         }
 
@@ -1004,7 +1029,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v24",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v25",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

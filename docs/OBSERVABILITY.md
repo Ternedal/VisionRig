@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v22` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v23` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v24` with:
+`visionrig/sensor-bootstrap-snapshot/v25` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v52` and advertises the desired-state
+`GET /health` uses `visionrig/health/v53` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -821,3 +821,32 @@ Sensor catalog advances to v14 because its nested runtime projection now
 includes `heartbeat_schema_id`. Bootstrap v24 embeds fleet v22 and catalog
 v14; health advances to v52. These fields remain process-local diagnostics and
 do not create semantic events or control changes.
+
+
+### Heartbeat schema coverage
+
+VisionRig 0.74.0 extends fleet summary v23 with
+`heartbeat_schema_coverage`.
+
+The aggregate contains:
+
+- `runtime_sources`: connected/process-local runtime sources;
+- `v2` through `v6`: count by latest accepted heartbeat contract;
+- `no_heartbeat`: runtime sources created from frame ingress that have not yet
+  published a heartbeat;
+- `upgrade_required`: runtime sources whose latest heartbeat is not v6,
+  including frame-only sources without a heartbeat.
+
+Catalog-only sensors without runtime state are intentionally excluded. The
+aggregate therefore describes producer runtime coverage, while
+`packet_target_measurement_coverage` continues to describe the whole known
+fleet.
+
+Heartbeat v6 remains the remediation target because it is the first contract
+that carries observed packet utilization. A producer running v6 is not counted
+as requiring a contract upgrade even if some separate runtime condition causes
+measurement telemetry to be unavailable.
+
+Bootstrap v25 embeds fleet v23 and health advances to v53. Heartbeat schema
+coverage is process-local diagnostics only and creates no semantic event,
+attention reason, or control action.

@@ -512,3 +512,15 @@ the negotiated target from a v6 producer with complete measurement telemetry.
 The measurement-gap list remains bounded to 32 deterministic source-id ordered
 entries. Its total and truncation fields continue to describe the full fleet,
 and it remains separate from operational attention.
+
+
+## VisionRig 0.74.0: heartbeat schema coverage
+
+Fleet observability now aggregates the heartbeat contract versions currently
+used by connected runtime sources. The summary exposes counts for v2 through
+v6, frame-only/no-heartbeat runtime sources, total runtime sources, and how many
+producers require an upgrade to heartbeat v6 for complete packet-target
+measurement telemetry.
+
+This is upgrade/remediation telemetry only. It does not change attention,
+capture authority, or producer negotiation policy.
