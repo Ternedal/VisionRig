@@ -517,8 +517,10 @@ def test_live_transport_refresh_can_change_packet_encoder_strategy() -> None:
     ]
     assert producer.negotiation_heartbeats[0][0] == 2048
     assert producer.negotiation_heartbeats[0][3] == "auto"
+    assert producer.negotiation_heartbeats[0][4] == 0.80
     assert producer.negotiation_heartbeats[1][0] == 2048
     assert producer.negotiation_heartbeats[1][3] == "none"
+    assert producer.negotiation_heartbeats[1][4] == 0.70
 
 
 def test_select_packet_compression_rejects_unknown_only_modes() -> None:
