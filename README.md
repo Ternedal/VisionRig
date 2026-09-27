@@ -27,6 +27,7 @@ VisionRig includes:
 - **negotiated packet-pressure thresholds so adaptive JPEG follows server policy**
 - **heartbeat v3/v4/v5 observability for negotiated producer budget, compression, target utilization and refresh freshness**
 - **fleet attention for stale producer capability negotiation**
+- **fleet packet-target compliance with target-vs-observed attention**
 - **clock-skew-safe capability freshness using VisionRig-observed refresh time**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
@@ -269,3 +270,12 @@ target. The reference Kinect producer reports the latest achieved SensorPacket
 utilization, and the gateway/core expose it through runtime status v11. The
 measurement is intentionally transient and does not generate semantic
 `runtime_changed` events.
+
+
+## VisionRig 0.55.0: fleet packet-target compliance
+
+Fleet summary v7 aggregates heartbeat v6 target-vs-observed packet utilization
+as `within_target`, `above_target` or `unknown`. Producers above their
+negotiated packet target enter the bounded attention list with
+`reason = packet_target`, including both values for diagnostics. The signal
+is observational only and does not alter capture policy or semantic state.

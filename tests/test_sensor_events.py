@@ -224,7 +224,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     assert body["change_cursor"] == 2
     assert body["catalog"]["schema"] == "visionrig/sensor-catalog/v8"
     assert body["catalog"]["sources"][0]["source_id"] == "camera-bootstrap"
-    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v6"
+    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v7"
     assert body["fleet"]["state_revision"] == 1
     assert body["fleet"]["change_consistency"]["status"] == "synced"
     assert body["fleet"]["total"] == 1
@@ -276,7 +276,7 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "sources": [],
     }
     assert body["fleet"] == {
-        "schema": "visionrig/sensor-fleet-summary/v6",
+        "schema": "visionrig/sensor-fleet-summary/v7",
         "state_revision": 0,
         "change_consistency": {
             "schema": "visionrig/sensor-change-consistency/v1",
@@ -312,6 +312,11 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "none": 0,
             "zlib": 0,
             "auto": 0,
+            "unknown": 0,
+        },
+        "packet_target": {
+            "within_target": 0,
+            "above_target": 0,
             "unknown": 0,
         },
         "attention": [],
