@@ -408,3 +408,21 @@ An `above_target` source is added to bounded fleet attention with
 utilization plus the derived status. This remains transient transport
 observability; it does not advance registry state, modify desired state, or
 emit semantic change events.
+
+
+### Sustained packet-target attention
+
+VisionRig 0.56.0 keeps the instantaneous fleet compliance classification, but
+does not raise `packet_target` attention for a single oversized observation.
+Runtime status v12 tracks `packet_target_above_streak`, the number of
+consecutive heartbeat-v6 measurements whose observed utilization exceeds the
+negotiated target.
+
+Fleet summary v8 advertises
+`packet_target_attention_streak_threshold = 3`. The source enters bounded
+attention only when the current status is `above_target` and the streak has
+reached that threshold. A within-target measurement or missing comparison data
+resets the streak to zero immediately.
+
+This debounce state is process-local transport telemetry. It does not advance
+registry state, alter desired capture state, or emit semantic change events.
