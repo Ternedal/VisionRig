@@ -272,7 +272,7 @@ measurement is intentionally transient and does not generate semantic
 `runtime_changed` events.
 
 
-## VisionRig 0.55.0: fleet packet-target compliance
+## VisionRig 0.56.0: fleet packet-target compliance
 
 Fleet summary v7 aggregates heartbeat v6 target-vs-observed packet utilization
 as `within_target`, `above_target` or `unknown`. Producers above their
