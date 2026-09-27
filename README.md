@@ -20,6 +20,7 @@ VisionRig includes:
 - **per-source SensorPacket transport telemetry with compression ratio and ingress-limit utilization**
 - **fleet attention for SensorPacket payload pressure with warning/critical thresholds**
 - **remote Kinect v2 producer with producer-side color/depth alignment**
+- **producer-side Kinect packet budgeting with adaptive RGB JPEG quality**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
@@ -168,7 +169,11 @@ PerceptionEvent/Consciousness Core. `visionrig-producer --kinect-v2` performs Ki
 producer host and emits SensorPacket/v2 with adaptive per-plane compression:
 zlib is used only when it makes that depth/IR plane smaller; otherwise the plane
 stays raw. The packet still uses the same durable sequence/backpressure state
-machine as normal frames.
+machine as normal frames. The reference Kinect producer also keeps a local
+packet budget (8 MiB by default) and lowers only RGB JPEG quality in 5-point
+steps until the packet is below the 80% warning threshold where possible.
+Depth/IR are never degraded. If the packet still exceeds the hard local budget
+at minimum JPEG quality, it fails before sequence reservation/send.
 
 `GET /api/v1/sensors/status` exposes the most recent accepted SensorPacket
 transport telemetry per source: total packet bytes, RGB bytes, raw/wire

@@ -54,6 +54,32 @@ uint16 bytes; otherwise that plane is sent uncompressed. RGB remains JPEG. It
 uses the same persistent sequence/drop state,
 desired-state polling and heartbeat acknowledgement as the webcam producer.
 
+### Kinect packet budget adaptation
+
+Remote Kinect mode applies a producer-side SensorPacket budget before calling
+`send_packet()`. The default is 8 MiB, matching the default core/gateway
+limit. Override it with:
+
+```powershell
+$env:VISIONRIG_PRODUCER_MAX_PACKET_BYTES="8388608"
+# or:
+visionrig-producer --kinect-v2 --max-packet-bytes 8388608
+```
+
+The producer starts at `--jpeg-quality` (default 80). If the full packet is at
+or above the 80% payload-warning threshold, it re-encodes only the RGB JPEG in
+5-quality-point steps down to `--min-jpeg-quality` (default 30). Depth and IR
+planes are never downsampled, quantized or discarded by this adaptation.
+
+If the minimum-quality packet is still below the hard packet budget, it is sent
+even if its utilization remains warning/critical because the numeric planes may
+dominate the packet. If it exceeds the hard budget, the producer raises a visible
+error **before** calling `send_packet()`; no durable sequence is reserved and no
+hidden drop is created.
+
+For deployments where core or gateway limits differ from the default, set the
+producer budget to the lower effective limit.
+
 The producer polls desired state every two seconds by default. Override with
 `--control-poll-seconds` between 0.25 and 60 seconds.
 

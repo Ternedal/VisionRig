@@ -4,7 +4,11 @@ import numpy as np
 
 from visionrig.contracts import SourceDescriptor
 from visionrig.pipeline import Frame
-from visionrig.producer_cli import _encode_kinect_packet, _run_controlled_capture
+from visionrig.producer_cli import (
+    _encode_kinect_packet,
+    _encode_packet_with_budget,
+    _run_controlled_capture,
+)
 from visionrig.sensor_packet import decode_sensor_packet, inspect_sensor_packet
 
 
@@ -233,3 +237,76 @@ def test_encode_kinect_packet_uses_aligned_depth_and_infrared() -> None:
     assert decoded.rgb_payload == b"jpeg"
     assert np.array_equal(decoded.depth_mm, depth)
     assert np.array_equal(decoded.infrared, infrared)
+
+
+def test_packet_budget_adapts_jpeg_quality_below_warning_threshold() -> None:
+    frame = SimpleNamespace(payload=b"frame")
+    qualities: list[int] = []
+
+    def encode_jpeg(_payload, quality: int) -> bytes:
+        qualities.append(quality)
+        return b"x" * (quality * 10)
+
+    packet, quality, utilization = _encode_packet_with_budget(
+        frame=frame,
+        packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
+        encode_jpeg=encode_jpeg,
+        initial_quality=80,
+        min_quality=30,
+        max_packet_bytes=1024,
+    )
+
+    assert quality == 70
+    assert qualities == [80, 75, 70]
+    assert len(packet) == 800
+    assert utilization == 800 / 1024
+    assert utilization < 0.80
+
+
+def test_packet_budget_accepts_irreducible_warning_but_not_overflow() -> None:
+    frame = SimpleNamespace(payload=b"frame")
+
+    packet, quality, utilization = _encode_packet_with_budget(
+        frame=frame,
+        packet_encoder=lambda _frame, jpeg: b"h" * 850 + jpeg,
+        encode_jpeg=lambda _payload, q: b"x" * q,
+        initial_quality=80,
+        min_quality=30,
+        max_packet_bytes=1024,
+    )
+
+    assert quality == 30
+    assert len(packet) == 880
+    assert utilization == 880 / 1024
+
+
+def test_packet_budget_failure_happens_before_send_and_sequence_reservation() -> None:
+    clock = FakeClock()
+    producer = FakeProducer([True])
+    source = FakeSource("kinect")
+
+    try:
+        _run_controlled_capture(
+            producer=producer,
+            source_factory=lambda: source,
+            source_type="camera",
+            capabilities=("rgb", "depth", "infrared"),
+            fps=5.0,
+            jpeg_quality=80,
+            max_frames=1,
+            control_poll_seconds=1.0,
+            verbose=False,
+            encode_jpeg=lambda _payload, q: b"x" * q,
+            packet_encoder=lambda _frame, jpeg: b"h" * 1000 + jpeg,
+            packet_budget_bytes=1024,
+            min_jpeg_quality=30,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+    except RuntimeError as exc:
+        assert "exceeds producer packet budget" in str(exc)
+    else:
+        raise AssertionError("oversized packet must fail before send")
+
+    assert producer.sent_packets == []
+    assert source.closed is True
