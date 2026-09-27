@@ -315,7 +315,7 @@ sources have recovered from at least one sustained episode. Attention entries
 also include each source's episode count and last recovery timestamp.
 
 
-## VisionRig 0.59.0: pressure recurrence telemetry
+## VisionRig 0.60.0: pressure recurrence telemetry
 
 Runtime status v15 now tracks whether sustained packet-target pressure returns
 after recovery. `packet_target_recurrence_count` increments only when a new
