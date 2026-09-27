@@ -11,7 +11,10 @@ from .kinect_v2 import KinectV2Source
 from .producer import GatewayFrameProducer, ProducerError
 from .producer_state import ProducerStateError, ProducerStateStore
 from .screen_source import MssScreenSource
-from .sensor_packet import encode_sensor_packet
+from .sensor_packet import (
+    SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION,
+    encode_sensor_packet,
+)
 from .sources import CameraSource, FrameSource, ImageFileSource
 
 
@@ -61,6 +64,54 @@ def _encode_kinect_packet(frame: Any, rgb_jpeg: bytes) -> bytes:
     )
 
 
+def _encode_packet_with_budget(
+    *,
+    frame: Any,
+    packet_encoder: Callable[[Any, bytes], bytes],
+    encode_jpeg: Callable[[Any, int], bytes],
+    initial_quality: int,
+    min_quality: int,
+    max_packet_bytes: int,
+) -> tuple[bytes, int, float]:
+    if max_packet_bytes < 1024:
+        raise ValueError("max_packet_bytes must be >= 1024")
+    if not 30 <= min_quality <= initial_quality <= 100:
+        raise ValueError(
+            "JPEG quality must satisfy 30 <= min_quality <= initial_quality <= 100"
+        )
+
+    target_bytes = int(
+        max_packet_bytes * SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION
+    )
+    quality = initial_quality
+    best_packet: bytes | None = None
+    best_quality = quality
+
+    while True:
+        rgb_jpeg = encode_jpeg(frame.payload, quality)
+        packet = packet_encoder(frame, rgb_jpeg)
+        best_packet = packet
+        best_quality = quality
+
+        if len(packet) <= target_bytes:
+            return packet, quality, len(packet) / max_packet_bytes
+        if quality <= min_quality:
+            break
+        quality = max(min_quality, quality - 5)
+
+    assert best_packet is not None
+    if len(best_packet) > max_packet_bytes:
+        raise RuntimeError(
+            "SensorPacket exceeds producer packet budget even at minimum JPEG "
+            f"quality {best_quality}: {len(best_packet)} > {max_packet_bytes} bytes"
+        )
+    return (
+        best_packet,
+        best_quality,
+        len(best_packet) / max_packet_bytes,
+    )
+
+
 def _default_state_path() -> Path:
     configured = os.getenv("VISIONRIG_PRODUCER_STATE")
     if configured:
@@ -81,6 +132,8 @@ def _run_controlled_capture(
     verbose: bool,
     encode_jpeg: Callable[[Any, int], bytes] = _encode_jpeg,
     packet_encoder: Callable[[Any, bytes], bytes] | None = None,
+    packet_budget_bytes: int | None = None,
+    min_jpeg_quality: int = 30,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> int:
@@ -140,19 +193,41 @@ def _run_controlled_capture(
             if frame is None:
                 break
 
-            payload = encode_jpeg(frame.payload, jpeg_quality)
+            effective_quality = jpeg_quality
+            packet_utilization = None
             if packet_encoder is None:
+                payload = encode_jpeg(frame.payload, jpeg_quality)
                 result = producer.send_encoded(payload)
-            else:
+            elif packet_budget_bytes is None:
+                payload = encode_jpeg(frame.payload, jpeg_quality)
                 result = producer.send_packet(packet_encoder(frame, payload))
+            else:
+                packet, effective_quality, packet_utilization = (
+                    _encode_packet_with_budget(
+                        frame=frame,
+                        packet_encoder=packet_encoder,
+                        encode_jpeg=encode_jpeg,
+                        initial_quality=jpeg_quality,
+                        min_quality=min_jpeg_quality,
+                        max_packet_bytes=packet_budget_bytes,
+                    )
+                )
+                result = producer.send_packet(packet)
             frames += 1
 
             if verbose or result.status != "accepted":
                 stats = producer.stats()
+                packet_suffix = (
+                    f" jpeg_quality={effective_quality} "
+                    f"packet_utilization={packet_utilization:.3f}"
+                    if packet_utilization is not None
+                    else ""
+                )
                 print(
                     f"seq={result.frame_sequence} status={result.status} "
                     f"pending_dropped={stats.pending_dropped_frames} "
                     f"accepted={stats.accepted}"
+                    f"{packet_suffix}"
                 )
 
             if source_type == "image":
@@ -189,6 +264,24 @@ def main() -> None:
     parser.add_argument("--source-id")
     parser.add_argument("--fps", type=float, default=5.0)
     parser.add_argument("--jpeg-quality", type=int, default=80)
+    parser.add_argument(
+        "--min-jpeg-quality",
+        type=int,
+        default=30,
+        help="minimum adaptive Kinect RGB JPEG quality; default 30",
+    )
+    parser.add_argument(
+        "--max-packet-bytes",
+        type=int,
+        default=os.getenv(
+            "VISIONRIG_PRODUCER_MAX_PACKET_BYTES",
+            str(8 * 1024 * 1024),
+        ),
+        help=(
+            "producer-side Kinect SensorPacket budget; default 8 MiB or "
+            "VISIONRIG_PRODUCER_MAX_PACKET_BYTES"
+        ),
+    )
     parser.add_argument("--max-frames", type=int, default=0)
     parser.add_argument(
         "--control-poll-seconds",
@@ -208,6 +301,12 @@ def main() -> None:
         parser.error("--fps must be > 0 and <= 60")
     if not 30 <= args.jpeg_quality <= 100:
         parser.error("--jpeg-quality must be between 30 and 100")
+    if not 30 <= args.min_jpeg_quality <= args.jpeg_quality:
+        parser.error(
+            "--min-jpeg-quality must be between 30 and --jpeg-quality"
+        )
+    if not 1024 <= args.max_packet_bytes <= 64 * 1024 * 1024:
+        parser.error("--max-packet-bytes must be between 1 KiB and 64 MiB")
     if args.max_frames < 0:
         parser.error("--max-frames must be >= 0")
     if not 0.25 <= args.control_poll_seconds <= 60:
@@ -262,6 +361,10 @@ def main() -> None:
             control_poll_seconds=args.control_poll_seconds,
             verbose=args.verbose,
             packet_encoder=packet_encoder,
+            packet_budget_bytes=(
+                args.max_packet_bytes if args.kinect_v2 else None
+            ),
+            min_jpeg_quality=args.min_jpeg_quality,
         )
     except (ProducerError, ProducerStateError) as exc:
         raise SystemExit(f"producer stopped: {exc}") from exc
