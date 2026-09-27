@@ -357,3 +357,16 @@ latest recurrence interval.
 This lets control surfaces render per-sensor `stable`, `recurring`,
 `flapping` or `unknown` state from the catalog/bootstrap snapshot without
 joining fleet attention data back onto catalog rows.
+
+
+## VisionRig 0.62.0: complete catalog packet-target diagnostics
+
+Catalog v10 expands each source's `packet_target` projection from stability
+alone into a UI-ready diagnostic snapshot. It now includes latest target and
+observed utilization, derived compliance and pressure state, debounce streak and
+timing, sustained episode/recovery history, recurrence telemetry and the
+effective attention/flap thresholds.
+
+Fleet and catalog share the same compliance, pressure and stability classifiers,
+so operator surfaces can render one consistent per-sensor transport state
+without reconstructing policy client-side.

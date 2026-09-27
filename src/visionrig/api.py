@@ -216,6 +216,28 @@ def create_app(
             "journal_state_revision": journal_revision,
         }
 
+    def packet_target_compliance_status(runtime_source) -> str:
+        if runtime_source is None:
+            return "unknown"
+        target = runtime_source.negotiated_packet_target_utilization
+        observed = runtime_source.observed_packet_utilization
+        if target is None or observed is None:
+            return "unknown"
+        return "within_target" if observed <= target else "above_target"
+
+    def packet_target_pressure_status(runtime_source, compliance_status: str) -> str:
+        if compliance_status == "unknown":
+            return "unknown"
+        if compliance_status == "within_target":
+            return "clear"
+        if (
+            runtime_source is not None
+            and runtime_source.packet_target_above_streak
+            >= PACKET_TARGET_ATTENTION_STREAK_THRESHOLD
+        ):
+            return "sustained"
+        return "transient"
+
     def packet_target_stability_status(runtime_source) -> str:
         if runtime_source is None:
             return "unknown"
@@ -378,12 +400,7 @@ def create_app(
                 if runtime_source is not None
                 else None
             )
-            if target_utilization is None or observed_utilization is None:
-                packet_target_status = "unknown"
-            elif observed_utilization <= target_utilization:
-                packet_target_status = "within_target"
-            else:
-                packet_target_status = "above_target"
+            packet_target_status = packet_target_compliance_status(runtime_source)
             packet_target_counts[packet_target_status] += 1
 
             packet_target_above_streak = (
@@ -391,18 +408,11 @@ def create_app(
                 if runtime_source is not None
                 else 0
             )
-            if packet_target_status == "unknown":
-                packet_target_pressure_status = "unknown"
-            elif packet_target_status == "within_target":
-                packet_target_pressure_status = "clear"
-            elif (
-                packet_target_above_streak
-                >= packet_target_attention_streak_threshold
-            ):
-                packet_target_pressure_status = "sustained"
-            else:
-                packet_target_pressure_status = "transient"
-            packet_target_pressure_counts[packet_target_pressure_status] += 1
+            packet_target_pressure = packet_target_pressure_status(
+                runtime_source,
+                packet_target_status,
+            )
+            packet_target_pressure_counts[packet_target_pressure] += 1
             if runtime_source is not None:
                 packet_target_sustained_episode_total += (
                     runtime_source.packet_target_sustained_episode_count
@@ -427,7 +437,7 @@ def create_app(
                 attention_reasons.append("packet_transport")
             if capability_refresh_status == "stale":
                 attention_reasons.append("capability_refresh")
-            if packet_target_pressure_status == "sustained":
+            if packet_target_pressure == "sustained":
                 attention_reasons.append("packet_target")
 
             needs_attention = bool(attention_reasons)
@@ -455,7 +465,7 @@ def create_app(
                         "negotiated_packet_target_utilization": target_utilization,
                         "observed_packet_utilization": observed_utilization,
                         "packet_target_status": packet_target_status,
-                        "packet_target_pressure_status": packet_target_pressure_status,
+                        "packet_target_pressure_status": packet_target_pressure,
                         "packet_target_above_streak": packet_target_above_streak,
                         "packet_target_above_since_utc": (
                             runtime_source.packet_target_above_since_utc
@@ -542,7 +552,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v40",
+            "schema": "visionrig/health/v41",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -611,7 +621,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v12",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v13",
             },
         }
 
@@ -681,6 +691,11 @@ def create_app(
                 control_status = "pending"
             discovery = registry.get_discovery(source_id)
             packet_target_stability = packet_target_stability_status(runtime_source)
+            packet_target_status = packet_target_compliance_status(runtime_source)
+            packet_target_pressure = packet_target_pressure_status(
+                runtime_source,
+                packet_target_status,
+            )
             sources.append(
                 {
                     "source_id": source_id,
@@ -704,7 +719,52 @@ def create_app(
                         else None
                     ),
                     "packet_target": {
+                        "status": packet_target_status,
+                        "pressure": packet_target_pressure,
                         "stability": packet_target_stability,
+                        "target_utilization": (
+                            runtime_source.negotiated_packet_target_utilization
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "observed_utilization": (
+                            runtime_source.observed_packet_utilization
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "attention_streak_threshold": (
+                            PACKET_TARGET_ATTENTION_STREAK_THRESHOLD
+                        ),
+                        "above_streak": (
+                            runtime_source.packet_target_above_streak
+                            if runtime_source is not None
+                            else 0
+                        ),
+                        "above_since_utc": (
+                            runtime_source.packet_target_above_since_utc
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "above_seconds": (
+                            runtime_source.packet_target_above_seconds
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "last_above_utc": (
+                            runtime_source.packet_target_last_above_utc
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "sustained_episode_count": (
+                            runtime_source.packet_target_sustained_episode_count
+                            if runtime_source is not None
+                            else 0
+                        ),
+                        "last_recovered_utc": (
+                            runtime_source.packet_target_last_recovered_utc
+                            if runtime_source is not None
+                            else None
+                        ),
                         "flap_window_seconds": packet_target_flap_window_seconds,
                         "recurrence_count": (
                             runtime_source.packet_target_recurrence_count
@@ -733,7 +793,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v9",
+            "schema": "visionrig/sensor-catalog/v10",
             "sources": sources,
         }
 
@@ -744,7 +804,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v12",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v13",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
