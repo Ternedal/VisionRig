@@ -371,6 +371,11 @@ def _run_controlled_capture(
                         if packet_transport_provider is not None
                         else None
                     ),
+                    negotiated_packet_target_utilization=(
+                        current_packet_target_utilization
+                        if packet_transport_provider is not None
+                        else None
+                    ),
                 )
 
             if source is None:
