@@ -685,3 +685,22 @@ source-id processing retains the first source.
 Bootstrap v18 embeds fleet v17 and health advances to v46. The latest-recovery
 summary is process-local operational telemetry only; it creates no semantic
 change event, alert, or control action.
+
+
+### Latest recovery age
+
+VisionRig 0.68.0 extends fleet summary v18 so
+`packet_target_latest_recovery` also exposes `age_seconds`.
+
+The age is computed from the same effective server clock used by
+`SensorIngress`, against the selected source's
+`packet_target_last_recovered_utc`. It is clamped at zero and rounded to three
+decimal places. This avoids client clock skew and keeps recovery age consistent
+with the existing server-clock packet-pressure durations.
+
+If no sustained recovery exists, `source_id`, `recovered_utc` and
+`age_seconds` are all `null`.
+
+Bootstrap v19 embeds fleet v18 and health advances to v47. Recovery age remains
+process-local operational telemetry and creates no semantic event or control
+action.
