@@ -266,3 +266,20 @@ Repeated heartbeats with the same producer refresh token do not reset age. A
 genuinely new refresh token resets the server-observed age to zero. Producer
 wall-clock skew can therefore no longer create false stale/current states,
 while both timestamps remain visible for diagnostics.
+
+
+## Heartbeat v4 compression telemetry
+
+VisionRig 0.51.0 extends producer negotiation observability with heartbeat v4.
+When the active negotiated packet transport plan has a concrete compression
+strategy, the reference producer sends:
+
+- `negotiated_max_payload_bytes`;
+- `capability_refreshed_utc`;
+- `capability_refresh_seconds`;
+- `negotiated_packet_compression` (`none`, `zlib` or encoder-side
+  `auto`).
+
+Budget-only compatibility paths continue to use heartbeat v3. Core accepts v2,
+v3 and v4. A change in compression strategy emits one semantic
+`runtime_changed` event; timestamp-only capability refreshes remain quiet.
