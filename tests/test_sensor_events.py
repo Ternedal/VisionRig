@@ -356,6 +356,10 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "source_id": None,
             "last_recurrence_seconds": None,
         },
+        "packet_target_latest_recovery": {
+            "source_id": None,
+            "recovered_utc": None,
+        },
         "attention": [],
         "attention_total": 0,
         "attention_truncated": False,
