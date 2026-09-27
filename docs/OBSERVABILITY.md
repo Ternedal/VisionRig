@@ -259,7 +259,7 @@ VisionRig compares that watermark with the current registry
 - `registry_ahead`: registry state is newer than the durable semantic journal;
 - `journal_ahead`: journal watermark is newer than the registry file.
 
-The status is included in fleet v3, bootstrap v4 and health. Health also exposes
+The status is included in fleet v4, bootstrap v4 and health. Health also exposes
 the raw journal `state_revision_high_water`. No automatic repair is performed:
 `registry_ahead` means clients should bootstrap from full state rather than
 trust incremental history, while `journal_ahead` indicates persistent files
@@ -288,7 +288,7 @@ one cross-file transaction. To make that crash window observable, the registry
 persists a monotonic semantic `state_revision`. It advances on registration,
 device/capability changes, operator metadata/control changes, lifecycle changes
 and permanent forget, but not on last-seen or observation-count-only heartbeat
-refreshes. Fleet v3 and bootstrap v4 expose the current revision and consistency status,
+refreshes. Fleet v4 and bootstrap v4 expose the current revision and consistency status,
 while each change event carries the revision it reflects.
 
 A client should track the highest event `state_revision` it has applied. If a
