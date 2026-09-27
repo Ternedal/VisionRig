@@ -765,3 +765,33 @@ row-level and fleet-level observability.
 Bootstrap v22 embeds catalog v13; health advances to v50. This is diagnostic
 projection only and introduces no new attention, semantic event, or control
 behavior.
+
+
+### Packet-target measurement gaps
+
+VisionRig 0.72.0 extends fleet summary v21 with a bounded diagnostics list for
+connected runtime sources whose packet-target `measurement` is not
+`complete`.
+
+The fleet payload exposes:
+
+- `packet_target_measurement_gaps`: up to 32 runtime sources, in deterministic
+  source-id order, with `source_id`, `measurement`, `presence`,
+  `negotiated_packet_target_utilization`, and
+  `observed_packet_utilization`;
+- `packet_target_measurement_gap_total`: total number of connected runtime
+  sources with incomplete packet-target measurement;
+- `packet_target_measurement_gaps_truncated`: whether the bounded list omits
+  additional gap sources.
+
+Catalog-only sources without runtime state are intentionally excluded from this
+list because there is no active producer to remediate. `complete` runtime
+sources are also excluded.
+
+These diagnostics do not contribute to `attention_total` and do not add an
+attention reason. This keeps telemetry-upgrade work visible without treating it
+as an operational incident.
+
+Bootstrap v23 embeds fleet v21 and health advances to v51. The gap list remains
+process-local operational telemetry and creates no semantic event or control
+action.
