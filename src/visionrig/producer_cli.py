@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Literal, Protocol
 
 from .kinect_v2 import KinectV2Source
-from .producer import GatewayFrameProducer, ProducerError
+from .producer import GatewayFrameProducer, ProducerError, ProducerProtocolError
 from .producer_state import ProducerStateError, ProducerStateStore
 from .screen_source import MssScreenSource
 from .sensor_packet import (
@@ -23,19 +23,23 @@ from .sources import CameraSource, FrameSource, ImageFileSource
 @dataclass(frozen=True, slots=True)
 class PacketTransportPlan:
     max_payload_bytes: int
-    compression: Literal["none", "auto"]
+    compression: Literal["none", "zlib", "auto"]
     packet_encoder: Callable[[Any, bytes], bytes]
 
 
 def _select_packet_compression(
     supported: tuple[str, ...],
-) -> Literal["none", "auto"]:
+) -> Literal["none", "zlib", "auto"]:
     normalized = {value.strip().lower() for value in supported}
-    if "zlib" in normalized:
+    has_none = "none" in normalized
+    has_zlib = "zlib" in normalized
+    if has_none and has_zlib:
         return "auto"
-    if "none" in normalized:
+    if has_zlib:
+        return "zlib"
+    if has_none:
         return "none"
-    raise RuntimeError(
+    raise ProducerProtocolError(
         "VisionRig gateway/core advertises no supported SensorPacket compression"
     )
 
@@ -79,7 +83,7 @@ def _encode_kinect_packet(
     frame: Any,
     rgb_jpeg: bytes,
     *,
-    compression: Literal["none", "auto"] = "auto",
+    compression: Literal["none", "zlib", "auto"] = "auto",
 ) -> bytes:
     depth = frame.sensor_data.get("color_aligned_depth_mm")
     if depth is None:
@@ -92,6 +96,7 @@ def _encode_kinect_packet(
         depth_mm=depth,
         infrared=frame.sensor_data.get("infrared"),
         compression=compression,
+        packet_version="v2",
     )
 
 
