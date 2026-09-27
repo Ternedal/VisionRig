@@ -107,7 +107,18 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "retired_utc": None,
     }
     assert source["packet_target"] == {
+        "status": "unknown",
+        "pressure": "unknown",
         "stability": "stable",
+        "target_utilization": None,
+        "observed_utilization": None,
+        "attention_streak_threshold": 3,
+        "above_streak": 0,
+        "above_since_utc": None,
+        "above_seconds": None,
+        "last_above_utc": None,
+        "sustained_episode_count": 0,
+        "last_recovered_utc": None,
         "flap_window_seconds": 120.0,
         "recurrence_count": 0,
         "last_recurrence_seconds": None,
@@ -141,7 +152,18 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
     assert catalog["sources"][0]["runtime"] is None
     assert catalog["sources"][0]["metadata"]["enabled"] is False
     assert catalog["sources"][0]["packet_target"] == {
+        "status": "unknown",
+        "pressure": "unknown",
         "stability": "unknown",
+        "target_utilization": None,
+        "observed_utilization": None,
+        "attention_streak_threshold": 3,
+        "above_streak": 0,
+        "above_since_utc": None,
+        "above_seconds": None,
+        "last_above_utc": None,
+        "sustained_episode_count": 0,
+        "last_recovered_utc": None,
         "flap_window_seconds": 120.0,
         "recurrence_count": 0,
         "last_recurrence_seconds": None,
