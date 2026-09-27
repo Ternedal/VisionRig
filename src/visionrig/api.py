@@ -330,6 +330,9 @@ def create_app(
         packet_target_overshoot_measured_sources = 0
         packet_target_max_overshoot_delta = None
         packet_target_max_overshoot_ratio = None
+        packet_target_worst_source_id = None
+        packet_target_worst_target_utilization = None
+        packet_target_worst_observed_utilization = None
         attention = []
         attention_total = 0
 
@@ -446,14 +449,20 @@ def create_app(
             )
             if packet_target_overshoot_delta is not None:
                 packet_target_overshoot_measured_sources += 1
-                packet_target_max_overshoot_delta = max(
-                    packet_target_max_overshoot_delta or 0.0,
-                    packet_target_overshoot_delta,
-                )
-                packet_target_max_overshoot_ratio = max(
-                    packet_target_max_overshoot_ratio or 0.0,
-                    packet_target_overshoot_ratio or 0.0,
-                )
+                if (
+                    packet_target_max_overshoot_delta is None
+                    or packet_target_overshoot_delta
+                    > packet_target_max_overshoot_delta
+                ):
+                    packet_target_max_overshoot_delta = packet_target_overshoot_delta
+                    packet_target_max_overshoot_ratio = (
+                        packet_target_overshoot_ratio
+                    )
+                    packet_target_worst_source_id = source_id
+                    packet_target_worst_target_utilization = target_utilization
+                    packet_target_worst_observed_utilization = (
+                        observed_utilization
+                    )
 
             attention_reasons = []
             if control_status == "pending":
@@ -552,7 +561,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v13",
+            "schema": "visionrig/sensor-fleet-summary/v14",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -579,6 +588,13 @@ def create_app(
                 "measured_sources": packet_target_overshoot_measured_sources,
                 "max_delta": packet_target_max_overshoot_delta,
                 "max_ratio": packet_target_max_overshoot_ratio,
+                "worst_source_id": packet_target_worst_source_id,
+                "worst_target_utilization": (
+                    packet_target_worst_target_utilization
+                ),
+                "worst_observed_utilization": (
+                    packet_target_worst_observed_utilization
+                ),
             },
             "attention": attention,
             "attention_total": attention_total,
@@ -590,7 +606,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v42",
+            "schema": "visionrig/health/v43",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -659,7 +675,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v14",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v15",
             },
         }
 
@@ -847,7 +863,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v14",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v15",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

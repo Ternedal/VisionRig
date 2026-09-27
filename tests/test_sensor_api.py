@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v42"
+    assert health["schema"] == "visionrig/health/v43"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -442,7 +442,7 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v13"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v14"
     assert fleet["packet_target_attention_streak_threshold"] == 3
     assert fleet["packet_target"] == {
         "within_target": 0,
@@ -459,6 +459,9 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
         "measured_sources": 1,
         "max_delta": 0.04,
         "max_ratio": 0.055556,
+        "worst_source_id": "kinect-over-target",
+        "worst_target_utilization": 0.72,
+        "worst_observed_utilization": 0.76,
     }
     assert fleet["attention_total"] == 1
     item = fleet["attention"][0]
@@ -739,4 +742,41 @@ def test_packet_target_overshoot_is_zero_within_target() -> None:
         "measured_sources": 1,
         "max_delta": 0.0,
         "max_ratio": 0.0,
+        "worst_source_id": "kinect-overshoot-zero",
+        "worst_target_utilization": 0.72,
+        "worst_observed_utilization": 0.70,
+    }
+
+
+def test_packet_target_overshoot_identifies_worst_source() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    base = {
+        "schema_id": "visionrig/sensor-heartbeat/v6",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T16:30:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+
+    for source_id, observed in (
+        ("camera-low", 0.73),
+        ("camera-high", 0.91),
+        ("camera-ok", 0.70),
+    ):
+        payload = dict(base)
+        payload["source_id"] = source_id
+        payload["observed_packet_utilization"] = observed
+        assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v14"
+    assert fleet["packet_target_overshoot"] == {
+        "measured_sources": 3,
+        "max_delta": 0.19,
+        "max_ratio": 0.263889,
+        "worst_source_id": "camera-high",
+        "worst_target_utilization": 0.72,
+        "worst_observed_utilization": 0.91,
     }
