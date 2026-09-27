@@ -220,12 +220,13 @@ def test_gateway_health_advertises_only_sensor_routes() -> None:
     app = create_gateway_app(GatewayConfig(token=TOKEN))
     with TestClient(app) as client:
         body = client.get("/health").json()
-    assert body["schema"] == "visionrig/sensor-gateway-health/v4"
+    assert body["schema"] == "visionrig/sensor-gateway-health/v5"
     assert body["routes"] == [
         "/api/v1/frames/ingest",
         "/api/v1/sensor-packets/ingest",
         "/api/v1/sensors/heartbeat",
         "/api/v1/sensors/{source_id}/desired-state",
+        "/api/v1/producer-capabilities",
     ]
 
 
@@ -291,3 +292,71 @@ async def test_gateway_forwards_authenticated_sensor_packet_to_fixed_route() -> 
     assert seen["content_type"] == "application/vnd.visionrig.sensor-packet"
     assert seen["body"] == b"packet-bytes"
     assert response.headers["x-visionrig-gateway"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_gateway_exposes_authenticated_effective_producer_capabilities() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/health"
+        return httpx.Response(
+            200,
+            json={
+                "sensor_ingress": {
+                    "max_frame_bytes": 4 * 1024 * 1024,
+                    "sensor_packet_schemas": [
+                        "visionrig/sensor-packet/v1",
+                        "visionrig/sensor-packet/v2",
+                    ],
+                    "sensor_packet_compressions": ["none", "zlib"],
+                }
+            },
+        )
+
+    config = GatewayConfig(
+        token=TOKEN,
+        max_payload_bytes=8 * 1024 * 1024,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
+        app = create_gateway_app(config, client=upstream)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://gateway",
+        ) as caller:
+            denied = await caller.get("/api/v1/producer-capabilities")
+            response = await caller.get(
+                "/api/v1/producer-capabilities",
+                headers={"authorization": f"Bearer {TOKEN}"},
+            )
+
+    assert denied.status_code == 401
+    assert response.status_code == 200
+    assert response.json() == {
+        "schema": "visionrig/producer-capabilities/v1",
+        "max_payload_bytes": 4 * 1024 * 1024,
+        "gateway_max_payload_bytes": 8 * 1024 * 1024,
+        "core_max_payload_bytes": 4 * 1024 * 1024,
+        "sensor_packet_schemas": [
+            "visionrig/sensor-packet/v1",
+            "visionrig/sensor-packet/v2",
+        ],
+        "sensor_packet_compressions": ["none", "zlib"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_gateway_capabilities_fail_closed_on_invalid_core_health() -> None:
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"sensor_ingress": {}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
+        app = create_gateway_app(GatewayConfig(token=TOKEN), client=upstream)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://gateway",
+        ) as caller:
+            response = await caller.get(
+                "/api/v1/producer-capabilities",
+                headers={"authorization": f"Bearer {TOKEN}"},
+            )
+
+    assert response.status_code == 502

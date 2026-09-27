@@ -31,7 +31,8 @@ proxy those routes. It accepts only this fixed allow-list:
 - `POST /api/v1/frames/ingest`;
 - `POST /api/v1/sensor-packets/ingest`;
 - `POST /api/v1/sensors/heartbeat`;
-- `GET /api/v1/sensors/{source_id}/desired-state`.
+- `GET /api/v1/sensors/{source_id}/desired-state`;
+- `GET /api/v1/producer-capabilities`.
 
 Each route forwards only to its matching fixed loopback core endpoint. There is
 no generic path proxy.
@@ -104,3 +105,16 @@ the bearer token supplies application-level admission.
 Do not expose this gateway directly to the public internet. If that becomes a
 requirement later, add explicit TLS/mTLS termination and a stronger device
 identity/enrollment layer rather than widening this contract.
+
+
+## Producer capability negotiation
+
+`GET /api/v1/producer-capabilities` is bearer-authenticated and returns only
+bounded transport information needed before remote capture starts. The gateway
+reads the loopback core health response and extracts the sensor-ingress maximum
+payload plus supported SensorPacket schemas/compressions. It does not proxy the
+full core health response.
+
+The effective advertised payload ceiling is the lower of the gateway and core
+limits. If core health is unavailable, malformed, or lacks the expected bounded
+transport fields, the gateway returns 502 rather than guessing.

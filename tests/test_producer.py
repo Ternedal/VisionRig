@@ -193,3 +193,65 @@ def test_producer_sends_sensor_packet_through_same_sequence_state_machine() -> N
     )
     assert seen[0].content == b"sensor-packet"
     assert producer.stats().next_sequence == 1
+
+
+def test_producer_fetches_and_validates_transport_capabilities() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["authorization"] = request.headers.get("authorization")
+        return httpx.Response(
+            200,
+            json={
+                "schema": "visionrig/producer-capabilities/v1",
+                "max_payload_bytes": 4 * 1024 * 1024,
+                "gateway_max_payload_bytes": 8 * 1024 * 1024,
+                "core_max_payload_bytes": 4 * 1024 * 1024,
+                "sensor_packet_schemas": [
+                    "visionrig/sensor-packet/v1",
+                    "visionrig/sensor-packet/v2",
+                ],
+                "sensor_packet_compressions": ["none", "zlib"],
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="kinect",
+            source_type="camera",
+            client=client,
+        )
+        capabilities = producer.fetch_capabilities()
+
+    assert seen["path"] == "/api/v1/producer-capabilities"
+    assert seen["authorization"] == f"Bearer {TOKEN}"
+    assert capabilities.max_payload_bytes == 4 * 1024 * 1024
+
+
+def test_producer_rejects_capabilities_without_sensor_packet_v2() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "schema": "visionrig/producer-capabilities/v1",
+                "max_payload_bytes": 1024 * 1024,
+                "gateway_max_payload_bytes": 1024 * 1024,
+                "core_max_payload_bytes": 1024 * 1024,
+                "sensor_packet_schemas": ["visionrig/sensor-packet/v1"],
+                "sensor_packet_compressions": ["none"],
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="kinect",
+            source_type="camera",
+            client=client,
+        )
+        with pytest.raises(ProducerProtocolError, match="SensorPacket/v2"):
+            producer.fetch_capabilities()

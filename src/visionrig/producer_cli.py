@@ -19,6 +19,7 @@ from .sources import CameraSource, FrameSource, ImageFileSource
 
 
 class _ProducerClient(Protocol):
+    def fetch_capabilities(self): ...
     def fetch_desired_state(self): ...
     def send_heartbeat(
         self,
@@ -350,6 +351,21 @@ def main() -> None:
         state_store=ProducerStateStore(_default_state_path()),
     )
 
+    negotiated_packet_budget = None
+    if args.kinect_v2:
+        capabilities_contract = producer.fetch_capabilities()
+        negotiated_packet_budget = min(
+            args.max_packet_bytes,
+            capabilities_contract.max_payload_bytes,
+        )
+        if args.verbose:
+            print(
+                "producer_capabilities "
+                f"local_packet_cap={args.max_packet_bytes} "
+                f"remote_packet_cap={capabilities_contract.max_payload_bytes} "
+                f"effective_packet_cap={negotiated_packet_budget}"
+            )
+
     try:
         _run_controlled_capture(
             producer=producer,
@@ -362,9 +378,7 @@ def main() -> None:
             control_poll_seconds=args.control_poll_seconds,
             verbose=args.verbose,
             packet_encoder=packet_encoder,
-            packet_budget_bytes=(
-                args.max_packet_bytes if args.kinect_v2 else None
-            ),
+            packet_budget_bytes=negotiated_packet_budget,
             min_jpeg_quality=args.min_jpeg_quality,
         )
     except (ProducerError, ProducerStateError) as exc:
