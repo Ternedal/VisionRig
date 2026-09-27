@@ -463,6 +463,12 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
         "worst_target_utilization": 0.72,
         "worst_observed_utilization": 0.76,
     }
+    assert fleet["packet_target_sustained_pressure"]["sources"] == 1
+    assert fleet["packet_target_sustained_pressure"]["longest_source_id"] == (
+        "kinect-over-target"
+    )
+    assert fleet["packet_target_sustained_pressure"]["longest_seconds"] is not None
+    assert fleet["packet_target_sustained_pressure"]["longest_since_utc"] is not None
     assert fleet["attention_total"] == 1
     item = fleet["attention"][0]
     assert item["source_id"] == "kinect-over-target"
@@ -779,4 +785,45 @@ def test_packet_target_overshoot_identifies_worst_source() -> None:
         "worst_source_id": "camera-high",
         "worst_target_utilization": 0.72,
         "worst_observed_utilization": 0.91,
+    }
+
+
+def test_fleet_reports_longest_sustained_packet_pressure() -> None:
+    now = [datetime(2026, 9, 27, 17, 0, tzinfo=timezone.utc)]
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: now[0],
+        )
+    )
+    base = {
+        "schema_id": "visionrig/sensor-heartbeat/v6",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T17:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+        "observed_packet_utilization": 0.80,
+    }
+
+    old = dict(base)
+    old["source_id"] = "camera-old-pressure"
+    for _ in range(3):
+        assert client.post("/api/v1/sensors/heartbeat", json=old).status_code == 200
+
+    now[0] = datetime(2026, 9, 27, 17, 0, 20, tzinfo=timezone.utc)
+    newer = dict(base)
+    newer["source_id"] = "camera-new-pressure"
+    for _ in range(3):
+        assert client.post("/api/v1/sensors/heartbeat", json=newer).status_code == 200
+
+    now[0] = datetime(2026, 9, 27, 17, 1, 0, tzinfo=timezone.utc)
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v15"
+    assert fleet["packet_target_sustained_pressure"] == {
+        "sources": 2,
+        "longest_seconds": 60.0,
+        "longest_source_id": "camera-old-pressure",
+        "longest_since_utc": "2026-09-27T17:00:00+00:00",
     }
