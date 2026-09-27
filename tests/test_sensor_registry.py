@@ -521,6 +521,12 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "stale": 0,
         "unknown": 4,
     }
+    assert fleet["negotiated_compression"] == {
+        "none": 0,
+        "zlib": 0,
+        "auto": 0,
+        "unknown": 4,
+    }
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -546,6 +552,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert health_fleet["control"] == fleet["control"]
     assert health_fleet["transport"] == fleet["transport"]
     assert health_fleet["capability_refresh"] == fleet["capability_refresh"]
+    assert health_fleet["negotiated_compression"] == fleet["negotiated_compression"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
@@ -577,6 +584,12 @@ def test_sensor_fleet_attention_is_bounded() -> None:
     assert fleet["capability_refresh"] == {
         "current": 0,
         "stale": 0,
+        "unknown": 40,
+    }
+    assert fleet["negotiated_compression"] == {
+        "none": 0,
+        "zlib": 0,
+        "auto": 0,
         "unknown": 40,
     }
     assert fleet["attention_total"] == 40
