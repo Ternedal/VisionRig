@@ -336,6 +336,11 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "flapping": 0,
             "unknown": 0,
         },
+        "packet_target_measurement_coverage": {
+            "complete": 0,
+            "target_only": 0,
+            "unavailable": 0,
+        },
         "packet_target_flap_window_seconds": 120.0,
         "packet_target_overshoot": {
             "measured_sources": 0,
