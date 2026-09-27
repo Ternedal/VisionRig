@@ -194,7 +194,7 @@ def create_gateway_app(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.7.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.8.0")
 
     async def request_upstream(method: str, path: str, **kwargs) -> httpx.Response:
         target = config.target_base_url + path
@@ -219,7 +219,7 @@ def create_gateway_app(
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v7",
+            "schema": "visionrig/sensor-gateway-health/v8",
             "target_scope": "loopback-only",
             "routes": [
                 "/api/v1/frames/ingest",
@@ -247,6 +247,11 @@ def create_gateway_app(
             packet_compressions = tuple(
                 sensor_ingress["sensor_packet_compressions"]
             )
+            packet_thresholds = sensor_ingress[
+                "sensor_packet_payload_thresholds"
+            ]
+            warning_utilization = float(packet_thresholds["warning"])
+            critical_utilization = float(packet_thresholds["critical"])
         except (KeyError, TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=502,
@@ -258,9 +263,16 @@ def create_gateway_app(
                 status_code=502,
                 detail="VisionRig core reported an invalid sensor payload limit",
             )
+        if not (
+            0.0 < warning_utilization < critical_utilization <= 1.0
+        ):
+            raise HTTPException(
+                status_code=502,
+                detail="VisionRig core reported invalid packet payload thresholds",
+            )
 
         return {
-            "schema": "visionrig/producer-capabilities/v1",
+            "schema": "visionrig/producer-capabilities/v2",
             "max_payload_bytes": min(
                 config.max_payload_bytes,
                 core_max_payload,
@@ -269,6 +281,8 @@ def create_gateway_app(
             "core_max_payload_bytes": core_max_payload,
             "sensor_packet_schemas": list(packet_schemas),
             "sensor_packet_compressions": list(packet_compressions),
+            "packet_payload_warning_utilization": warning_utilization,
+            "packet_payload_critical_utilization": critical_utilization,
         }
 
     @app.get("/api/v1/sensors/{source_id}/desired-state")
