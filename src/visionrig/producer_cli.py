@@ -253,6 +253,10 @@ def _run_controlled_capture(
                     )
                 if refreshed_encoder is None:
                     raise RuntimeError("negotiated packet encoder is unavailable")
+                if not 0.0 < refreshed_target_utilization < 1.0:
+                    raise RuntimeError(
+                        "negotiated packet target utilization must be between 0 and 1"
+                    )
                 if verbose and (
                     refreshed_budget != current_packet_budget
                     or refreshed_compression != current_packet_compression
