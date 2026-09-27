@@ -810,3 +810,56 @@ def test_negotiated_compression_change_emits_runtime_event_but_refresh_only_does
     assert batch["entries"][0]["event"]["payload"][
         "negotiated_packet_compression"
     ] == "none"
+
+
+def test_target_utilization_change_emits_runtime_event() -> None:
+    registry = SensorRegistry()
+    journal = SensorChangeJournal(stream_id="target-policy")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_registry=registry,
+            sensor_change_journal=journal,
+        )
+    )
+    base = {
+        "schema_id": "visionrig/sensor-heartbeat/v5",
+        "source_id": "remote-kinect",
+        "source_type": "camera",
+        "capture_active": True,
+        "applied_revision": 0,
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T10:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+    assert client.post("/api/v1/sensors/heartbeat", json=base).status_code == 200
+    first = client.get("/api/v1/sensors/changes").json()
+    cursor = first["next_cursor"]
+
+    refreshed = dict(base)
+    refreshed["capability_refreshed_utc"] = "2026-09-27T10:00:30+00:00"
+    assert client.post("/api/v1/sensors/heartbeat", json=refreshed).status_code == 200
+    quiet = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert quiet["entries"] == []
+
+    changed = dict(refreshed)
+    changed["negotiated_packet_target_utilization"] = 0.65
+    assert client.post("/api/v1/sensors/heartbeat", json=changed).status_code == 200
+    batch = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert [entry["event"]["kind"] for entry in batch["entries"]] == [
+        "runtime_changed"
+    ]
+    assert (
+        batch["entries"][0]["event"]["payload"][
+            "negotiated_packet_target_utilization"
+        ]
+        == 0.65
+    )
