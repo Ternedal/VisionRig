@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -75,13 +75,13 @@ def create_app(
         selected_pipeline,
         event_sinks=((modelrig_publisher,) if modelrig_publisher is not None else ()),
     )
+    effective_sensor_clock = sensor_clock or (lambda: datetime.now(timezone.utc))
     sensor_ingress_kwargs: dict[str, object] = {
         "max_payload_bytes": max_sensor_frame_bytes,
         "stale_after_seconds": sensor_stale_after_seconds,
         "offline_after_seconds": sensor_offline_after_seconds,
+        "clock": effective_sensor_clock,
     }
-    if sensor_clock is not None:
-        sensor_ingress_kwargs["clock"] = sensor_clock
     sensor_ingress = SensorIngress(
         runtime,
         **sensor_ingress_kwargs,
@@ -342,6 +342,7 @@ def create_app(
         packet_target_most_recurrent_last_interval_seconds = None
         packet_target_latest_recovery_utc = None
         packet_target_latest_recovery_source_id = None
+        packet_target_latest_recovery_age_seconds = None
         attention = []
         attention_total = 0
 
@@ -470,6 +471,18 @@ def create_app(
                             runtime_source.packet_target_last_recovered_utc
                         )
                         packet_target_latest_recovery_source_id = source_id
+                        recovered_at = datetime.fromisoformat(
+                            runtime_source.packet_target_last_recovered_utc
+                        )
+                        packet_target_latest_recovery_age_seconds = round(
+                            max(
+                                0.0,
+                                (
+                                    effective_sensor_clock() - recovered_at
+                                ).total_seconds(),
+                            ),
+                            3,
+                        )
                 packet_target_recurrence_total += (
                     runtime_source.packet_target_recurrence_count
                 )
@@ -606,7 +619,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v17",
+            "schema": "visionrig/sensor-fleet-summary/v18",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -657,6 +670,7 @@ def create_app(
             "packet_target_latest_recovery": {
                 "source_id": packet_target_latest_recovery_source_id,
                 "recovered_utc": packet_target_latest_recovery_utc,
+                "age_seconds": packet_target_latest_recovery_age_seconds,
             },
             "attention": attention,
             "attention_total": attention_total,
@@ -668,7 +682,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v46",
+            "schema": "visionrig/health/v47",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -737,7 +751,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v18",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v19",
             },
         }
 
@@ -925,7 +939,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v18",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v19",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
