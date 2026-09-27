@@ -156,6 +156,10 @@ def create_app(
             previous_runtime is None
             or previous_runtime.capture_active != current_runtime.capture_active
             or previous_runtime.applied_revision != current_runtime.applied_revision
+            or (
+                previous_runtime.negotiated_max_payload_bytes
+                != current_runtime.negotiated_max_payload_bytes
+            )
         ):
             append_sensor_change(
                 kind="runtime_changed",
@@ -163,6 +167,9 @@ def create_app(
                 payload={
                     "capture_active": current_runtime.capture_active,
                     "applied_revision": current_runtime.applied_revision,
+                    "negotiated_max_payload_bytes": (
+                        current_runtime.negotiated_max_payload_bytes
+                    ),
                     "presence": current_runtime.presence,
                 },
             )
@@ -317,7 +324,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v29",
+            "schema": "visionrig/health/v30",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -337,7 +344,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v5",
+                "schema": "visionrig/sensor-ingress/v6",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": [
                     "image/jpeg",
