@@ -164,7 +164,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v30"
+    assert health["schema"] == "visionrig/health/v31"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -491,7 +491,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     response = client.get("/api/v1/sensors/fleet")
     assert response.status_code == 200
     fleet = response.json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v4"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v5"
     assert fleet["state_revision"] == 5
     assert fleet["change_consistency"]["status"] == "synced"
     assert fleet["change_consistency"]["journal_state_revision"] == 5
@@ -514,6 +514,11 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "critical": 0,
         "unknown": 4,
     }
+    assert fleet["capability_refresh"] == {
+        "current": 0,
+        "stale": 0,
+        "unknown": 4,
+    }
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -530,7 +535,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v30"
+    assert health["schema"] == "visionrig/health/v31"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
@@ -538,6 +543,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert health_fleet["presence"] == fleet["presence"]
     assert health_fleet["control"] == fleet["control"]
     assert health_fleet["transport"] == fleet["transport"]
+    assert health_fleet["capability_refresh"] == fleet["capability_refresh"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
@@ -564,6 +570,11 @@ def test_sensor_fleet_attention_is_bounded() -> None:
         "normal": 0,
         "warning": 0,
         "critical": 0,
+        "unknown": 40,
+    }
+    assert fleet["capability_refresh"] == {
+        "current": 0,
+        "stale": 0,
         "unknown": 40,
     }
     assert fleet["attention_total"] == 40
@@ -665,3 +676,61 @@ def test_lifecycle_writes_enforce_expected_state_revision() -> None:
     assert forgotten.status_code == 200
     assert forgotten.json()["state_revision"] == 5
     assert registry.contains("camera-lifecycle") is False
+
+
+def test_stale_capability_refresh_enters_fleet_attention() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    heartbeat = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v3",
+            "source_id": "stale-remote-kinect",
+            "source_type": "camera",
+            "device": "kinect-v2",
+            "capabilities": ["rgb", "depth", "infrared"],
+            "capture_active": True,
+            "applied_revision": 0,
+            "negotiated_max_payload_bytes": 2097152,
+            "capability_refreshed_utc": "2020-01-01T00:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+        },
+    )
+    assert heartbeat.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v5"
+    assert fleet["capability_refresh"] == {
+        "current": 0,
+        "stale": 1,
+        "unknown": 0,
+    }
+    assert fleet["attention_total"] == 1
+    item = fleet["attention"][0]
+    assert item["source_id"] == "stale-remote-kinect"
+    assert item["capability_refresh_status"] == "stale"
+    assert item["negotiated_max_payload_bytes"] == 2097152
+    assert item["capability_refresh_age_seconds"] > 60.0
+    assert "capability_refresh" in item["reasons"]
+
+
+def test_unknown_capability_refresh_does_not_create_attention() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    heartbeat = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v2",
+            "source_id": "legacy-camera",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+        },
+    )
+    assert heartbeat.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["capability_refresh"] == {
+        "current": 0,
+        "stale": 0,
+        "unknown": 1,
+    }
+    assert fleet["attention_total"] == 0
