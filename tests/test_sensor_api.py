@@ -50,7 +50,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v10"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v11"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
