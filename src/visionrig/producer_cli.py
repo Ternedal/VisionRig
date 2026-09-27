@@ -308,17 +308,26 @@ def _run_controlled_capture(
                     applied_revision=desired.revision,
                     negotiated_max_payload_bytes=(
                         current_packet_budget
-                        if packet_budget_provider is not None
+                        if (
+                            packet_budget_provider is not None
+                            or packet_transport_provider is not None
+                        )
                         else None
                     ),
                     capability_refreshed_utc=(
                         capability_refreshed_utc
-                        if packet_budget_provider is not None
+                        if (
+                            packet_budget_provider is not None
+                            or packet_transport_provider is not None
+                        )
                         else None
                     ),
                     capability_refresh_seconds=(
                         capability_refresh_seconds
-                        if packet_budget_provider is not None
+                        if (
+                            packet_budget_provider is not None
+                            or packet_transport_provider is not None
+                        )
                         else None
                     ),
                 )
