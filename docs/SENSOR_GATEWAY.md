@@ -128,3 +128,16 @@ loopback core. `negotiated_max_payload_bytes`,
 be present or all be absent; the refresh timestamp must be timezone-aware.
 Current producers send v3. Core continues to accept v2 for backward
 compatibility.
+
+
+## Heartbeat v3 negotiation telemetry
+
+The gateway accepts the bounded remote heartbeat body and forwards
+`visionrig/sensor-heartbeat/v3` to core. V3 may carry the producer's current
+negotiated payload ceiling, the UTC time of the last successful capability
+refresh, and the configured refresh interval. Those three fields are validated
+as an all-or-nothing set; partial negotiation telemetry is rejected.
+
+Core still accepts heartbeat v2 for backward compatibility. The gateway's
+current forwarding contract uses v3 so remote producers can expose negotiation
+freshness without broadening gateway authority.
