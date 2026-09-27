@@ -432,6 +432,7 @@ def create_app(
                     "visionrig/sensor-heartbeat/v3",
                     "visionrig/sensor-heartbeat/v4",
                     "visionrig/sensor-heartbeat/v5",
+                    "visionrig/sensor-heartbeat/v6",
                 ],
                 "sensor_packet_schemas": [
                     "visionrig/sensor-packet/v1",
