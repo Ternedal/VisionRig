@@ -5,7 +5,7 @@ import numpy as np
 from visionrig.contracts import SourceDescriptor
 from visionrig.pipeline import Frame
 from visionrig.producer_cli import _encode_kinect_packet, _run_controlled_capture
-from visionrig.sensor_packet import decode_sensor_packet
+from visionrig.sensor_packet import decode_sensor_packet, inspect_sensor_packet
 
 
 class FakeClock:
@@ -224,8 +224,12 @@ def test_encode_kinect_packet_uses_aligned_depth_and_infrared() -> None:
     )
 
     packet = _encode_kinect_packet(frame, b"jpeg")
+    header = inspect_sensor_packet(packet)
     decoded = decode_sensor_packet(packet)
 
+    assert header.schema_id == "visionrig/sensor-packet/v2"
+    assert header.depth is not None
+    assert header.depth.compression == "zlib"
     assert decoded.rgb_payload == b"jpeg"
     assert np.array_equal(decoded.depth_mm, depth)
     assert np.array_equal(decoded.infrared, infrared)

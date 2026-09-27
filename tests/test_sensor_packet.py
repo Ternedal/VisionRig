@@ -10,6 +10,7 @@ from visionrig.sensor_packet import (
     SensorPacketError,
     decode_sensor_packet,
     encode_sensor_packet,
+    inspect_sensor_packet,
 )
 from visionrig.sensor_registry import SensorRegistry
 
@@ -47,8 +48,10 @@ def test_sensor_packet_roundtrip_preserves_rgb_depth_and_infrared() -> None:
         depth_mm=depth,
         infrared=infrared,
     )
+    header = inspect_sensor_packet(encoded)
     decoded = decode_sensor_packet(encoded)
 
+    assert header.schema_id == "visionrig/sensor-packet/v1"
     assert decoded.rgb_content_type == "image/jpeg"
     assert decoded.rgb_payload == b"jpeg-bytes"
     assert np.array_equal(decoded.depth_mm, depth)
@@ -214,3 +217,101 @@ def test_packet_source_type_conflict_is_rejected_before_pipeline(monkeypatch) ->
 
     assert response.status_code == 409
     assert probe.seen is None
+
+
+def test_sensor_packet_v2_compresses_and_roundtrips_planes() -> None:
+    depth = np.zeros((120, 160), dtype=np.uint16)
+    depth[40:80, 60:100] = 1750
+    infrared = np.zeros((60, 80), dtype=np.uint16)
+    infrared[10:20, 10:20] = 900
+
+    raw = encode_sensor_packet(
+        rgb_payload=b"jpeg-bytes",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        infrared=infrared,
+        compression="none",
+    )
+    compressed = encode_sensor_packet(
+        rgb_payload=b"jpeg-bytes",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        infrared=infrared,
+        compression="zlib",
+    )
+
+    header = inspect_sensor_packet(compressed)
+    decoded = decode_sensor_packet(compressed)
+
+    assert header.schema_id == "visionrig/sensor-packet/v2"
+    assert header.depth is not None
+    assert header.depth.compression == "zlib"
+    assert header.depth.raw_byte_length == depth.nbytes
+    assert header.infrared is not None
+    assert header.infrared.compression == "zlib"
+    assert len(compressed) < len(raw)
+    assert np.array_equal(decoded.depth_mm, depth)
+    assert np.array_equal(decoded.infrared, infrared)
+
+
+def test_sensor_packet_v2_ingress_matches_v1_semantics(monkeypatch) -> None:
+    monkeypatch.setattr(sensor_ingress, "OpenCVImageDecoder", lambda: FakeCVDecoder())
+    registry = SensorRegistry()
+    probe = PacketProbeStage()
+    client = TestClient(
+        create_app(
+            PerceptionPipeline((probe,)),
+            sensor_registry=registry,
+            max_sensor_frame_bytes=1024 * 1024,
+        )
+    )
+    depth = np.array([[1000, 1500], [2000, 2500]], dtype=np.uint16)
+    packet = encode_sensor_packet(
+        rgb_payload=b"rgb-v2",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        compression="zlib",
+    )
+
+    response = client.post(
+        "/api/v1/sensor-packets/ingest",
+        params={
+            "source_id": "compressed-kinect",
+            "source_type": "camera",
+            "frame_sequence": 1,
+            "device": "kinect-v2",
+        },
+        content=packet,
+        headers={"content-type": SENSOR_PACKET_MEDIA_TYPE},
+    )
+
+    assert response.status_code == 200
+    assert probe.seen.payload == {
+        "payload": b"rgb-v2",
+        "content_type": "image/jpeg",
+    }
+    assert np.array_equal(probe.seen.sensor_data["depth_mm"], depth)
+    assert registry.get_discovery("compressed-kinect").capabilities == (
+        "depth",
+        "rgb",
+    )
+
+
+def test_sensor_packet_v2_rejects_corrupt_zlib_plane() -> None:
+    depth = np.zeros((8, 8), dtype=np.uint16)
+    packet = bytearray(
+        encode_sensor_packet(
+            rgb_payload=b"jpeg",
+            rgb_content_type="image/jpeg",
+            depth_mm=depth,
+            compression="zlib",
+        )
+    )
+    packet[-1] ^= 0xFF
+
+    try:
+        decode_sensor_packet(bytes(packet))
+    except SensorPacketError as exc:
+        assert "zlib" in str(exc) or "decompressed" in str(exc)
+    else:
+        raise AssertionError("corrupt compressed plane must be rejected")

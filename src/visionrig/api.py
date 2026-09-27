@@ -289,7 +289,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v26",
+            "schema": "visionrig/health/v27",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -309,7 +309,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v2",
+                "schema": "visionrig/sensor-ingress/v3",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": [
                     "image/jpeg",
@@ -317,6 +317,11 @@ def create_app(
                     "image/webp",
                     SENSOR_PACKET_MEDIA_TYPE,
                 ],
+                "sensor_packet_schemas": [
+                    "visionrig/sensor-packet/v1",
+                    "visionrig/sensor-packet/v2",
+                ],
+                "sensor_packet_compressions": ["none", "zlib"],
                 "overload_policy": "reject",
                 "runtime": asdict(sensor_ingress.stats()),
             },

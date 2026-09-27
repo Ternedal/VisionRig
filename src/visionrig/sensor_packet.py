@@ -1,20 +1,24 @@
 """Bounded binary multimodal sensor packet contract.
 
-SensorPacket/v1 transports one encoded RGB frame plus optional color-aligned
-uint16 metric depth and uint16 infrared planes without base64 expansion.
+SensorPacket v1/v2 transports one encoded RGB frame plus optional color-aligned
+uint16 metric depth and uint16 infrared planes without base64 expansion. V2 can
+compress numeric planes with bounded zlib decompression.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 import struct
-from typing import Any
+from typing import Any, Literal
+import zlib
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 SENSOR_PACKET_MEDIA_TYPE = "application/vnd.visionrig.sensor-packet"
-_MAGIC = b"VRSP1\x00"
+_MAGIC_V1 = b"VRSP1\x00"
+_MAGIC_V2 = b"VRSP2\x00"
 _HEADER_LENGTH = struct.Struct(">I")
+_MAX_PLANE_RAW_BYTES = 32 * 1024 * 1024
 
 
 class SensorPacketError(ValueError):
@@ -27,14 +31,19 @@ class SensorPacketPlane(BaseModel):
     width: int = Field(ge=1, le=8192)
     height: int = Field(ge=1, le=8192)
     dtype: str = Field(pattern="^uint16$")
-    byte_length: int = Field(ge=2)
+    byte_length: int = Field(ge=1)
+    raw_byte_length: int | None = Field(default=None, ge=2)
+    compression: Literal["none", "zlib"] = "none"
     alignment: str | None = None
 
 
 class SensorPacketHeader(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_id: str = Field(pattern="^visionrig/sensor-packet/v1$")
+    schema_id: Literal[
+        "visionrig/sensor-packet/v1",
+        "visionrig/sensor-packet/v2",
+    ]
     rgb_content_type: str
     rgb_byte_length: int = Field(ge=1)
     depth: SensorPacketPlane | None = None
@@ -68,22 +77,59 @@ class ArrayMetricDepthSampler:
         return value / 1000.0
 
 
-def _validate_plane_bytes(plane: SensorPacketPlane, payload: bytes, *, label: str) -> None:
+def _expected_raw_plane_bytes(plane: SensorPacketPlane, *, label: str) -> int:
     expected = plane.width * plane.height * 2
-    if plane.byte_length != expected:
+    if expected > _MAX_PLANE_RAW_BYTES:
+        raise SensorPacketError(f"{label} raw plane exceeds safety limit")
+    declared_raw = plane.raw_byte_length if plane.raw_byte_length is not None else expected
+    if declared_raw != expected:
         raise SensorPacketError(
-            f"{label} byte_length must equal width*height*2 for uint16"
+            f"{label} raw_byte_length must equal width*height*2 for uint16"
         )
-    if len(payload) != expected:
+    if plane.compression == "none" and plane.byte_length != expected:
+        raise SensorPacketError(
+            f"{label} byte_length must equal width*height*2 when uncompressed"
+        )
+    return expected
+
+
+def _decode_plane_bytes(
+    plane: SensorPacketPlane,
+    payload: bytes,
+    *,
+    label: str,
+) -> bytes:
+    expected = _expected_raw_plane_bytes(plane, label=label)
+    if len(payload) != plane.byte_length:
         raise SensorPacketError(f"{label} payload length does not match header")
+    if plane.compression == "none":
+        return payload
+    try:
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(payload, expected + 1)
+        if len(raw) > expected or decoder.unconsumed_tail:
+            raise SensorPacketError(f"{label} decompressed payload exceeds declared size")
+        remaining = expected - len(raw)
+        flushed = decoder.flush(max(1, remaining))
+        if len(raw) + len(flushed) > expected:
+            raise SensorPacketError(f"{label} decompressed payload exceeds declared size")
+        raw += flushed
+    except zlib.error as exc:
+        raise SensorPacketError(f"{label} zlib payload is invalid") from exc
+    if len(raw) != expected:
+        raise SensorPacketError(f"{label} decompressed length does not match header")
+    if not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+        raise SensorPacketError(f"{label} zlib stream contains trailing data")
+    return raw
 
 
 def inspect_sensor_packet(payload: bytes) -> SensorPacketHeader:
-    if len(payload) < len(_MAGIC) + _HEADER_LENGTH.size:
+    if len(payload) < len(_MAGIC_V1) + _HEADER_LENGTH.size:
         raise SensorPacketError("sensor packet is truncated")
-    if payload[: len(_MAGIC)] != _MAGIC:
+    magic = payload[: len(_MAGIC_V1)]
+    if magic not in {_MAGIC_V1, _MAGIC_V2}:
         raise SensorPacketError("sensor packet magic/version is invalid")
-    offset = len(_MAGIC)
+    offset = len(_MAGIC_V1)
     (header_length,) = _HEADER_LENGTH.unpack(
         payload[offset : offset + _HEADER_LENGTH.size]
     )
@@ -93,20 +139,36 @@ def inspect_sensor_packet(payload: bytes) -> SensorPacketHeader:
     if offset + header_length > len(payload):
         raise SensorPacketError("sensor packet header is truncated")
     try:
-        return SensorPacketHeader.model_validate_json(
+        header = SensorPacketHeader.model_validate_json(
             payload[offset : offset + header_length]
         )
     except (ValidationError, ValueError) as exc:
         raise SensorPacketError("sensor packet header is invalid") from exc
 
+    expected_schema = (
+        "visionrig/sensor-packet/v1"
+        if magic == _MAGIC_V1
+        else "visionrig/sensor-packet/v2"
+    )
+    if header.schema_id != expected_schema:
+        raise SensorPacketError("sensor packet magic/schema version mismatch")
+    if header.schema_id.endswith("/v1"):
+        for plane in (header.depth, header.infrared):
+            if plane is not None and (
+                plane.compression != "none"
+                or plane.raw_byte_length is not None
+            ):
+                raise SensorPacketError("SensorPacket/v1 planes must be uncompressed")
+    return header
+
 
 def decode_sensor_packet(payload: bytes) -> DecodedSensorPacket:
-    if len(payload) < len(_MAGIC) + _HEADER_LENGTH.size:
+    if len(payload) < len(_MAGIC_V1) + _HEADER_LENGTH.size:
         raise SensorPacketError("sensor packet is truncated")
-    if payload[: len(_MAGIC)] != _MAGIC:
+    if payload[: len(_MAGIC_V1)] not in {_MAGIC_V1, _MAGIC_V2}:
         raise SensorPacketError("sensor packet magic/version is invalid")
 
-    offset = len(_MAGIC)
+    offset = len(_MAGIC_V1)
     (header_length,) = _HEADER_LENGTH.unpack(
         payload[offset : offset + _HEADER_LENGTH.size]
     )
@@ -131,8 +193,11 @@ def decode_sensor_packet(payload: bytes) -> DecodedSensorPacket:
         end_depth = offset + header.depth.byte_length
         if end_depth > len(payload):
             raise SensorPacketError("sensor packet depth payload is truncated")
-        depth_bytes = payload[offset:end_depth]
-        _validate_plane_bytes(header.depth, depth_bytes, label="depth")
+        depth_bytes = _decode_plane_bytes(
+            header.depth,
+            payload[offset:end_depth],
+            label="depth",
+        )
         offset = end_depth
 
     infrared_bytes: bytes | None = None
@@ -140,8 +205,11 @@ def decode_sensor_packet(payload: bytes) -> DecodedSensorPacket:
         end_ir = offset + header.infrared.byte_length
         if end_ir > len(payload):
             raise SensorPacketError("sensor packet infrared payload is truncated")
-        infrared_bytes = payload[offset:end_ir]
-        _validate_plane_bytes(header.infrared, infrared_bytes, label="infrared")
+        infrared_bytes = _decode_plane_bytes(
+            header.infrared,
+            payload[offset:end_ir],
+            label="infrared",
+        )
         offset = end_ir
 
     if offset != len(payload):
@@ -184,6 +252,7 @@ def encode_sensor_packet(
     rgb_content_type: str,
     depth_mm: Any | None = None,
     infrared: Any | None = None,
+    compression: Literal["none", "zlib"] = "none",
 ) -> bytes:
     if not rgb_payload:
         raise SensorPacketError("RGB payload is empty")
@@ -199,18 +268,32 @@ def encode_sensor_packet(
             raise SensorPacketError("encoding depth/infrared requires numpy") from exc
         np = None  # type: ignore[assignment]
 
+    if compression not in {"none", "zlib"}:
+        raise SensorPacketError("unsupported plane compression")
+
     planes: list[bytes] = []
     depth_header = None
     if depth_mm is not None:
         depth = np.asarray(depth_mm, dtype="<u2")
         if depth.ndim != 2:
             raise SensorPacketError("depth plane must be 2D")
-        depth_bytes = depth.tobytes(order="C")
+        raw_depth_bytes = depth.tobytes(order="C")
+        if len(raw_depth_bytes) > _MAX_PLANE_RAW_BYTES:
+            raise SensorPacketError("depth raw plane exceeds safety limit")
+        depth_bytes = (
+            zlib.compress(raw_depth_bytes)
+            if compression == "zlib"
+            else raw_depth_bytes
+        )
         depth_header = SensorPacketPlane(
             width=int(depth.shape[1]),
             height=int(depth.shape[0]),
             dtype="uint16",
             byte_length=len(depth_bytes),
+            raw_byte_length=(
+                len(raw_depth_bytes) if compression != "none" else None
+            ),
+            compression=compression,
             alignment="color",
         )
         planes.append(depth_bytes)
@@ -220,17 +303,29 @@ def encode_sensor_packet(
         ir = np.asarray(infrared, dtype="<u2")
         if ir.ndim != 2:
             raise SensorPacketError("infrared plane must be 2D")
-        ir_bytes = ir.tobytes(order="C")
+        raw_ir_bytes = ir.tobytes(order="C")
+        if len(raw_ir_bytes) > _MAX_PLANE_RAW_BYTES:
+            raise SensorPacketError("infrared raw plane exceeds safety limit")
+        ir_bytes = (
+            zlib.compress(raw_ir_bytes)
+            if compression == "zlib"
+            else raw_ir_bytes
+        )
         ir_header = SensorPacketPlane(
             width=int(ir.shape[1]),
             height=int(ir.shape[0]),
             dtype="uint16",
             byte_length=len(ir_bytes),
+            raw_byte_length=(
+                len(raw_ir_bytes) if compression != "none" else None
+            ),
+            compression=compression,
         )
         planes.append(ir_bytes)
 
+    packet_version = "v2" if compression != "none" else "v1"
     header = SensorPacketHeader(
-        schema_id="visionrig/sensor-packet/v1",
+        schema_id=f"visionrig/sensor-packet/{packet_version}",
         rgb_content_type=normalized_rgb_type,
         rgb_byte_length=len(rgb_payload),
         depth=depth_header,
@@ -242,7 +337,7 @@ def encode_sensor_packet(
 
     return b"".join(
         (
-            _MAGIC,
+            _MAGIC_V2 if packet_version == "v2" else _MAGIC_V1,
             _HEADER_LENGTH.pack(len(header_bytes)),
             header_bytes,
             rgb_payload,

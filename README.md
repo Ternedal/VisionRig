@@ -16,7 +16,7 @@ VisionRig includes:
 - **managed local webcam/Kinect capture through the shared desired/effective-state contract**
 - bounded camera/screen/VR ingress
 - authenticated cross-device sensor gateway
-- **bounded binary SensorPacket/v1 transport for RGB + color-aligned metric depth + infrared**
+- **bounded binary SensorPacket v1/v2 transport for RGB + color-aligned metric depth + infrared**
 - **remote Kinect v2 producer with producer-side color/depth alignment**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
@@ -157,12 +157,14 @@ the authenticated gateway route `POST /api/v1/sensors/heartbeat`.
 Multimodal producers can use
 `POST /api/v1/sensor-packets/ingest` with
 `application/vnd.visionrig.sensor-packet`. SensorPacket/v1 carries encoded RGB
-plus optional little-endian uint16 depth/IR planes without base64 expansion.
+plus optional raw little-endian uint16 depth/IR planes. SensorPacket/v2 keeps the
+same frame semantics but can zlib-compress depth/IR independently of RGB, with
+bounded decompression and explicit raw-length validation.
 Depth is required to be color-aligned and is exposed frame-locally as both
 `depth_mm` and a metric sampler; raw planes still do not cross into
-PerceptionEvent/Consciousness Core. `visionrig-producer --kinect-v2` now
-performs Kinect color/depth alignment on the producer host and sends the packet
-through the same durable sequence/backpressure state machine as normal frames.
+PerceptionEvent/Consciousness Core. `visionrig-producer --kinect-v2` performs Kinect color/depth alignment on the
+producer host and emits zlib-compressed SensorPacket/v2 by default through the
+same durable sequence/backpressure state machine as normal frames.
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.

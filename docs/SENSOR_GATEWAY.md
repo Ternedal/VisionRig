@@ -76,7 +76,7 @@ POST /api/v1/sensor-packets/ingest?source_id=kinect-living-room&source_type=came
 Authorization: Bearer <token>
 Content-Type: application/vnd.visionrig.sensor-packet
 
-<SensorPacket/v1 bytes>
+<SensorPacket/v1 or v2 bytes>
 ```
 
 The gateway never forwards the client's Authorization header to VisionRig core.
