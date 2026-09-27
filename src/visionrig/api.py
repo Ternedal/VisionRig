@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Literal
+from datetime import datetime
+from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -61,6 +62,7 @@ def create_app(
     modelrig_publisher: ModelRigPerceptionPublisher | None = None,
     sensor_registry: SensorRegistry | None = None,
     sensor_change_journal: SensorChangeJournal | None = None,
+    sensor_clock: Callable[[], datetime] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="VisionRig", version=__version__)
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
@@ -68,11 +70,16 @@ def create_app(
         selected_pipeline,
         event_sinks=((modelrig_publisher,) if modelrig_publisher is not None else ()),
     )
+    sensor_ingress_kwargs: dict[str, object] = {
+        "max_payload_bytes": max_sensor_frame_bytes,
+        "stale_after_seconds": sensor_stale_after_seconds,
+        "offline_after_seconds": sensor_offline_after_seconds,
+    }
+    if sensor_clock is not None:
+        sensor_ingress_kwargs["clock"] = sensor_clock
     sensor_ingress = SensorIngress(
         runtime,
-        max_payload_bytes=max_sensor_frame_bytes,
-        stale_after_seconds=sensor_stale_after_seconds,
-        offline_after_seconds=sensor_offline_after_seconds,
+        **sensor_ingress_kwargs,
     )
     registry = sensor_registry or SensorRegistry()
     sensor_changes = sensor_change_journal or SensorChangeJournal()
