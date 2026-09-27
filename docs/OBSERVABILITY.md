@@ -704,3 +704,24 @@ If no sustained recovery exists, `source_id`, `recovered_utc` and
 Bootstrap v19 embeds fleet v18 and health advances to v47. Recovery age remains
 process-local operational telemetry and creates no semantic event or control
 action.
+
+
+### Conservative packet-target stability
+
+VisionRig 0.69.0 tightens the packet-target stability classifier used by fleet
+summary v19 and sensor catalog v12.
+
+A runtime source is classified as `unknown` unless both
+`negotiated_packet_target_utilization` and
+`observed_packet_utilization` are present. Only sources with a complete
+measurement pair can then be classified as `stable`, `recurring` or
+`flapping` from their recurrence history.
+
+This is an intentional semantic correction: absence of recurrence evidence is
+not treated as evidence of stability when packet-target measurement itself is
+missing. Heartbeat v5 target-only producers and older producer contracts
+therefore remain `unknown`.
+
+Bootstrap v20 embeds catalog v12 and fleet v19; health advances to v48. The
+change affects classification only and introduces no new attention, semantic
+events or control behavior.
