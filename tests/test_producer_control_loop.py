@@ -42,6 +42,7 @@ class FakeProducer:
         self.enabled_states = list(enabled_states)
         self.state_index = 0
         self.heartbeats: list[tuple[tuple[str, ...], bool | None, int | None]] = []
+        self.negotiation_heartbeats: list[tuple[int | None, str | None, float | None]] = []
         self.sent: list[bytes] = []
         self.sent_packets: list[bytes] = []
 
@@ -57,8 +58,18 @@ class FakeProducer:
         capabilities: tuple[str, ...] = (),
         capture_active: bool | None = None,
         applied_revision: int | None = None,
+        negotiated_max_payload_bytes: int | None = None,
+        capability_refreshed_utc: str | None = None,
+        capability_refresh_seconds: float | None = None,
     ):
         self.heartbeats.append((capabilities, capture_active, applied_revision))
+        self.negotiation_heartbeats.append(
+            (
+                negotiated_max_payload_bytes,
+                capability_refreshed_utc,
+                capability_refresh_seconds,
+            )
+        )
         return SimpleNamespace(source_id="cam")
 
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"):
@@ -345,6 +356,10 @@ def test_capability_refresh_updates_packet_budget_between_frames() -> None:
     assert frames == 2
     assert qualities == [80, 80, 75, 70]
     assert [len(packet) for packet in producer.sent_packets] == [900, 800]
+    assert producer.negotiation_heartbeats[0][0] == 2000
+    assert producer.negotiation_heartbeats[0][1] is not None
+    assert producer.negotiation_heartbeats[0][2] == 1.0
+    assert producer.negotiation_heartbeats[1][0] == 1024
     assert source.closed is True
 
 
