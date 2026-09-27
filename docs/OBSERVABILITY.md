@@ -153,7 +153,7 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v10` and adds a bounded control summary:
+`visionrig/sensor-catalog/v11` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
 - `desired_revision`: revision of the current enabled command;
@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v12` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v13` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v13` with:
+`visionrig/sensor-bootstrap-snapshot/v14` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v41` and advertises the desired-state
+`GET /health` uses `visionrig/health/v42` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -565,3 +565,30 @@ Known sensors without runtime expose `unknown` compliance/pressure/stability,
 zero counters and null timestamps. Bootstrap v13 embeds catalog v10 alongside
 fleet v12; health advances to v41. All fields remain process-local operational
 telemetry with no capture authority.
+
+
+### Packet-target overshoot telemetry
+
+VisionRig 0.63.0 adds magnitude to the existing packet-target compliance
+diagnostics. For a runtime source with both target and observed utilization,
+VisionRig derives:
+
+- `overshoot_delta = max(0, observed - target)`;
+- `overshoot_ratio = overshoot_delta / target`.
+
+Both values are rounded to six decimal places. A measured source that is at or
+below target reports `0.0` for both fields, while a source without a complete
+target/observed pair reports `null`.
+
+Catalog v11 exposes these values in each source's `packet_target` block.
+Bounded fleet attention entries expose the same values as
+`packet_target_overshoot_delta` and `packet_target_overshoot_ratio`.
+
+Fleet summary v13 additionally exposes `packet_target_overshoot` with
+`measured_sources`, `max_delta` and `max_ratio`. If no source has a
+complete measurement pair, the maxima are `null`; if all measured sources are
+within target, both maxima are `0.0`.
+
+Bootstrap v14 embeds catalog v11 and fleet v13; health advances to v42. The
+overshoot fields are process-local operational telemetry and create no semantic
+change events or automatic control action.

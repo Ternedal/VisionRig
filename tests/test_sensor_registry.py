@@ -75,7 +75,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v10"
+    assert body["schema"] == "visionrig/sensor-catalog/v11"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -112,6 +112,8 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "stability": "stable",
         "target_utilization": None,
         "observed_utilization": None,
+        "overshoot_delta": None,
+        "overshoot_ratio": None,
         "attention_streak_threshold": 3,
         "above_streak": 0,
         "above_since_utc": None,
@@ -157,6 +159,8 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
         "stability": "unknown",
         "target_utilization": None,
         "observed_utilization": None,
+        "overshoot_delta": None,
+        "overshoot_ratio": None,
         "attention_streak_threshold": 3,
         "above_streak": 0,
         "above_since_utc": None,
@@ -200,7 +204,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v41"
+    assert health["schema"] == "visionrig/health/v42"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -527,7 +531,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     response = client.get("/api/v1/sensors/fleet")
     assert response.status_code == 200
     fleet = response.json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v12"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v13"
     assert fleet["state_revision"] == 5
     assert fleet["change_consistency"]["status"] == "synced"
     assert fleet["change_consistency"]["journal_state_revision"] == 5
@@ -583,6 +587,11 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "unknown": 2,
     }
     assert fleet["packet_target_flap_window_seconds"] == 120.0
+    assert fleet["packet_target_overshoot"] == {
+        "measured_sources": 0,
+        "max_delta": None,
+        "max_ratio": None,
+    }
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -599,7 +608,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v41"
+    assert health["schema"] == "visionrig/health/v42"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
@@ -623,6 +632,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         health_fleet["packet_target_flap_window_seconds"]
         == fleet["packet_target_flap_window_seconds"]
     )
+    assert health_fleet["packet_target_overshoot"] == fleet["packet_target_overshoot"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
@@ -797,7 +807,7 @@ def test_stale_capability_refresh_enters_fleet_attention() -> None:
 
     now[0] = datetime(2026, 9, 27, 7, 1, 1, tzinfo=timezone.utc)
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v12"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v13"
     assert fleet["capability_refresh"] == {
         "current": 0,
         "stale": 1,
