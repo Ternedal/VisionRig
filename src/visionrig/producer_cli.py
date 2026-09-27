@@ -135,6 +135,8 @@ def _run_controlled_capture(
     encode_jpeg: Callable[[Any, int], bytes] = _encode_jpeg,
     packet_encoder: Callable[[Any, bytes], bytes] | None = None,
     packet_budget_bytes: int | None = None,
+    packet_budget_provider: Callable[[], int] | None = None,
+    capability_refresh_seconds: float = 30.0,
     min_jpeg_quality: int = 30,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
@@ -146,8 +148,15 @@ def _run_controlled_capture(
     A disabled source remains visible through heartbeats, but no capture device
     is opened and no frame sequence is consumed.
     """
+    if packet_budget_provider is not None and packet_encoder is None:
+        raise ValueError("packet_budget_provider requires packet_encoder")
+    if not 1.0 <= capability_refresh_seconds <= 3600.0:
+        raise ValueError("capability_refresh_seconds must be between 1 and 3600")
+
     interval = 1.0 / fps
     next_control_check = 0.0
+    next_capability_check = 0.0
+    current_packet_budget = packet_budget_bytes
     deadline = monotonic()
     frames = 0
     source: FrameSource | None = None
@@ -156,6 +165,27 @@ def _run_controlled_capture(
     try:
         while max_frames == 0 or frames < max_frames:
             now = monotonic()
+
+            if (
+                packet_budget_provider is not None
+                and (
+                    current_packet_budget is None
+                    or now >= next_capability_check
+                )
+            ):
+                refreshed_budget = packet_budget_provider()
+                if not 1024 <= refreshed_budget <= 64 * 1024 * 1024:
+                    raise RuntimeError(
+                        "negotiated packet budget must be between 1 KiB and 64 MiB"
+                    )
+                if verbose and refreshed_budget != current_packet_budget:
+                    print(
+                        "producer_capabilities "
+                        f"effective_packet_cap={refreshed_budget}"
+                    )
+                current_packet_budget = refreshed_budget
+                next_capability_check = now + capability_refresh_seconds
+
             if enabled is None or now >= next_control_check:
                 desired = producer.fetch_desired_state()
                 next_control_check = now + control_poll_seconds
@@ -200,7 +230,7 @@ def _run_controlled_capture(
             if packet_encoder is None:
                 payload = encode_jpeg(frame.payload, jpeg_quality)
                 result = producer.send_encoded(payload)
-            elif packet_budget_bytes is None:
+            elif current_packet_budget is None:
                 payload = encode_jpeg(frame.payload, jpeg_quality)
                 result = producer.send_packet(packet_encoder(frame, payload))
             else:
@@ -211,7 +241,7 @@ def _run_controlled_capture(
                         encode_jpeg=encode_jpeg,
                         initial_quality=jpeg_quality,
                         min_quality=min_jpeg_quality,
-                        max_packet_bytes=packet_budget_bytes,
+                        max_packet_bytes=current_packet_budget,
                     )
                 )
                 result = producer.send_packet(packet)
@@ -284,6 +314,20 @@ def main() -> None:
             "VISIONRIG_PRODUCER_MAX_PACKET_BYTES"
         ),
     )
+    parser.add_argument(
+        "--capability-refresh-seconds",
+        type=float,
+        default=float(
+            os.getenv(
+                "VISIONRIG_PRODUCER_CAPABILITY_REFRESH_SECONDS",
+                "30",
+            )
+        ),
+        help=(
+            "refresh authenticated gateway/core transport capabilities; "
+            "default 30 seconds"
+        ),
+    )
     parser.add_argument("--max-frames", type=int, default=0)
     parser.add_argument(
         "--control-poll-seconds",
@@ -309,6 +353,10 @@ def main() -> None:
         )
     if not 1024 <= args.max_packet_bytes <= 64 * 1024 * 1024:
         parser.error("--max-packet-bytes must be between 1 KiB and 64 MiB")
+    if not 1 <= args.capability_refresh_seconds <= 3600:
+        parser.error(
+            "--capability-refresh-seconds must be between 1 and 3600"
+        )
     if args.max_frames < 0:
         parser.error("--max-frames must be >= 0")
     if not 0.25 <= args.control_poll_seconds <= 60:
@@ -351,19 +399,13 @@ def main() -> None:
         state_store=ProducerStateStore(_default_state_path()),
     )
 
-    negotiated_packet_budget = None
+    packet_budget_provider = None
     if args.kinect_v2:
-        capabilities_contract = producer.fetch_capabilities()
-        negotiated_packet_budget = min(
-            args.max_packet_bytes,
-            capabilities_contract.max_payload_bytes,
-        )
-        if args.verbose:
-            print(
-                "producer_capabilities "
-                f"local_packet_cap={args.max_packet_bytes} "
-                f"remote_packet_cap={capabilities_contract.max_payload_bytes} "
-                f"effective_packet_cap={negotiated_packet_budget}"
+        def packet_budget_provider() -> int:
+            capabilities_contract = producer.fetch_capabilities()
+            return min(
+                args.max_packet_bytes,
+                capabilities_contract.max_payload_bytes,
             )
 
     try:
@@ -378,7 +420,8 @@ def main() -> None:
             control_poll_seconds=args.control_poll_seconds,
             verbose=args.verbose,
             packet_encoder=packet_encoder,
-            packet_budget_bytes=negotiated_packet_budget,
+            packet_budget_provider=packet_budget_provider,
+            capability_refresh_seconds=args.capability_refresh_seconds,
             min_jpeg_quality=args.min_jpeg_quality,
         )
     except (ProducerError, ProducerStateError) as exc:
