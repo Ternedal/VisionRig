@@ -289,3 +289,41 @@ def test_capabilities_with_v2_but_unknown_compression_are_parseable() -> None:
         capabilities = producer.fetch_capabilities()
 
     assert capabilities.sensor_packet_compressions == ("future-codec",)
+
+
+def test_producer_uses_heartbeat_v4_when_compression_is_negotiated() -> None:
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["json"] = request.read()
+        import json
+        body = json.loads(seen["json"].decode("utf-8"))
+        seen["body"] = body
+        return httpx.Response(
+            200,
+            json={
+                "schema_id": "visionrig/sensor-heartbeat-receipt/v1",
+                "status": "accepted",
+                "source_id": "kinect",
+                "seen_utc": "2026-09-27T08:30:00+00:00",
+                "production_authority": False,
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="kinect",
+            source_type="camera",
+            client=client,
+        )
+        producer.send_heartbeat(
+            negotiated_max_payload_bytes=4194304,
+            capability_refreshed_utc="2026-09-27T08:30:00+00:00",
+            capability_refresh_seconds=30.0,
+            negotiated_packet_compression="auto",
+        )
+
+    assert seen["body"]["schema_id"] == "visionrig/sensor-heartbeat/v4"
+    assert seen["body"]["negotiated_packet_compression"] == "auto"
