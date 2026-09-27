@@ -307,7 +307,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v30` and advertises the desired-state
+`GET /health` uses `visionrig/health/v31` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -339,3 +339,17 @@ that source to the existing bounded attention list with
 advertises the exact thresholds under
 `sensor_ingress.sensor_packet_payload_thresholds`: warning at 0.80 and
 critical at 0.95.
+
+
+### Capability refresh fleet attention
+
+Fleet summary v5 aggregates producer capability-refresh freshness as
+`current/stale/unknown`. A source whose heartbeat-v3 negotiation refresh is
+`stale` enters the bounded attention list with reason
+`capability_refresh`, alongside any existing presence, control or packet
+transport reasons. Attention items include the latest negotiated payload ceiling
+and refresh age for diagnosis.
+
+`unknown` is intentionally not an alert: heartbeat-v2 producers do not publish
+the negotiation tuple and remain compatible without being marked unhealthy.
+This is observability only and never changes desired state or capture authority.
