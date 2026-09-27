@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v46"
+    assert health["schema"] == "visionrig/health/v47"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -442,7 +442,7 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v17"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v18"
     assert fleet["packet_target_attention_streak_threshold"] == 3
     assert fleet["packet_target"] == {
         "within_target": 0,
@@ -777,7 +777,7 @@ def test_packet_target_overshoot_identifies_worst_source() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v17"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v18"
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 3,
         "max_delta": 0.19,
@@ -820,7 +820,7 @@ def test_fleet_reports_longest_sustained_packet_pressure() -> None:
 
     now[0] = datetime(2026, 9, 27, 17, 1, 0, tzinfo=timezone.utc)
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v17"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v18"
     assert fleet["packet_target_sustained_pressure"] == {
         "sources": 2,
         "longest_seconds": 60.0,
@@ -865,7 +865,7 @@ def test_fleet_identifies_most_recurrent_packet_target_source() -> None:
     sustained("camera-two-repeats")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v17"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v18"
     assert fleet["packet_target_recurrence_total"] == 3
     assert fleet["packet_target_recurring_sources"] == 2
     assert fleet["packet_target_recurrence_hotspot"]["max_recurrence_count"] == 2
@@ -917,7 +917,7 @@ def test_fleet_reports_latest_packet_target_recovery() -> None:
     recover("camera-latest-recovery")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v17"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v18"
     assert fleet["packet_target_recovered_sources"] == 2
     assert fleet["packet_target_latest_recovery"] == {
         "source_id": "camera-latest-recovery",
