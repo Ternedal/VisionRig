@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v11`.
+Schema: `visionrig/sensor-runtime-status/v12`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v7` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v8` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v6` with:
+`visionrig/sensor-bootstrap-snapshot/v7` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v34` and advertises the desired-state
+`GET /health` uses `visionrig/health/v35` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
