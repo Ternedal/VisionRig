@@ -474,7 +474,7 @@ registry revisions or change capture authority.
 
 ### Sustained pressure recurrence
 
-VisionRig 0.60.0 adds recurrence telemetry on top of sustained episode and
+VisionRig 0.59.0 adds recurrence telemetry on top of sustained episode and
 recovery tracking. Runtime status v15 exposes:
 
 - `packet_target_recurrence_count`, incremented when a sustained episode begins
@@ -495,3 +495,29 @@ repeatedly unstable producers without introducing automatic capture policy.
 Like the other packet-target diagnostics, recurrence data is process-local
 operational telemetry and does not advance semantic registry state or emit
 heartbeat-driven semantic change events.
+
+
+### Packet-target stability classification
+
+VisionRig 0.60.0 derives a fleet-level stability classification from recurrence
+telemetry. The service accepts
+`packet_target_flap_window_seconds` when constructed; it defaults to 120
+seconds and must be greater than zero.
+
+Fleet summary v12 exposes `packet_target_stability` counts for:
+
+- `stable`: runtime source exists and has no sustained recurrence;
+- `flapping`: the latest recurrence interval is less than or equal to the
+  configured flap window;
+- `recurring`: at least one sustained recurrence exists and the latest
+  recurrence interval is longer than the flap window;
+- `unknown`: no runtime source exists for the known sensor.
+
+The fleet response also publishes the effective
+`packet_target_flap_window_seconds` so dashboards interpret the classification
+against the same threshold used by the service. Current attention entries carry
+the per-source stability status, but stability itself does not create an
+attention reason or alter capture policy.
+
+Health embeds the same fleet v12 payload. Bootstrap advances with the fleet
+contract so UI clients receive one internally consistent snapshot.
