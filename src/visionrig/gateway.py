@@ -30,7 +30,8 @@ class GatewayHeartbeat(BaseModel):
     schema_id: Literal[
         "visionrig/sensor-heartbeat/v3",
         "visionrig/sensor-heartbeat/v4",
-    ] = "visionrig/sensor-heartbeat/v4"
+        "visionrig/sensor-heartbeat/v5",
+    ] = "visionrig/sensor-heartbeat/v5"
     source_id: str = Field(min_length=1, max_length=128)
     source_type: Literal["camera", "screen", "vr", "image"]
     device: str | None = Field(default=None, max_length=256)
@@ -49,6 +50,11 @@ class GatewayHeartbeat(BaseModel):
         le=3600.0,
     )
     negotiated_packet_compression: Literal["none", "zlib", "auto"] | None = None
+    negotiated_packet_target_utilization: float | None = Field(
+        default=None,
+        gt=0.0,
+        lt=1.0,
+    )
 
     @model_validator(mode="after")
     def validate_negotiation_telemetry(self) -> "GatewayHeartbeat":
@@ -69,12 +75,25 @@ class GatewayHeartbeat(BaseModel):
             raise ValueError(
                 "negotiated compression requires complete negotiation telemetry"
             )
+        if self.schema_id == "visionrig/sensor-heartbeat/v3":
+            if (
+                self.negotiated_packet_compression is not None
+                or self.negotiated_packet_target_utilization is not None
+            ):
+                raise ValueError(
+                    "sensor-heartbeat/v3 does not support packet negotiation details"
+                )
+        elif self.schema_id == "visionrig/sensor-heartbeat/v4":
+            if self.negotiated_packet_target_utilization is not None:
+                raise ValueError(
+                    "sensor-heartbeat/v4 does not support negotiated target utilization"
+                )
         if (
-            self.schema_id == "visionrig/sensor-heartbeat/v3"
-            and self.negotiated_packet_compression is not None
+            self.negotiated_packet_target_utilization is not None
+            and not all(supplied)
         ):
             raise ValueError(
-                "sensor-heartbeat/v3 does not support negotiated compression"
+                "negotiated target utilization requires complete negotiation telemetry"
             )
         return self
 
@@ -194,7 +213,7 @@ def create_gateway_app(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.8.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.9.0")
 
     async def request_upstream(method: str, path: str, **kwargs) -> httpx.Response:
         target = config.target_base_url + path
@@ -219,7 +238,7 @@ def create_gateway_app(
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v8",
+            "schema": "visionrig/sensor-gateway-health/v9",
             "target_scope": "loopback-only",
             "producer_capabilities_schema": "visionrig/producer-capabilities/v2",
             "routes": [
@@ -329,6 +348,9 @@ def create_gateway_app(
                 "capability_refresh_seconds": body.capability_refresh_seconds,
                 "negotiated_packet_compression": (
                     body.negotiated_packet_compression
+                ),
+                "negotiated_packet_target_utilization": (
+                    body.negotiated_packet_target_utilization
                 ),
             },
         )

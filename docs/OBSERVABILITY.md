@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v9`.
+Schema: `visionrig/sensor-runtime-status/v10`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -313,7 +313,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v33` and advertises the desired-state
+`GET /health` uses `visionrig/health/v34` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -359,3 +359,19 @@ and refresh age for diagnosis.
 `unknown` is intentionally not an alert: heartbeat-v2 producers do not publish
 the negotiation tuple and remain compatible without being marked unhealthy.
 This is observability only and never changes desired state or capture authority.
+
+
+### Negotiated packet target utilization
+
+Heartbeat v5 adds
+`negotiated_packet_target_utilization` to the transient producer negotiation
+surface. It reports the exact fraction of the negotiated payload ceiling that
+the producer is currently targeting when adapting packet size. The value is
+strictly between 0 and 1 and requires the complete negotiation tuple.
+
+Runtime status v10 exposes the field per source. Heartbeat v2/v3/v4 remain
+accepted for backward compatibility and report no target-utilization value.
+
+Changing the target policy is operationally meaningful and emits one
+`runtime_changed` event. Refreshing the same policy with a newer capability
+timestamp remains quiet, preserving the no-heartbeat-spam change-feed contract.

@@ -305,3 +305,18 @@ The producer still accepts legacy `producer-capabilities/v1` responses for
 compatibility. Since v1 did not carry thresholds, that path falls back to the
 historical 0.80 warning target. V2 threshold fields are all required and must
 satisfy `0 < warning < critical <= 1`; malformed policy is fail-closed.
+
+
+## Heartbeat v5 target policy telemetry
+
+VisionRig 0.53.0 publishes the producer's active packet-size target through
+heartbeat v5 as `negotiated_packet_target_utilization`. For the reference
+Kinect producer this is the target selected from the negotiated server warning
+threshold and used by RGB JPEG adaptation.
+
+Heartbeat v5 is selected only when a target-utilization value is present.
+Heartbeat v4 remains valid for negotiated compression without target telemetry,
+and older v3/v2 contracts remain accepted by the core.
+
+The target is observability only. It does not change server-side desired state
+or grant the producer any new authority.
