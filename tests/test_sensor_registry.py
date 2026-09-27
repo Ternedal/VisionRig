@@ -540,6 +540,8 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     }
     assert fleet["packet_target_sustained_episode_total"] == 0
     assert fleet["packet_target_recovered_sources"] == 0
+    assert fleet["packet_target_recurrence_total"] == 0
+    assert fleet["packet_target_recurring_sources"] == 0
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
     assert [item["source_id"] for item in fleet["attention"]] == [
@@ -573,6 +575,8 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         == fleet["packet_target_sustained_episode_total"]
     )
     assert health_fleet["packet_target_recovered_sources"] == fleet["packet_target_recovered_sources"]
+    assert health_fleet["packet_target_recurrence_total"] == fleet["packet_target_recurrence_total"]
+    assert health_fleet["packet_target_recurring_sources"] == fleet["packet_target_recurring_sources"]
     assert health_fleet["attention_total"] == fleet["attention_total"]
     assert [
         item["source_id"] for item in health_fleet["attention"]
