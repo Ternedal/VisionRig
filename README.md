@@ -411,3 +411,15 @@ started, and its current server-clock duration.
 This gives dashboards a direct distinction between newly sustained pressure and
 a source that has remained over target for a long period, without introducing a
 new alert or capture policy.
+
+
+## VisionRig 0.66.0: recurrence hotspot
+
+Fleet packet-target telemetry now identifies the source with the highest
+sustained recurrence count. The summary exposes the maximum recurrence count,
+the source id behind it and that source's latest recovery-to-recurrence
+interval.
+
+This makes repeated transport instability directly actionable in dashboards
+without scanning every catalog row. Equal recurrence counts retain the first
+source in deterministic sorted source-id order.
