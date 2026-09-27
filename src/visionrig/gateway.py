@@ -27,9 +27,10 @@ class GatewayConfigError(RuntimeError):
 
 class GatewayHeartbeat(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    schema_id: Literal["visionrig/sensor-heartbeat/v3"] = (
-        "visionrig/sensor-heartbeat/v3"
-    )
+    schema_id: Literal[
+        "visionrig/sensor-heartbeat/v3",
+        "visionrig/sensor-heartbeat/v4",
+    ] = "visionrig/sensor-heartbeat/v4"
     source_id: str = Field(min_length=1, max_length=128)
     source_type: Literal["camera", "screen", "vr", "image"]
     device: str | None = Field(default=None, max_length=256)
@@ -47,18 +48,33 @@ class GatewayHeartbeat(BaseModel):
         ge=1.0,
         le=3600.0,
     )
+    negotiated_packet_compression: Literal["none", "zlib", "auto"] | None = None
 
     @model_validator(mode="after")
     def validate_negotiation_telemetry(self) -> "GatewayHeartbeat":
-        fields = (
+        base_fields = (
             self.negotiated_max_payload_bytes,
             self.capability_refreshed_utc,
             self.capability_refresh_seconds,
         )
-        supplied = [value is not None for value in fields]
+        supplied = [value is not None for value in base_fields]
         if any(supplied) and not all(supplied):
             raise ValueError(
                 "negotiation telemetry fields must be supplied together"
+            )
+        if (
+            self.negotiated_packet_compression is not None
+            and not all(supplied)
+        ):
+            raise ValueError(
+                "negotiated compression requires complete negotiation telemetry"
+            )
+        if (
+            self.schema_id == "visionrig/sensor-heartbeat/v3"
+            and self.negotiated_packet_compression is not None
+        ):
+            raise ValueError(
+                "sensor-heartbeat/v3 does not support negotiated compression"
             )
         return self
 
@@ -178,7 +194,7 @@ def create_gateway_app(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.6.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.7.0")
 
     async def request_upstream(method: str, path: str, **kwargs) -> httpx.Response:
         target = config.target_base_url + path
@@ -203,7 +219,7 @@ def create_gateway_app(
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v6",
+            "schema": "visionrig/sensor-gateway-health/v7",
             "target_scope": "loopback-only",
             "routes": [
                 "/api/v1/frames/ingest",
@@ -296,6 +312,9 @@ def create_gateway_app(
                     else None
                 ),
                 "capability_refresh_seconds": body.capability_refresh_seconds,
+                "negotiated_packet_compression": (
+                    body.negotiated_packet_compression
+                ),
             },
         )
         return _relay(upstream)
