@@ -206,7 +206,7 @@ the local UTC time when it first observes each new refresh timestamp. Runtime
 freshness age/status is derived from that **server-observed** time, so producer
 clock skew cannot make a fresh negotiation look stale or keep an old negotiation
 fresh. Both timestamps remain visible for diagnostics without persisting that
-transport telemetry into operator registry state. Fleet v5 counts those states
+transport telemetry into operator registry state. Fleet v6 counts those states
 and adds only `stale` producers to bounded attention with reason
 `capability_refresh`; legacy/unknown heartbeat-v2 producers are not treated as
 faults. Timestamp-only refreshes do not create change-feed events; an actual
