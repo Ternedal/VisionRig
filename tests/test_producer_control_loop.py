@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from visionrig.contracts import SourceDescriptor
 from visionrig.pipeline import Frame
@@ -508,3 +509,8 @@ def test_live_transport_refresh_can_change_packet_encoder_strategy() -> None:
     ]
     assert producer.negotiation_heartbeats[0][0] == 2048
     assert producer.negotiation_heartbeats[1][0] == 2048
+
+
+def test_select_packet_compression_rejects_unknown_only_modes() -> None:
+    with pytest.raises(Exception, match="no supported SensorPacket compression"):
+        _select_packet_compression(("future-codec",))
