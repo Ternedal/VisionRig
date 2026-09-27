@@ -257,6 +257,7 @@ def create_app(
             "above_target": 0,
             "unknown": 0,
         }
+        packet_target_attention_streak_threshold = 3
         attention = []
         attention_total = 0
 
@@ -358,7 +359,16 @@ def create_app(
                 attention_reasons.append("packet_transport")
             if capability_refresh_status == "stale":
                 attention_reasons.append("capability_refresh")
-            if packet_target_status == "above_target":
+            packet_target_above_streak = (
+                runtime_source.packet_target_above_streak
+                if runtime_source is not None
+                else 0
+            )
+            if (
+                packet_target_status == "above_target"
+                and packet_target_above_streak
+                >= packet_target_attention_streak_threshold
+            ):
                 attention_reasons.append("packet_target")
 
             needs_attention = bool(attention_reasons)
@@ -386,6 +396,7 @@ def create_app(
                         "negotiated_packet_target_utilization": target_utilization,
                         "observed_packet_utilization": observed_utilization,
                         "packet_target_status": packet_target_status,
+                        "packet_target_above_streak": packet_target_above_streak,
                         "capability_refresh_age_seconds": (
                             runtime_source.capability_refresh_age_seconds
                             if runtime_source is not None
@@ -402,7 +413,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v7",
+            "schema": "visionrig/sensor-fleet-summary/v8",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -413,6 +424,9 @@ def create_app(
             "capability_refresh": capability_refresh_counts,
             "negotiated_compression": negotiated_compression_counts,
             "packet_target": packet_target_counts,
+            "packet_target_attention_streak_threshold": (
+                packet_target_attention_streak_threshold
+            ),
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -423,7 +437,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v34",
+            "schema": "visionrig/health/v35",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -492,7 +506,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v6",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v7",
             },
         }
 
@@ -610,7 +624,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v6",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v7",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

@@ -279,3 +279,12 @@ as `within_target`, `above_target` or `unknown`. Producers above their
 negotiated packet target enter the bounded attention list with
 `reason = packet_target`, including both values for diagnostics. The signal
 is observational only and does not alter capture policy or semantic state.
+
+
+## VisionRig 0.56.0: sustained packet-target attention
+
+Packet-target compliance now distinguishes a transient oversized packet from a
+sustained producer-side adaptation problem. Runtime status v12 tracks consecutive
+over-target heartbeat-v6 observations, while fleet summary v8 raises
+`packet_target` attention only after three consecutive exceedances. A compliant
+or unknown measurement resets the streak immediately.
