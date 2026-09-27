@@ -544,3 +544,39 @@ def test_packet_transport_warning_enters_fleet_attention(monkeypatch) -> None:
     assert item["transport_status"] == "warning"
     assert item["reasons"] == ["packet_transport"]
     assert item["packet_transport"]["payload_status"] == "warning"
+
+
+def test_sensor_packet_v2_can_carry_uncompressed_planes() -> None:
+    depth = np.array([[1000, 1500], [2000, 2500]], dtype=np.uint16)
+    packet = encode_sensor_packet(
+        rgb_payload=b"jpeg",
+        rgb_content_type="image/jpeg",
+        depth_mm=depth,
+        compression="none",
+        packet_version="v2",
+    )
+
+    header = inspect_sensor_packet(packet)
+    decoded = decode_sensor_packet(packet)
+
+    assert header.schema_id == "visionrig/sensor-packet/v2"
+    assert header.depth is not None
+    assert header.depth.compression == "none"
+    assert header.depth.raw_byte_length is None
+    assert np.array_equal(decoded.depth_mm, depth)
+
+
+def test_sensor_packet_v1_rejects_compressed_planes() -> None:
+    depth = np.zeros((2, 2), dtype=np.uint16)
+    try:
+        encode_sensor_packet(
+            rgb_payload=b"jpeg",
+            rgb_content_type="image/jpeg",
+            depth_mm=depth,
+            compression="zlib",
+            packet_version="v1",
+        )
+    except SensorPacketError as exc:
+        assert "v1" in str(exc)
+    else:
+        raise AssertionError("SensorPacket/v1 compression must be rejected")

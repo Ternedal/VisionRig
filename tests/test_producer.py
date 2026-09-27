@@ -262,3 +262,30 @@ def test_producer_rejects_capabilities_without_sensor_packet_v2() -> None:
         )
         with pytest.raises(ProducerProtocolError, match="SensorPacket/v2"):
             producer.fetch_capabilities()
+
+
+def test_capabilities_with_v2_but_unknown_compression_are_parseable() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "schema": "visionrig/producer-capabilities/v1",
+                "max_payload_bytes": 1024 * 1024,
+                "gateway_max_payload_bytes": 1024 * 1024,
+                "core_max_payload_bytes": 1024 * 1024,
+                "sensor_packet_schemas": ["visionrig/sensor-packet/v2"],
+                "sensor_packet_compressions": ["future-codec"],
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="kinect",
+            source_type="camera",
+            client=client,
+        )
+        capabilities = producer.fetch_capabilities()
+
+    assert capabilities.sensor_packet_compressions == ("future-codec",)

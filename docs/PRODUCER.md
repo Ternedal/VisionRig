@@ -227,3 +227,26 @@ last video frame.
 Heartbeat v2 remains accepted for older producers. V2 has no negotiation
 telemetry and appears as `capability_refresh_status=unknown`. V3 negotiation
 fields are all-or-nothing; partial tuples are rejected rather than interpreted.
+
+
+## Negotiated packet compression
+
+VisionRig 0.49.0 makes the advertised SensorPacket compression capabilities
+operational rather than informational.
+
+Remote Kinect selects its v2 plane encoder from the latest negotiated capability
+contract:
+
+- `none + zlib` -> adaptive `auto` per plane;
+- `zlib` only -> force zlib for depth/IR;
+- `none` only -> send raw uint16 depth/IR in SensorPacket/v2;
+- no known mode -> fail closed before capture/send.
+
+Raw v2 is explicit: the producer keeps the SensorPacket/v2 magic/schema even
+when both numeric planes are uncompressed. This avoids silently downgrading to
+SensorPacket/v1.
+
+The selection is refreshed together with the negotiated payload ceiling. A
+running producer can therefore move between adaptive, forced-zlib and raw-v2
+encoding between frames without reopening Kinect, changing frame sequence state,
+or touching depth/IR semantics.

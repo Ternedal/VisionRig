@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
 import time
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 from .kinect_v2 import KinectV2Source
-from .producer import GatewayFrameProducer, ProducerError
+from .producer import GatewayFrameProducer, ProducerError, ProducerProtocolError
 from .producer_state import ProducerStateError, ProducerStateStore
 from .screen_source import MssScreenSource
 from .sensor_packet import (
@@ -17,6 +18,30 @@ from .sensor_packet import (
     encode_sensor_packet,
 )
 from .sources import CameraSource, FrameSource, ImageFileSource
+
+
+@dataclass(frozen=True, slots=True)
+class PacketTransportPlan:
+    max_payload_bytes: int
+    compression: Literal["none", "zlib", "auto"]
+    packet_encoder: Callable[[Any, bytes], bytes]
+
+
+def _select_packet_compression(
+    supported: tuple[str, ...],
+) -> Literal["none", "zlib", "auto"]:
+    normalized = {value.strip().lower() for value in supported}
+    has_none = "none" in normalized
+    has_zlib = "zlib" in normalized
+    if has_none and has_zlib:
+        return "auto"
+    if has_zlib:
+        return "zlib"
+    if has_none:
+        return "none"
+    raise ProducerProtocolError(
+        "VisionRig gateway/core advertises no supported SensorPacket compression"
+    )
 
 
 class _ProducerClient(Protocol):
@@ -54,7 +79,12 @@ def _encode_jpeg(image: Any, quality: int) -> bytes:
     return encoded.tobytes()
 
 
-def _encode_kinect_packet(frame: Any, rgb_jpeg: bytes) -> bytes:
+def _encode_kinect_packet(
+    frame: Any,
+    rgb_jpeg: bytes,
+    *,
+    compression: Literal["none", "zlib", "auto"] = "auto",
+) -> bytes:
     depth = frame.sensor_data.get("color_aligned_depth_mm")
     if depth is None:
         raise RuntimeError(
@@ -65,7 +95,8 @@ def _encode_kinect_packet(frame: Any, rgb_jpeg: bytes) -> bytes:
         rgb_content_type="image/jpeg",
         depth_mm=depth,
         infrared=frame.sensor_data.get("infrared"),
-        compression="auto",
+        compression=compression,
+        packet_version="v2",
     )
 
 
@@ -140,6 +171,7 @@ def _run_controlled_capture(
     packet_encoder: Callable[[Any, bytes], bytes] | None = None,
     packet_budget_bytes: int | None = None,
     packet_budget_provider: Callable[[], int] | None = None,
+    packet_transport_provider: Callable[[], PacketTransportPlan] | None = None,
     capability_refresh_seconds: float = 30.0,
     min_jpeg_quality: int = 30,
     monotonic: Callable[[], float] = time.monotonic,
@@ -155,6 +187,15 @@ def _run_controlled_capture(
     """
     if packet_budget_provider is not None and packet_encoder is None:
         raise ValueError("packet_budget_provider requires packet_encoder")
+    if packet_transport_provider is not None and packet_encoder is None:
+        raise ValueError("packet_transport_provider requires packet_encoder")
+    if (
+        packet_budget_provider is not None
+        and packet_transport_provider is not None
+    ):
+        raise ValueError(
+            "use either packet_budget_provider or packet_transport_provider"
+        )
     if not 1.0 <= capability_refresh_seconds <= 3600.0:
         raise ValueError("capability_refresh_seconds must be between 1 and 3600")
 
@@ -162,6 +203,8 @@ def _run_controlled_capture(
     next_control_check = 0.0
     next_capability_check = 0.0
     current_packet_budget = packet_budget_bytes
+    current_packet_encoder = packet_encoder
+    current_packet_compression: str | None = None
     capability_refreshed_utc: str | None = None
     deadline = monotonic()
     frames = 0
@@ -172,24 +215,46 @@ def _run_controlled_capture(
         while max_frames == 0 or frames < max_frames:
             now = monotonic()
 
-            if (
-                packet_budget_provider is not None
+            should_refresh_transport = (
+                (
+                    packet_budget_provider is not None
+                    or packet_transport_provider is not None
+                )
                 and (
                     current_packet_budget is None
                     or now >= next_capability_check
                 )
-            ):
-                refreshed_budget = packet_budget_provider()
+            )
+            if should_refresh_transport:
+                refreshed_compression = current_packet_compression
+                refreshed_encoder = current_packet_encoder
+                if packet_transport_provider is not None:
+                    plan = packet_transport_provider()
+                    refreshed_budget = plan.max_payload_bytes
+                    refreshed_compression = plan.compression
+                    refreshed_encoder = plan.packet_encoder
+                else:
+                    assert packet_budget_provider is not None
+                    refreshed_budget = packet_budget_provider()
+
                 if not 1024 <= refreshed_budget <= 64 * 1024 * 1024:
                     raise RuntimeError(
                         "negotiated packet budget must be between 1 KiB and 64 MiB"
                     )
-                if verbose and refreshed_budget != current_packet_budget:
+                if refreshed_encoder is None:
+                    raise RuntimeError("negotiated packet encoder is unavailable")
+                if verbose and (
+                    refreshed_budget != current_packet_budget
+                    or refreshed_compression != current_packet_compression
+                ):
                     print(
                         "producer_capabilities "
-                        f"effective_packet_cap={refreshed_budget}"
+                        f"effective_packet_cap={refreshed_budget} "
+                        f"packet_compression={refreshed_compression or 'default'}"
                     )
                 current_packet_budget = refreshed_budget
+                current_packet_encoder = refreshed_encoder
+                current_packet_compression = refreshed_compression
                 capability_refreshed_utc = utcnow().isoformat()
                 next_capability_check = now + capability_refresh_seconds
 
@@ -210,17 +275,26 @@ def _run_controlled_capture(
                         applied_revision=desired.revision,
                         negotiated_max_payload_bytes=(
                             current_packet_budget
-                            if packet_budget_provider is not None
+                            if (
+                                packet_budget_provider is not None
+                                or packet_transport_provider is not None
+                            )
                             else None
                         ),
                         capability_refreshed_utc=(
                             capability_refreshed_utc
-                            if packet_budget_provider is not None
+                            if (
+                                packet_budget_provider is not None
+                                or packet_transport_provider is not None
+                            )
                             else None
                         ),
                         capability_refresh_seconds=(
                             capability_refresh_seconds
-                            if packet_budget_provider is not None
+                            if (
+                                packet_budget_provider is not None
+                                or packet_transport_provider is not None
+                            )
                             else None
                         ),
                     )
@@ -239,17 +313,26 @@ def _run_controlled_capture(
                     applied_revision=desired.revision,
                     negotiated_max_payload_bytes=(
                         current_packet_budget
-                        if packet_budget_provider is not None
+                        if (
+                            packet_budget_provider is not None
+                            or packet_transport_provider is not None
+                        )
                         else None
                     ),
                     capability_refreshed_utc=(
                         capability_refreshed_utc
-                        if packet_budget_provider is not None
+                        if (
+                            packet_budget_provider is not None
+                            or packet_transport_provider is not None
+                        )
                         else None
                     ),
                     capability_refresh_seconds=(
                         capability_refresh_seconds
-                        if packet_budget_provider is not None
+                        if (
+                            packet_budget_provider is not None
+                            or packet_transport_provider is not None
+                        )
                         else None
                     ),
                 )
@@ -264,17 +347,17 @@ def _run_controlled_capture(
 
             effective_quality = jpeg_quality
             packet_utilization = None
-            if packet_encoder is None:
+            if current_packet_encoder is None:
                 payload = encode_jpeg(frame.payload, jpeg_quality)
                 result = producer.send_encoded(payload)
             elif current_packet_budget is None:
                 payload = encode_jpeg(frame.payload, jpeg_quality)
-                result = producer.send_packet(packet_encoder(frame, payload))
+                result = producer.send_packet(current_packet_encoder(frame, payload))
             else:
                 packet, effective_quality, packet_utilization = (
                     _encode_packet_with_budget(
                         frame=frame,
-                        packet_encoder=packet_encoder,
+                        packet_encoder=current_packet_encoder,
                         encode_jpeg=encode_jpeg,
                         initial_quality=jpeg_quality,
                         min_quality=min_jpeg_quality,
@@ -436,13 +519,28 @@ def main() -> None:
         state_store=ProducerStateStore(_default_state_path()),
     )
 
-    packet_budget_provider = None
+    packet_transport_provider = None
     if args.kinect_v2:
-        def packet_budget_provider() -> int:
+        def packet_transport_provider() -> PacketTransportPlan:
             capabilities_contract = producer.fetch_capabilities()
-            return min(
-                args.max_packet_bytes,
-                capabilities_contract.max_payload_bytes,
+            compression = _select_packet_compression(
+                capabilities_contract.sensor_packet_compressions
+            )
+            return PacketTransportPlan(
+                max_payload_bytes=min(
+                    args.max_packet_bytes,
+                    capabilities_contract.max_payload_bytes,
+                ),
+                compression=compression,
+                packet_encoder=(
+                    lambda frame, rgb_jpeg, selected=compression: (
+                        _encode_kinect_packet(
+                            frame,
+                            rgb_jpeg,
+                            compression=selected,
+                        )
+                    )
+                ),
             )
 
     try:
@@ -457,7 +555,7 @@ def main() -> None:
             control_poll_seconds=args.control_poll_seconds,
             verbose=args.verbose,
             packet_encoder=packet_encoder,
-            packet_budget_provider=packet_budget_provider,
+            packet_transport_provider=packet_transport_provider,
             capability_refresh_seconds=args.capability_refresh_seconds,
             min_jpeg_quality=args.min_jpeg_quality,
         )

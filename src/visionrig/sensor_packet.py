@@ -336,6 +336,7 @@ def encode_sensor_packet(
     depth_mm: Any | None = None,
     infrared: Any | None = None,
     compression: Literal["none", "zlib", "auto"] = "none",
+    packet_version: Literal["auto", "v1", "v2"] = "auto",
 ) -> bytes:
     if not rgb_payload:
         raise SensorPacketError("RGB payload is empty")
@@ -353,6 +354,10 @@ def encode_sensor_packet(
 
     if compression not in {"none", "zlib", "auto"}:
         raise SensorPacketError("unsupported plane compression")
+    if packet_version not in {"auto", "v1", "v2"}:
+        raise SensorPacketError("unsupported sensor packet version")
+    if packet_version == "v1" and compression != "none":
+        raise SensorPacketError("SensorPacket/v1 does not support compressed planes")
 
     planes: list[bytes] = []
     depth_header = None
@@ -418,9 +423,13 @@ def encode_sensor_packet(
         )
         planes.append(ir_bytes)
 
-    packet_version = "v2" if compression in {"zlib", "auto"} else "v1"
+    selected_packet_version = packet_version
+    if selected_packet_version == "auto":
+        selected_packet_version = (
+            "v2" if compression in {"zlib", "auto"} else "v1"
+        )
     header = SensorPacketHeader(
-        schema_id=f"visionrig/sensor-packet/{packet_version}",
+        schema_id=f"visionrig/sensor-packet/{selected_packet_version}",
         rgb_content_type=normalized_rgb_type,
         rgb_byte_length=len(rgb_payload),
         depth=depth_header,
@@ -432,7 +441,7 @@ def encode_sensor_packet(
 
     return b"".join(
         (
-            _MAGIC_V2 if packet_version == "v2" else _MAGIC_V1,
+            _MAGIC_V2 if selected_packet_version == "v2" else _MAGIC_V1,
             _HEADER_LENGTH.pack(len(header_bytes)),
             header_bytes,
             rgb_payload,
