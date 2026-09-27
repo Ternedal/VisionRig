@@ -406,3 +406,68 @@ def test_sensor_heartbeat_v5_rejects_observed_packet_utilization() -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_fleet_marks_packet_target_compliance_and_attention() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v6",
+            "source_id": "kinect-over-target",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T12:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": 0.76,
+        },
+    )
+    assert response.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v7"
+    assert fleet["packet_target"] == {
+        "within_target": 0,
+        "above_target": 1,
+        "unknown": 0,
+    }
+    assert fleet["attention_total"] == 1
+    item = fleet["attention"][0]
+    assert item["source_id"] == "kinect-over-target"
+    assert item["packet_target_status"] == "above_target"
+    assert item["negotiated_packet_target_utilization"] == 0.72
+    assert item["observed_packet_utilization"] == 0.76
+    assert "packet_target" in item["reasons"]
+
+
+def test_fleet_packet_target_within_target_does_not_raise_attention() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v6",
+            "source_id": "kinect-within-target",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T12:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": 0.70,
+        },
+    )
+    assert response.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["packet_target"] == {
+        "within_target": 1,
+        "above_target": 0,
+        "unknown": 0,
+    }
+    assert fleet["attention_total"] == 0
