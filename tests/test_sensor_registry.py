@@ -586,6 +586,11 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "flapping": 0,
         "unknown": 4,
     }
+    assert fleet["packet_target_measurement_coverage"] == {
+        "complete": 0,
+        "target_only": 0,
+        "unavailable": 4,
+    }
     assert fleet["packet_target_flap_window_seconds"] == 120.0
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 0,
@@ -647,6 +652,10 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert health_fleet["packet_target_recurrence_total"] == fleet["packet_target_recurrence_total"]
     assert health_fleet["packet_target_recurring_sources"] == fleet["packet_target_recurring_sources"]
     assert health_fleet["packet_target_stability"] == fleet["packet_target_stability"]
+    assert (
+        health_fleet["packet_target_measurement_coverage"]
+        == fleet["packet_target_measurement_coverage"]
+    )
     assert (
         health_fleet["packet_target_flap_window_seconds"]
         == fleet["packet_target_flap_window_seconds"]
