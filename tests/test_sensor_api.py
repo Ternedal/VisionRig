@@ -466,8 +466,12 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert item["packet_target_last_above_utc"] is not None
     assert item["packet_target_sustained_episode_count"] == 1
     assert item["packet_target_last_recovered_utc"] is None
+    assert item["packet_target_recurrence_count"] == 0
+    assert item["packet_target_last_recurrence_seconds"] is None
     assert fleet["packet_target_sustained_episode_total"] == 1
     assert fleet["packet_target_recovered_sources"] == 0
+    assert fleet["packet_target_recurrence_total"] == 0
+    assert fleet["packet_target_recurring_sources"] == 0
     assert item["negotiated_packet_target_utilization"] == 0.72
     assert item["observed_packet_utilization"] == 0.76
     assert "packet_target" in item["reasons"]
@@ -535,6 +539,8 @@ def test_packet_target_streak_resets_after_compliant_measurement() -> None:
     assert runtime["packet_target_last_above_utc"] is not None
     assert runtime["packet_target_sustained_episode_count"] == 1
     assert runtime["packet_target_last_recovered_utc"] is not None
+    assert runtime["packet_target_recurrence_count"] == 0
+    assert runtime["packet_target_last_recurrence_seconds"] is None
     fleet = client.get("/api/v1/sensors/fleet").json()
     assert fleet["packet_target"]["within_target"] == 1
     assert fleet["packet_target_sustained_episode_total"] == 1
@@ -574,7 +580,11 @@ def test_packet_target_sustained_episode_count_increments_once_per_episode() -> 
     runtime = client.get("/api/v1/sensors/status").json()["sources"][0]
     assert runtime["packet_target_sustained_episode_count"] == 2
     assert runtime["packet_target_last_recovered_utc"] == first_recovery
+    assert runtime["packet_target_recurrence_count"] == 1
+    assert runtime["packet_target_last_recurrence_seconds"] is not None
 
     fleet = client.get("/api/v1/sensors/fleet").json()
     assert fleet["packet_target_sustained_episode_total"] == 2
     assert fleet["packet_target_recovered_sources"] == 1
+    assert fleet["packet_target_recurrence_total"] == 1
+    assert fleet["packet_target_recurring_sources"] == 1
