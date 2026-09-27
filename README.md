@@ -345,3 +345,15 @@ Each known/runtime source is classified as:
 
 This is descriptive transport observability only. It does not change desired
 capture state or producer authority.
+
+
+## VisionRig 0.61.0: catalog packet-target stability
+
+The sensor catalog now exposes the packet-target stability projection directly
+on every source. Catalog v9 adds a compact `packet_target` block containing the
+current stability classification, effective flap window, recurrence count and
+latest recurrence interval.
+
+This lets control surfaces render per-sensor `stable`, `recurring`,
+`flapping` or `unknown` state from the catalog/bootstrap snapshot without
+joining fleet attention data back onto catalog rows.
