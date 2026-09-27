@@ -157,7 +157,7 @@ the server-side sampler deterministic.
 For the most recently accepted SensorPacket on a source,
 `GET /api/v1/sensors/status` includes
 `packet_transport` with schema
-`visionrig/sensor-packet-transport/v1`.
+`visionrig/sensor-packet-transport/v2`.
 
 The telemetry contains only transport metadata:
 
@@ -165,11 +165,20 @@ The telemetry contains only transport metadata:
 - encoded RGB bytes;
 - depth wire bytes, raw bytes and selected compression;
 - infrared wire bytes, raw bytes and selected compression;
-- combined numeric wire/raw byte totals;
+- combined numeric wire/raw byte totals and `numeric_saved_bytes`;
 - `numeric_compression_ratio = numeric_wire_bytes / numeric_raw_bytes`;
-- `payload_utilization = packet_bytes / configured_max_payload_bytes`.
+- `payload_utilization = packet_bytes / configured_max_payload_bytes`;
+- remaining `payload_headroom_bytes`;
+- derived `payload_status`: `normal` below 0.80, `warning` from 0.80,
+  and `critical` from 0.95.
 
 No pixels, depth values, IR values or embeddings are exposed. The telemetry is
 updated only after successful packet processing. A later successfully accepted
 plain JPEG/PNG/WebP frame for the same source clears `packet_transport`, so
 the status surface never presents old multimodal transport figures as current.
+
+
+Warning and critical packet status is observability only. It does not change
+desired sensor state, reject an otherwise valid packet, or grant new control
+authority. The fleet summary surfaces warning/critical sources in its bounded
+attention list with reason `packet_transport`.
