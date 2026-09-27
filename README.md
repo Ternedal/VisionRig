@@ -25,6 +25,7 @@ VisionRig includes:
 - **live capability refresh so remote Kinect adapts to payload-limit changes without restart**
 - **heartbeat v3 observability for negotiated producer budget and refresh freshness**
 - **fleet attention for stale producer capability negotiation**
+- **clock-skew-safe capability freshness using VisionRig-observed refresh time**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
@@ -190,10 +191,13 @@ transport contract is refreshed every 30 seconds by default; if the effective
 remote ceiling changes, the next packet uses the new budget without resetting
 the durable frame sequence. A failed refresh stops capture through the existing
 fail-closed cleanup path rather than continuing on stale transport assumptions.
-Heartbeat v3 reports the currently applied negotiated packet ceiling, the last
-capability refresh timestamp and refresh interval. Runtime/catalog surfaces
-derive `current`, `stale` or `unknown` freshness without persisting that
-transport telemetry into operator registry state. Fleet v5 counts those states
+Heartbeat v3 reports the currently applied negotiated packet ceiling, the
+producer-reported refresh timestamp and refresh interval. VisionRig also records
+the local UTC time when it first observes each new refresh timestamp. Freshness
+age/status is derived from that **server-observed** time, so producer clock skew
+cannot make a fresh negotiation look stale or keep an old negotiation fresh.
+Both timestamps remain visible for diagnostics; neither is persisted into
+operator registry state. Fleet v5 counts those states
 and adds only `stale` producers to bounded attention with reason
 `capability_refresh`; legacy/unknown heartbeat-v2 producers are not treated as
 faults. Timestamp-only refreshes do not create change-feed events; an actual
