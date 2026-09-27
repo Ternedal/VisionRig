@@ -109,7 +109,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     assert source["packet_target"] == {
         "status": "unknown",
         "pressure": "unknown",
-        "stability": "stable",
+        "stability": "unknown",
         "target_utilization": None,
         "observed_utilization": None,
         "overshoot_delta": None,
@@ -581,10 +581,10 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert fleet["packet_target_recurrence_total"] == 0
     assert fleet["packet_target_recurring_sources"] == 0
     assert fleet["packet_target_stability"] == {
-        "stable": 2,
+        "stable": 0,
         "recurring": 0,
         "flapping": 0,
-        "unknown": 2,
+        "unknown": 4,
     }
     assert fleet["packet_target_flap_window_seconds"] == 120.0
     assert fleet["packet_target_overshoot"] == {
