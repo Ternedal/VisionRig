@@ -541,3 +541,27 @@ runtime is `unknown`, while an active runtime with no recurrence history is
 Bootstrap v12 embeds catalog v9 alongside fleet v12. Health advances to v40.
 The projection remains process-local transport observability and has no control
 authority.
+
+
+### Complete catalog packet-target diagnostics
+
+VisionRig 0.62.0 expands sensor catalog v10 so the per-source
+`packet_target` object is a complete bounded diagnostic projection rather than
+only a stability summary. It exposes:
+
+- `status`: `within_target`, `above_target` or `unknown`;
+- `pressure`: `clear`, `transient`, `sustained` or `unknown`;
+- target and observed utilization;
+- the shared sustained-attention threshold and current above-target streak;
+- current above-target start/duration plus latest above-target observation;
+- sustained episode count and latest sustained recovery;
+- stability, flap window, recurrence count and latest recurrence interval.
+
+Catalog, fleet and attention now derive compliance, pressure and stability from
+the same server-side classifier helpers. UI clients therefore do not need to
+duplicate threshold logic or join fleet attention back onto catalog rows.
+
+Known sensors without runtime expose `unknown` compliance/pressure/stability,
+zero counters and null timestamps. Bootstrap v13 embeds catalog v10 alongside
+fleet v12; health advances to v41. All fields remain process-local operational
+telemetry with no capture authority.
