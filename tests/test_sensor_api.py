@@ -315,3 +315,24 @@ def test_sensor_heartbeat_v3_rejects_partial_negotiation_telemetry() -> None:
         },
     )
     assert response.status_code == 422
+
+
+def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v3",
+            "source_id": "stale-kinect",
+            "source_type": "camera",
+            "capture_active": True,
+            "applied_revision": 0,
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2000-01-01T00:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+        },
+    )
+    assert response.status_code == 200
+    source = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert source["capability_refresh_status"] == "stale"
+    assert source["capability_refresh_age_seconds"] > 60.0
