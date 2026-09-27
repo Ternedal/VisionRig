@@ -850,3 +850,30 @@ measurement telemetry to be unavailable.
 Bootstrap v25 embeds fleet v23 and health advances to v53. Heartbeat schema
 coverage is process-local diagnostics only and creates no semantic event,
 attention reason, or control action.
+
+
+### Heartbeat upgrade candidates
+
+VisionRig 0.75.0 extends fleet summary v24 with a bounded producer migration
+list derived from `heartbeat_schema_coverage`.
+
+The fleet payload exposes:
+
+- `heartbeat_upgrade_candidates`: up to 32 runtime sources whose latest
+  heartbeat contract is not v6, in deterministic source-id order;
+- `heartbeat_upgrade_candidate_total`: total number of runtime sources that
+  require a heartbeat contract upgrade;
+- `heartbeat_upgrade_candidates_truncated`: whether additional candidates are
+  omitted from the bounded list.
+
+Each candidate contains `source_id`, `presence`, `current_schema_id`,
+`required_schema_id`, and the current packet-target `measurement` state.
+Frame-only sources with no heartbeat use `current_schema_id = null` and remain
+valid upgrade candidates.
+
+The candidate total matches
+`heartbeat_schema_coverage.upgrade_required`. Candidates remain diagnostic
+migration work only: they do not affect `attention_total`, desired state,
+capture authority, or semantic change events.
+
+Bootstrap v26 embeds fleet v24 and health advances to v54.

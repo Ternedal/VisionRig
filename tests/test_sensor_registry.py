@@ -206,7 +206,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v53"
+    assert health["schema"] == "visionrig/health/v54"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -533,7 +533,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     response = client.get("/api/v1/sensors/fleet")
     assert response.status_code == 200
     fleet = response.json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v23"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v24"
     assert fleet["state_revision"] == 5
     assert fleet["change_consistency"]["status"] == "synced"
     assert fleet["change_consistency"]["journal_state_revision"] == 5
@@ -603,6 +603,24 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "no_heartbeat": 0,
         "upgrade_required": 2,
     }
+    assert fleet["heartbeat_upgrade_candidate_total"] == 2
+    assert fleet["heartbeat_upgrade_candidates_truncated"] is False
+    assert fleet["heartbeat_upgrade_candidates"] == [
+        {
+            "source_id": "online-ok",
+            "presence": "online",
+            "current_schema_id": "visionrig/sensor-heartbeat/v2",
+            "required_schema_id": "visionrig/sensor-heartbeat/v6",
+            "measurement": "unavailable",
+        },
+        {
+            "source_id": "pending-camera",
+            "presence": "online",
+            "current_schema_id": "visionrig/sensor-heartbeat/v2",
+            "required_schema_id": "visionrig/sensor-heartbeat/v6",
+            "measurement": "unavailable",
+        },
+    ]
     assert fleet["packet_target_flap_window_seconds"] == 120.0
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 0,
@@ -666,7 +684,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v53"
+    assert health["schema"] == "visionrig/health/v54"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
@@ -693,6 +711,18 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert (
         health_fleet["heartbeat_schema_coverage"]
         == fleet["heartbeat_schema_coverage"]
+    )
+    assert (
+        health_fleet["heartbeat_upgrade_candidates"]
+        == fleet["heartbeat_upgrade_candidates"]
+    )
+    assert (
+        health_fleet["heartbeat_upgrade_candidate_total"]
+        == fleet["heartbeat_upgrade_candidate_total"]
+    )
+    assert (
+        health_fleet["heartbeat_upgrade_candidates_truncated"]
+        == fleet["heartbeat_upgrade_candidates_truncated"]
     )
     assert (
         health_fleet["packet_target_flap_window_seconds"]
@@ -897,7 +927,7 @@ def test_stale_capability_refresh_enters_fleet_attention() -> None:
 
     now[0] = datetime(2026, 9, 27, 7, 1, 1, tzinfo=timezone.utc)
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v23"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v24"
     assert fleet["capability_refresh"] == {
         "current": 0,
         "stale": 1,
