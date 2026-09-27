@@ -341,6 +341,16 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "target_only": 0,
             "unavailable": 0,
         },
+        "heartbeat_schema_coverage": {
+            "runtime_sources": 0,
+            "v2": 0,
+            "v3": 0,
+            "v4": 0,
+            "v5": 0,
+            "v6": 0,
+            "no_heartbeat": 0,
+            "upgrade_required": 0,
+        },
         "packet_target_flap_window_seconds": 120.0,
         "packet_target_overshoot": {
             "measured_sources": 0,
