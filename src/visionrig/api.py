@@ -352,6 +352,10 @@ def create_app(
                     "image/webp",
                     SENSOR_PACKET_MEDIA_TYPE,
                 ],
+                "heartbeat_schemas": [
+                    "visionrig/sensor-heartbeat/v2",
+                    "visionrig/sensor-heartbeat/v3",
+                ],
                 "sensor_packet_schemas": [
                     "visionrig/sensor-packet/v1",
                     "visionrig/sensor-packet/v2",
