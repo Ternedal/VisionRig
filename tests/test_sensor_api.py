@@ -922,4 +922,12 @@ def test_fleet_reports_latest_packet_target_recovery() -> None:
     assert fleet["packet_target_latest_recovery"] == {
         "source_id": "camera-latest-recovery",
         "recovered_utc": "2026-09-27T19:02:00+00:00",
+        "age_seconds": 0.0,
     }
+
+    now[0] = datetime(2026, 9, 27, 19, 3, 30, tzinfo=timezone.utc)
+    later = client.get("/api/v1/sensors/fleet").json()
+    assert later["packet_target_latest_recovery"]["source_id"] == (
+        "camera-latest-recovery"
+    )
+    assert later["packet_target_latest_recovery"]["age_seconds"] == 90.0
