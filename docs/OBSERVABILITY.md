@@ -430,7 +430,7 @@ registry state, alter desired capture state, or emit semantic change events.
 
 ### Packet-target pressure duration
 
-VisionRig 0.58.0 adds temporal context to the packet-target debounce signal.
+VisionRig 0.57.0 adds temporal context to the packet-target debounce signal.
 Runtime status v13 exposes:
 
 - `packet_target_above_since_utc` while a consecutive over-target run is active;
@@ -446,3 +446,27 @@ reached and the source is eligible for `packet_target` attention.
 The timestamps and duration are process-local transport telemetry. They do not
 advance registry state, alter desired capture state, or generate semantic
 change-feed events.
+
+
+### Sustained pressure episodes and recovery
+
+VisionRig 0.58.0 extends the process-local packet-target diagnostics with
+episode semantics. Runtime status v14 exposes:
+
+- `packet_target_sustained_episode_count`, incremented exactly once when an
+  over-target streak reaches the shared sustained threshold;
+- `packet_target_last_recovered_utc`, updated when a sustained episode ends.
+
+Long-running sustained pressure therefore remains one episode instead of being
+counted on every heartbeat. A transient run that recovers before reaching the
+threshold does not increment the episode count and does not update the sustained
+recovery timestamp.
+
+Fleet summary v10 exposes
+`packet_target_sustained_episode_total` across runtime sources and
+`packet_target_recovered_sources`, the number of sources that have recovered
+from at least one sustained episode. Attention entries include the per-source
+episode count and last recovery timestamp.
+
+These fields remain transient operational telemetry and do not advance semantic
+registry revisions or change capture authority.
