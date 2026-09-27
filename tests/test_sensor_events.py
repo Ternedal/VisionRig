@@ -123,6 +123,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
         "capture_active": False,
         "applied_revision": 1,
         "negotiated_max_payload_bytes": None,
+        "negotiated_packet_compression": None,
         "presence": "online",
     }
     assert runtime_batch["entries"][0]["event"]["state_revision"] == 3
@@ -210,7 +211,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v5"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v6"
     assert body["sensor_state_revision"] == 1
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -222,7 +223,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     assert body["change_cursor"] == 2
     assert body["catalog"]["schema"] == "visionrig/sensor-catalog/v8"
     assert body["catalog"]["sources"][0]["source_id"] == "camera-bootstrap"
-    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v5"
+    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v6"
     assert body["fleet"]["state_revision"] == 1
     assert body["fleet"]["change_consistency"]["status"] == "synced"
     assert body["fleet"]["total"] == 1
@@ -259,7 +260,7 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v5"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v6"
     assert body["sensor_state_revision"] == 0
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -274,7 +275,7 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "sources": [],
     }
     assert body["fleet"] == {
-        "schema": "visionrig/sensor-fleet-summary/v5",
+        "schema": "visionrig/sensor-fleet-summary/v6",
         "state_revision": 0,
         "change_consistency": {
             "schema": "visionrig/sensor-change-consistency/v1",
@@ -304,6 +305,12 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "capability_refresh": {
             "current": 0,
             "stale": 0,
+            "unknown": 0,
+        },
+        "negotiated_compression": {
+            "none": 0,
+            "zlib": 0,
+            "auto": 0,
             "unknown": 0,
         },
         "attention": [],
@@ -756,3 +763,50 @@ def test_change_feed_emits_budget_change_but_not_refresh_timestamp_only() -> Non
     assert batch["entries"][0]["event"]["payload"][
         "negotiated_max_payload_bytes"
     ] == 2097152
+
+
+def test_negotiated_compression_change_emits_runtime_event_but_refresh_only_does_not() -> None:
+    journal = SensorChangeJournal(stream_id="compression-stream")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_change_journal=journal,
+        )
+    )
+    base = {
+        "schema_id": "visionrig/sensor-heartbeat/v4",
+        "source_id": "kinect-compression",
+        "source_type": "camera",
+        "capture_active": True,
+        "applied_revision": 0,
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T08:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+    }
+    assert client.post("/api/v1/sensors/heartbeat", json=base).status_code == 200
+    first = client.get("/api/v1/sensors/changes").json()
+    cursor = first["next_cursor"]
+
+    refreshed = dict(base)
+    refreshed["capability_refreshed_utc"] = "2026-09-27T08:00:30+00:00"
+    assert client.post("/api/v1/sensors/heartbeat", json=refreshed).status_code == 200
+    quiet = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert quiet["entries"] == []
+
+    changed = dict(refreshed)
+    changed["negotiated_packet_compression"] = "none"
+    assert client.post("/api/v1/sensors/heartbeat", json=changed).status_code == 200
+    batch = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert [entry["event"]["kind"] for entry in batch["entries"]] == [
+        "runtime_changed"
+    ]
+    assert batch["entries"][0]["event"]["payload"][
+        "negotiated_packet_compression"
+    ] == "none"
