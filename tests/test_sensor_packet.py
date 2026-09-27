@@ -295,3 +295,23 @@ def test_sensor_packet_v2_ingress_matches_v1_semantics(monkeypatch) -> None:
         "depth",
         "rgb",
     )
+
+
+def test_sensor_packet_v2_rejects_corrupt_zlib_plane() -> None:
+    depth = np.zeros((8, 8), dtype=np.uint16)
+    packet = bytearray(
+        encode_sensor_packet(
+            rgb_payload=b"jpeg",
+            rgb_content_type="image/jpeg",
+            depth_mm=depth,
+            compression="zlib",
+        )
+    )
+    packet[-1] ^= 0xFF
+
+    try:
+        decode_sensor_packet(bytes(packet))
+    except SensorPacketError as exc:
+        assert "zlib" in str(exc) or "decompressed" in str(exc)
+    else:
+        raise AssertionError("corrupt compressed plane must be rejected")
