@@ -591,6 +591,9 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "measured_sources": 0,
         "max_delta": None,
         "max_ratio": None,
+        "worst_source_id": None,
+        "worst_target_utilization": None,
+        "worst_observed_utilization": None,
     }
     assert fleet["attention_total"] == 2
     assert fleet["attention_truncated"] is False
