@@ -337,6 +337,11 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "unknown": 0,
         },
         "packet_target_flap_window_seconds": 120.0,
+        "packet_target_overshoot": {
+            "measured_sources": 0,
+            "max_delta": None,
+            "max_ratio": None,
+        },
         "attention": [],
         "attention_total": 0,
         "attention_truncated": False,
