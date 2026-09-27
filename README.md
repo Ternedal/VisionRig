@@ -281,7 +281,7 @@ negotiated packet target enter the bounded attention list with
 is observational only and does not alter capture policy or semantic state.
 
 
-## VisionRig 0.56.0: sustained packet-target attention
+## VisionRig 0.57.0: sustained packet-target attention
 
 Packet-target compliance now distinguishes a transient oversized packet from a
 sustained producer-side adaptation problem. Runtime status v12 tracks consecutive
