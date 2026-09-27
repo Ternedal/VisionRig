@@ -167,6 +167,10 @@ def create_app(
                 previous_runtime.negotiated_max_payload_bytes
                 != current_runtime.negotiated_max_payload_bytes
             )
+            or (
+                previous_runtime.negotiated_packet_compression
+                != current_runtime.negotiated_packet_compression
+            )
         ):
             append_sensor_change(
                 kind="runtime_changed",
@@ -176,6 +180,9 @@ def create_app(
                     "applied_revision": current_runtime.applied_revision,
                     "negotiated_max_payload_bytes": (
                         current_runtime.negotiated_max_payload_bytes
+                    ),
+                    "negotiated_packet_compression": (
+                        current_runtime.negotiated_packet_compression
                     ),
                     "presence": current_runtime.presence,
                 },
@@ -230,6 +237,12 @@ def create_app(
         capability_refresh_counts = {
             "current": 0,
             "stale": 0,
+            "unknown": 0,
+        }
+        negotiated_compression_counts = {
+            "none": 0,
+            "zlib": 0,
+            "auto": 0,
             "unknown": 0,
         }
         attention = []
@@ -297,6 +310,15 @@ def create_app(
                 capability_refresh_status = "unknown"
             capability_refresh_counts[capability_refresh_status] += 1
 
+            negotiated_compression = (
+                runtime_source.negotiated_packet_compression
+                if runtime_source is not None
+                else None
+            )
+            if negotiated_compression not in {"none", "zlib", "auto"}:
+                negotiated_compression = "unknown"
+            negotiated_compression_counts[negotiated_compression] += 1
+
             attention_reasons = []
             if control_status == "pending":
                 attention_reasons.append("control_pending")
@@ -324,6 +346,11 @@ def create_app(
                             if runtime_source is not None
                             else None
                         ),
+                        "negotiated_packet_compression": (
+                            runtime_source.negotiated_packet_compression
+                            if runtime_source is not None
+                            else None
+                        ),
                         "capability_refresh_age_seconds": (
                             runtime_source.capability_refresh_age_seconds
                             if runtime_source is not None
@@ -340,7 +367,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v5",
+            "schema": "visionrig/sensor-fleet-summary/v6",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -349,6 +376,7 @@ def create_app(
             "control": control_counts,
             "transport": transport_counts,
             "capability_refresh": capability_refresh_counts,
+            "negotiated_compression": negotiated_compression_counts,
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -359,7 +387,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v32",
+            "schema": "visionrig/health/v33",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -379,7 +407,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v7",
+                "schema": "visionrig/sensor-ingress/v8",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": [
                     "image/jpeg",
@@ -390,6 +418,7 @@ def create_app(
                 "heartbeat_schemas": [
                     "visionrig/sensor-heartbeat/v2",
                     "visionrig/sensor-heartbeat/v3",
+                    "visionrig/sensor-heartbeat/v4",
                 ],
                 "sensor_packet_schemas": [
                     "visionrig/sensor-packet/v1",
@@ -425,7 +454,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v5",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v6",
             },
         }
 
@@ -543,7 +572,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v5",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v6",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

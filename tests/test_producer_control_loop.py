@@ -45,7 +45,9 @@ class FakeProducer:
         self.enabled_states = list(enabled_states)
         self.state_index = 0
         self.heartbeats: list[tuple[tuple[str, ...], bool | None, int | None]] = []
-        self.negotiation_heartbeats: list[tuple[int | None, str | None, float | None]] = []
+        self.negotiation_heartbeats: list[
+            tuple[int | None, str | None, float | None, str | None]
+        ] = []
         self.sent: list[bytes] = []
         self.sent_packets: list[bytes] = []
 
@@ -64,6 +66,7 @@ class FakeProducer:
         negotiated_max_payload_bytes: int | None = None,
         capability_refreshed_utc: str | None = None,
         capability_refresh_seconds: float | None = None,
+        negotiated_packet_compression: str | None = None,
     ):
         self.heartbeats.append((capabilities, capture_active, applied_revision))
         self.negotiation_heartbeats.append(
@@ -71,6 +74,7 @@ class FakeProducer:
                 negotiated_max_payload_bytes,
                 capability_refreshed_utc,
                 capability_refresh_seconds,
+                negotiated_packet_compression,
             )
         )
         return SimpleNamespace(source_id="cam")
@@ -508,7 +512,9 @@ def test_live_transport_refresh_can_change_packet_encoder_strategy() -> None:
         b"raw:jpeg:frame-kinect-2",
     ]
     assert producer.negotiation_heartbeats[0][0] == 2048
+    assert producer.negotiation_heartbeats[0][3] == "auto"
     assert producer.negotiation_heartbeats[1][0] == 2048
+    assert producer.negotiation_heartbeats[1][3] == "none"
 
 
 def test_select_packet_compression_rejects_unknown_only_modes() -> None:

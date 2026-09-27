@@ -50,7 +50,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v8"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v9"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -65,11 +65,12 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v32"
-    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v7"
+    assert health["schema"] == "visionrig/health/v33"
+    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v8"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
         "visionrig/sensor-heartbeat/v3",
+        "visionrig/sensor-heartbeat/v4",
     ]
     assert health["sensor_ingress"]["sensor_packet_schemas"] == [
         "visionrig/sensor-packet/v1",
@@ -121,6 +122,7 @@ def test_sensor_heartbeat_registers_capabilities_without_frame() -> None:
     assert source["capabilities"] == ["depth", "infrared", "rgb"]
     assert source["applied_revision"] == 2
     assert source["negotiated_max_payload_bytes"] is None
+    assert source["negotiated_packet_compression"] is None
     assert source["capability_refreshed_utc"] is None
     assert source["capability_refresh_observed_utc"] is None
     assert source["capability_refresh_age_seconds"] is None
@@ -283,4 +285,43 @@ def test_sensor_heartbeat_v3_rejects_partial_negotiation_telemetry() -> None:
         },
     )
 
+    assert response.status_code == 422
+
+
+def test_sensor_heartbeat_v4_exposes_negotiated_compression() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    refreshed = datetime.now(timezone.utc).isoformat()
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v4",
+            "source_id": "kinect-v4",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": refreshed,
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+        },
+    )
+    assert response.status_code == 200
+    source = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert source["negotiated_max_payload_bytes"] == 4194304
+    assert source["negotiated_packet_compression"] == "auto"
+    assert source["capability_refresh_status"] == "current"
+
+
+def test_sensor_heartbeat_v3_rejects_compression_field() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v3",
+            "source_id": "bad-v3",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T08:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "zlib",
+        },
+    )
     assert response.status_code == 422

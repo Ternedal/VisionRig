@@ -136,7 +136,7 @@ async def test_gateway_forwards_authenticated_heartbeat_only_to_fixed_route() ->
             response = await caller.post(
                 "/api/v1/sensors/heartbeat",
                 json={
-                    "schema_id": "visionrig/sensor-heartbeat/v3",
+                    "schema_id": "visionrig/sensor-heartbeat/v4",
                     "source_id": "quest",
                     "source_type": "vr",
                     "device": "quest-2",
@@ -145,6 +145,7 @@ async def test_gateway_forwards_authenticated_heartbeat_only_to_fixed_route() ->
                     "negotiated_max_payload_bytes": 4194304,
                     "capability_refreshed_utc": "2026-09-27T06:30:00+00:00",
                     "capability_refresh_seconds": 30.0,
+                    "negotiated_packet_compression": "auto",
                 },
                 headers={"authorization": f"Bearer {TOKEN}"},
             )
@@ -152,12 +153,13 @@ async def test_gateway_forwards_authenticated_heartbeat_only_to_fixed_route() ->
     assert response.status_code == 200
     assert seen["url"] == "http://127.0.0.1:8110/api/v1/sensors/heartbeat"
     assert seen["authorization"] is None
-    assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v3"
+    assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v4"
     assert seen["json"]["capabilities"] == ["rgb", "passthrough"]
     assert seen["json"]["applied_revision"] == 7
     assert seen["json"]["negotiated_max_payload_bytes"] == 4194304
     assert seen["json"]["capability_refreshed_utc"] == "2026-09-27T06:30:00+00:00"
     assert seen["json"]["capability_refresh_seconds"] == 30.0
+    assert seen["json"]["negotiated_packet_compression"] == "auto"
     assert response.headers["x-visionrig-gateway"] == "1"
 
 
@@ -227,7 +229,7 @@ def test_gateway_health_advertises_only_sensor_routes() -> None:
     app = create_gateway_app(GatewayConfig(token=TOKEN))
     with TestClient(app) as client:
         body = client.get("/health").json()
-    assert body["schema"] == "visionrig/sensor-gateway-health/v6"
+    assert body["schema"] == "visionrig/sensor-gateway-health/v7"
     assert body["routes"] == [
         "/api/v1/frames/ingest",
         "/api/v1/sensor-packets/ingest",

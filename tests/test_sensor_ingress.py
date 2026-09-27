@@ -203,3 +203,34 @@ def test_new_reported_refresh_token_resets_server_observed_age() -> None:
     assert refreshed.capability_refresh_observed_utc == now[0].isoformat()
     assert refreshed.capability_refresh_age_seconds == 0.0
     assert refreshed.capability_refresh_status == "current"
+
+
+def test_heartbeat_v4_tracks_negotiated_compression() -> None:
+    ingress = SensorIngress(
+        VisionRuntime(PerceptionPipeline()),
+        decoder=FakeDecoder(),
+        max_payload_bytes=1024,
+    )
+    ingress.heartbeat(
+        SensorHeartbeat(
+            schema_id="visionrig/sensor-heartbeat/v4",
+            source_id="kinect-v4",
+            source_type="camera",
+            negotiated_max_payload_bytes=1024,
+            negotiated_packet_compression="zlib",
+            capability_refreshed_utc=datetime.now(timezone.utc),
+            capability_refresh_seconds=30.0,
+        )
+    )
+    source = ingress.stats().sources[0]
+    assert source.negotiated_packet_compression == "zlib"
+
+
+def test_heartbeat_v4_compression_requires_complete_negotiation_tuple() -> None:
+    with pytest.raises(Exception, match="complete negotiation telemetry"):
+        SensorHeartbeat(
+            schema_id="visionrig/sensor-heartbeat/v4",
+            source_id="broken-v4",
+            source_type="camera",
+            negotiated_packet_compression="auto",
+        )

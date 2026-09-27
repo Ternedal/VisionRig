@@ -120,11 +120,13 @@ limits. If core health is unavailable, malformed, or lacks the expected bounded
 transport fields, the gateway returns 502 rather than guessing.
 
 
-## Heartbeat v3 forwarding
+## Heartbeat v3/v4 forwarding
 
 The gateway validates the heartbeat v3 negotiation tuple before forwarding it to
 loopback core. `negotiated_max_payload_bytes`,
 `capability_refreshed_utc`, and `capability_refresh_seconds` must either all
 be present or all be absent; the refresh timestamp must be timezone-aware.
-Current producers send v3. Core continues to accept v2 for backward
-compatibility.
+Heartbeat v4 additionally carries the negotiated packet compression strategy
+and is used by current remote Kinect producers. Heartbeat v3 remains valid for
+budget-only negotiation telemetry, while core continues to accept v2 for
+backward compatibility.

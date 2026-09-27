@@ -13,18 +13,19 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v8`.
+Schema: `visionrig/sensor-runtime-status/v9`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
 optional latest accepted SensorPacket transport telemetry, negotiated producer
-payload ceiling and capability-refresh freshness,
+payload ceiling, negotiated packet compression and capability-refresh freshness,
 `last_seen_utc`, `age_seconds`, `capture_active` and derived `online/stale/offline` presence.
 
 ## Heartbeat
 
 `POST /api/v1/sensors/heartbeat` accepts
-`visionrig/sensor-heartbeat/v2`. Cross-device clients use the same route
+`visionrig/sensor-heartbeat/v2`, `visionrig/sensor-heartbeat/v3` and
+`visionrig/sensor-heartbeat/v4`. Cross-device clients use the same route
 through the authenticated sensor gateway.
 
 Heartbeat v3 adds an optional all-or-nothing producer transport negotiation
@@ -34,6 +35,10 @@ tuple:
 - timezone-aware `capability_refreshed_utc`;
 - `capability_refresh_seconds`.
 
+Heartbeat v4 keeps those fields and adds
+`negotiated_packet_compression` with one of `none`, `zlib` or `auto`.
+V2 and v3 remain accepted unchanged for backward compatibility.
+
 Runtime status and the catalog expose those values plus derived
 `capability_refresh_age_seconds` and `capability_refresh_status`:
 `current` while the last successful refresh is no older than twice the
@@ -42,8 +47,8 @@ the producer does not publish negotiation telemetry.
 
 This is transient producer telemetry. It does not advance registry
 `state_revision`, change desired state, or grant authority. The semantic
-change feed emits `runtime_changed` when the negotiated byte ceiling changes,
-but not when only the refresh timestamp advances.
+change feed emits `runtime_changed` when the negotiated byte ceiling or
+compression strategy changes, but not when only the refresh timestamp advances.
 
 ## Operator sensor catalog
 
@@ -172,7 +177,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v5` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v6` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -180,6 +185,7 @@ world-state access.
 - lifecycle counts for `active` and `retired`;
 - presence counts for `online`, `stale`, `offline` and `unknown`;
 - control counts for `converged`, `pending` and `unknown`;
+- negotiated compression counts for `none`, `zlib`, `auto` and `unknown`;
 - up to 32 attention entries plus `attention_total` and
   `attention_truncated`.
 
@@ -265,7 +271,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v5` with:
+`visionrig/sensor-bootstrap-snapshot/v6` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -307,7 +313,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v32` and advertises the desired-state
+`GET /health` uses `visionrig/health/v33` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards

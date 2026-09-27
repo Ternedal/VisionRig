@@ -104,7 +104,8 @@ class SensorHeartbeat(BaseModel):
     schema_id: Literal[
         "visionrig/sensor-heartbeat/v2",
         "visionrig/sensor-heartbeat/v3",
-    ] = "visionrig/sensor-heartbeat/v3"
+        "visionrig/sensor-heartbeat/v4",
+    ] = "visionrig/sensor-heartbeat/v4"
     source_id: str = Field(min_length=1, max_length=128)
     source_type: SensorSourceType
     device: str | None = Field(default=None, max_length=256)
@@ -122,22 +123,34 @@ class SensorHeartbeat(BaseModel):
         ge=1.0,
         le=3600.0,
     )
+    negotiated_packet_compression: Literal["none", "zlib", "auto"] | None = None
 
     @model_validator(mode="after")
     def validate_negotiation_telemetry(self) -> "SensorHeartbeat":
-        fields = (
+        base_fields = (
             self.negotiated_max_payload_bytes,
             self.capability_refreshed_utc,
             self.capability_refresh_seconds,
         )
-        supplied = [value is not None for value in fields]
-        if any(supplied) and not all(supplied):
+        base_supplied = [value is not None for value in base_fields]
+        if any(base_supplied) and not all(base_supplied):
             raise ValueError(
                 "negotiation telemetry fields must be supplied together"
             )
-        if self.schema_id == "visionrig/sensor-heartbeat/v2" and any(supplied):
+        has_negotiation = any(base_supplied)
+        if self.schema_id == "visionrig/sensor-heartbeat/v2":
+            if has_negotiation or self.negotiated_packet_compression is not None:
+                raise ValueError(
+                    "sensor-heartbeat/v2 does not support negotiation telemetry"
+                )
+        elif self.schema_id == "visionrig/sensor-heartbeat/v3":
+            if self.negotiated_packet_compression is not None:
+                raise ValueError(
+                    "sensor-heartbeat/v3 does not support negotiated compression"
+                )
+        elif self.negotiated_packet_compression is not None and not has_negotiation:
             raise ValueError(
-                "sensor-heartbeat/v2 does not support negotiation telemetry"
+                "negotiated compression requires complete negotiation telemetry"
             )
         return self
 
@@ -163,6 +176,7 @@ class SensorSourceStats:
     capture_active: bool | None
     applied_revision: int | None
     negotiated_max_payload_bytes: int | None
+    negotiated_packet_compression: str | None
     capability_refreshed_utc: str | None
     capability_refresh_observed_utc: str | None
     capability_refresh_age_seconds: float | None
@@ -201,6 +215,7 @@ class _MutableSourceStats:
     capture_active: bool | None
     applied_revision: int | None
     negotiated_max_payload_bytes: int | None
+    negotiated_packet_compression: str | None
     capability_refreshed_utc: datetime | None
     capability_refresh_observed_utc: datetime | None
     capability_refresh_seconds: float | None
@@ -293,6 +308,7 @@ class SensorIngress:
                     capture_active=heartbeat.capture_active,
                     applied_revision=heartbeat.applied_revision,
                     negotiated_max_payload_bytes=heartbeat.negotiated_max_payload_bytes,
+                    negotiated_packet_compression=heartbeat.negotiated_packet_compression,
                     capability_refreshed_utc=heartbeat.capability_refreshed_utc,
                     capability_refresh_observed_utc=(
                         now if heartbeat.capability_refreshed_utc is not None else None
@@ -313,6 +329,9 @@ class SensorIngress:
                 current.applied_revision = heartbeat.applied_revision
                 current.negotiated_max_payload_bytes = (
                     heartbeat.negotiated_max_payload_bytes
+                )
+                current.negotiated_packet_compression = (
+                    heartbeat.negotiated_packet_compression
                 )
                 if heartbeat.capability_refreshed_utc is None:
                     current.capability_refresh_observed_utc = None
@@ -353,6 +372,7 @@ class SensorIngress:
                     capture_active=True,
                     applied_revision=None,
                     negotiated_max_payload_bytes=None,
+                    negotiated_packet_compression=None,
                     capability_refreshed_utc=None,
                     capability_refresh_observed_utc=None,
                     capability_refresh_seconds=None,
@@ -392,6 +412,7 @@ class SensorIngress:
                     capture_active=state.capture_active,
                     applied_revision=state.applied_revision,
                     negotiated_max_payload_bytes=state.negotiated_max_payload_bytes,
+                    negotiated_packet_compression=state.negotiated_packet_compression,
                     capability_refreshed_utc=(
                         state.capability_refreshed_utc.isoformat()
                         if state.capability_refreshed_utc is not None
@@ -454,7 +475,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v8",
+                schema="visionrig/sensor-runtime-status/v9",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
