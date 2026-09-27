@@ -124,6 +124,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
         "applied_revision": 1,
         "negotiated_max_payload_bytes": None,
         "negotiated_packet_compression": None,
+        "negotiated_packet_target_utilization": None,
         "presence": "online",
     }
     assert runtime_batch["entries"][0]["event"]["state_revision"] == 3
