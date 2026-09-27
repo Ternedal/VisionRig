@@ -612,6 +612,8 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
             "current_schema_id": "visionrig/sensor-heartbeat/v2",
             "required_schema_id": "visionrig/sensor-heartbeat/v6",
             "measurement": "unavailable",
+            "upgrade_stage": "contract_upgrade",
+            "versions_behind": 4,
         },
         {
             "source_id": "pending-camera",
@@ -619,6 +621,8 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
             "current_schema_id": "visionrig/sensor-heartbeat/v2",
             "required_schema_id": "visionrig/sensor-heartbeat/v6",
             "measurement": "unavailable",
+            "upgrade_stage": "contract_upgrade",
+            "versions_behind": 4,
         },
     ]
     assert fleet["packet_target_flap_window_seconds"] == 120.0
