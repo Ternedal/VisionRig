@@ -164,6 +164,7 @@ class SensorSourceStats:
     applied_revision: int | None
     negotiated_max_payload_bytes: int | None
     capability_refreshed_utc: str | None
+    capability_refresh_observed_utc: str | None
     capability_refresh_age_seconds: float | None
     capability_refresh_status: str
     presence: SensorPresence
@@ -201,6 +202,7 @@ class _MutableSourceStats:
     applied_revision: int | None
     negotiated_max_payload_bytes: int | None
     capability_refreshed_utc: datetime | None
+    capability_refresh_observed_utc: datetime | None
     capability_refresh_seconds: float | None
     last_sequence: int | None
     accepted_frames: int
@@ -292,6 +294,9 @@ class SensorIngress:
                     applied_revision=heartbeat.applied_revision,
                     negotiated_max_payload_bytes=heartbeat.negotiated_max_payload_bytes,
                     capability_refreshed_utc=heartbeat.capability_refreshed_utc,
+                    capability_refresh_observed_utc=(
+                        now if heartbeat.capability_refreshed_utc is not None else None
+                    ),
                     capability_refresh_seconds=heartbeat.capability_refresh_seconds,
                     last_sequence=None,
                     accepted_frames=0,
@@ -309,6 +314,13 @@ class SensorIngress:
                 current.negotiated_max_payload_bytes = (
                     heartbeat.negotiated_max_payload_bytes
                 )
+                if heartbeat.capability_refreshed_utc is None:
+                    current.capability_refresh_observed_utc = None
+                elif (
+                    current.capability_refreshed_utc
+                    != heartbeat.capability_refreshed_utc
+                ):
+                    current.capability_refresh_observed_utc = now
                 current.capability_refreshed_utc = heartbeat.capability_refreshed_utc
                 current.capability_refresh_seconds = heartbeat.capability_refresh_seconds
                 current.heartbeat_count += 1
@@ -342,6 +354,7 @@ class SensorIngress:
                     applied_revision=None,
                     negotiated_max_payload_bytes=None,
                     capability_refreshed_utc=None,
+                    capability_refresh_observed_utc=None,
                     capability_refresh_seconds=None,
                     last_sequence=frame_sequence,
                     accepted_frames=1,
@@ -384,17 +397,22 @@ class SensorIngress:
                         if state.capability_refreshed_utc is not None
                         else None
                     ),
+                    capability_refresh_observed_utc=(
+                        state.capability_refresh_observed_utc.isoformat()
+                        if state.capability_refresh_observed_utc is not None
+                        else None
+                    ),
                     capability_refresh_age_seconds=(
                         round(
                             max(
                                 0.0,
                                 (
-                                    now - state.capability_refreshed_utc
+                                    now - state.capability_refresh_observed_utc
                                 ).total_seconds(),
                             ),
                             3,
                         )
-                        if state.capability_refreshed_utc is not None
+                        if state.capability_refresh_observed_utc is not None
                         else None
                     ),
                     capability_refresh_status=(
@@ -403,14 +421,14 @@ class SensorIngress:
                             if max(
                                 0.0,
                                 (
-                                    now - state.capability_refreshed_utc
+                                    now - state.capability_refresh_observed_utc
                                 ).total_seconds(),
                             )
                             <= 2.0 * state.capability_refresh_seconds
                             else "stale"
                         )
                         if (
-                            state.capability_refreshed_utc is not None
+                            state.capability_refresh_observed_utc is not None
                             and state.capability_refresh_seconds is not None
                         )
                         else "unknown"
@@ -436,7 +454,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v7",
+                schema="visionrig/sensor-runtime-status/v8",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
