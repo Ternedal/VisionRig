@@ -13,10 +13,11 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v4`.
+Schema: `visionrig/sensor-runtime-status/v5`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
+optional latest accepted SensorPacket transport telemetry,
 `last_seen_utc`, `age_seconds`, `capture_active` and derived `online/stale/offline` presence.
 
 ## Heartbeat
@@ -287,7 +288,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v27` and advertises the desired-state
+`GET /health` uses `visionrig/health/v28` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -297,3 +298,15 @@ schema under `sensor_bootstrap`.
 
 Only operational/control metadata is exposed. Raw images, depth arrays and
 embeddings are never returned by these surfaces.
+
+
+### SensorPacket transport telemetry
+
+When a source's latest accepted visual input was SensorPacket v1/v2, runtime
+status includes `packet_transport`
+(`visionrig/sensor-packet-transport/v1`) with byte counts, per-plane
+compression, combined numeric compression ratio, and utilization of the
+configured ingress payload limit. It is deliberately transient observability,
+not persistent registry state, and is cleared by a later accepted plain encoded
+frame. Health advertises the transport telemetry schema under
+`sensor_ingress.sensor_packet_transport_schema`.
