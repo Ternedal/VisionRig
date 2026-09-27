@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v14` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v15` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v15` with:
+`visionrig/sensor-bootstrap-snapshot/v16` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v43` and advertises the desired-state
+`GET /health` uses `visionrig/health/v44` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -617,3 +617,29 @@ anchors the aggregate, not an alert.
 Bootstrap v15 embeds fleet v14 and health advances to v43. This remains
 process-local diagnostic telemetry and does not alter attention or control
 policy.
+
+
+### Sustained packet-target pressure age
+
+VisionRig 0.65.0 extends fleet summary v15 with
+`packet_target_sustained_pressure`. The aggregate contains:
+
+- `sources`: the number of sources whose current packet-target pressure state
+  is `sustained`;
+- `longest_seconds`: current server-clock duration of the longest sustained
+  over-target run;
+- `longest_source_id`: source owning that longest active run;
+- `longest_since_utc`: start of that source's current consecutive over-target
+  run.
+
+Only sources that have crossed the shared sustained streak threshold participate
+in this aggregate. Transient over-target sources are deliberately excluded even
+though they may already have a non-zero `packet_target_above_seconds`.
+
+If no source is currently sustained, the source count is zero and the remaining
+fields are `null`. Equal durations retain the first source in deterministic
+sorted source-id order.
+
+Bootstrap v16 embeds fleet v15 and health advances to v44. The summary is
+process-local operational telemetry only; it creates no semantic event and
+changes no capture or adaptation policy.

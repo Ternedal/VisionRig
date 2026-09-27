@@ -333,6 +333,10 @@ def create_app(
         packet_target_worst_source_id = None
         packet_target_worst_target_utilization = None
         packet_target_worst_observed_utilization = None
+        packet_target_sustained_sources = 0
+        packet_target_longest_sustained_seconds = None
+        packet_target_longest_sustained_source_id = None
+        packet_target_longest_sustained_since_utc = None
         attention = []
         attention_total = 0
 
@@ -430,6 +434,22 @@ def create_app(
                 packet_target_status,
             )
             packet_target_pressure_counts[packet_target_pressure] += 1
+            if (
+                packet_target_pressure == "sustained"
+                and runtime_source is not None
+            ):
+                packet_target_sustained_sources += 1
+                sustained_seconds = runtime_source.packet_target_above_seconds
+                if sustained_seconds is not None and (
+                    packet_target_longest_sustained_seconds is None
+                    or sustained_seconds
+                    > packet_target_longest_sustained_seconds
+                ):
+                    packet_target_longest_sustained_seconds = sustained_seconds
+                    packet_target_longest_sustained_source_id = source_id
+                    packet_target_longest_sustained_since_utc = (
+                        runtime_source.packet_target_above_since_utc
+                    )
             if runtime_source is not None:
                 packet_target_sustained_episode_total += (
                     runtime_source.packet_target_sustained_episode_count
@@ -561,7 +581,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v14",
+            "schema": "visionrig/sensor-fleet-summary/v15",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -596,6 +616,12 @@ def create_app(
                     packet_target_worst_observed_utilization
                 ),
             },
+            "packet_target_sustained_pressure": {
+                "sources": packet_target_sustained_sources,
+                "longest_seconds": packet_target_longest_sustained_seconds,
+                "longest_source_id": packet_target_longest_sustained_source_id,
+                "longest_since_utc": packet_target_longest_sustained_since_utc,
+            },
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -606,7 +632,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v43",
+            "schema": "visionrig/health/v44",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -675,7 +701,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v15",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v16",
             },
         }
 
@@ -863,7 +889,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v15",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v16",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
