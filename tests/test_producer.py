@@ -152,16 +152,23 @@ def test_producer_sends_heartbeat_without_consuming_sequence() -> None:
             capabilities=("rgb", "passthrough"),
             capture_active=False,
             applied_revision=9,
+            negotiated_max_payload_bytes=4 * 1024 * 1024,
+            capability_refreshed_utc="2026-09-27T06:30:00+00:00",
+            capability_refresh_seconds=30.0,
         )
         stats = producer.stats()
 
     assert receipt.source_id == "quest"
     assert seen["path"] == "/api/v1/sensors/heartbeat"
     assert seen["authorization"] == f"Bearer {TOKEN}"
+    assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v3"
     assert seen["json"]["device"] == "quest-2"
     assert seen["json"]["capabilities"] == ["rgb", "passthrough"]
     assert seen["json"]["capture_active"] is False
     assert seen["json"]["applied_revision"] == 9
+    assert seen["json"]["negotiated_max_payload_bytes"] == 4 * 1024 * 1024
+    assert seen["json"]["capability_refreshed_utc"] == "2026-09-27T06:30:00+00:00"
+    assert seen["json"]["capability_refresh_seconds"] == 30.0
     assert stats.next_sequence == 0
     assert stats.captured == 0
 
