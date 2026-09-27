@@ -91,7 +91,7 @@ transport should go through an explicitly designed authenticated boundary rather
 than making this raw service listen broadly.
 
 
-## Multimodal SensorPacket/v1
+## Multimodal SensorPacket v1/v2
 
 `POST /api/v1/sensor-packets/ingest` uses the same source metadata,
 monotonic sequence checks, payload bound and single-slot overload policy as
@@ -101,10 +101,10 @@ Content-Type:
 
 `application/vnd.visionrig.sensor-packet`
 
-The v1 binary layout is:
+Both versions use the same bounded envelope shape:
 
 ```text
-VRSP1\0
+VRSP1\0 or VRSP2\0
 uint32_be header_length
 UTF-8 JSON header
 encoded RGB bytes
@@ -112,10 +112,18 @@ optional depth bytes
 optional infrared bytes
 ```
 
-The header schema is `visionrig/sensor-packet/v1`. RGB remains JPEG, PNG or
-WebP. Depth and infrared planes are raw little-endian `uint16`. Depth values
-are millimeters and depth must be aligned to RGB/color coordinates. A 0 depth
-sample means no valid metric reading.
+The header schema is `visionrig/sensor-packet/v1` or
+`visionrig/sensor-packet/v2`. RGB remains JPEG, PNG or WebP and is never
+recompressed by the packet layer.
+
+v1 depth/IR planes are raw little-endian `uint16`. v2 adds per-plane
+`compression` and `raw_byte_length`; VisionRig 0.40.0 supports `none` and
+`zlib`. Decompression is bounded to the exact declared
+`width*height*2` raw size, capped at 32 MiB per plane, and rejects trailing or
+overlong compressed streams.
+
+Depth values are millimeters and depth must be aligned to RGB/color coordinates.
+A 0 depth sample means no valid metric reading.
 
 VisionRig reconstructs the frame as:
 
@@ -135,7 +143,7 @@ The authenticated gateway exposes only the fixed
 It forwards the bounded body and whitelisted source query metadata to loopback
 VisionRig and never becomes an arbitrary proxy.
 
-SensorPacket/v1 intentionally does not define calibration transport or perform
-depth alignment server-side. Producers must send a color-aligned depth plane.
+SensorPacket v1/v2 intentionally does not define calibration transport or
+perform depth alignment server-side. Producers must send a color-aligned depth plane.
 This keeps Kinect/Quest vendor SDK objects outside the network contract and makes
 the server-side sampler deterministic.
