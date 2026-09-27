@@ -684,7 +684,18 @@ def test_catalog_exposes_flapping_packet_target_stability() -> None:
     catalog = client.get("/api/v1/sensors/catalog").json()
     assert catalog["schema"] == "visionrig/sensor-catalog/v10"
     packet_target = catalog["sources"][0]["packet_target"]
+    assert packet_target["status"] == "above_target"
+    assert packet_target["pressure"] == "sustained"
     assert packet_target["stability"] == "flapping"
+    assert packet_target["target_utilization"] == 0.72
+    assert packet_target["observed_utilization"] == 0.76
+    assert packet_target["attention_streak_threshold"] == 3
+    assert packet_target["above_streak"] == 3
+    assert packet_target["above_since_utc"] is not None
+    assert packet_target["above_seconds"] == 0.0
+    assert packet_target["last_above_utc"] is not None
+    assert packet_target["sustained_episode_count"] == 2
+    assert packet_target["last_recovered_utc"] is not None
     assert packet_target["flap_window_seconds"] == 60.0
     assert packet_target["recurrence_count"] == 1
     assert packet_target["last_recurrence_seconds"] == 30.0
