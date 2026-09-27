@@ -326,6 +326,8 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "unknown": 0,
         },
         "packet_target_attention_streak_threshold": 3,
+        "packet_target_sustained_episode_total": 0,
+        "packet_target_recovered_sources": 0,
         "attention": [],
         "attention_total": 0,
         "attention_truncated": False,
