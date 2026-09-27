@@ -547,13 +547,13 @@ def test_packet_budget_uses_negotiated_target_utilization() -> None:
         encode_jpeg=lambda _payload, q: b"x" * (q * 10),
         initial_quality=80,
         min_quality=30,
-        max_packet_bytes=1000,
+        max_packet_bytes=1024,
         target_utilization=0.60,
     )
 
-    assert quality2 == 45
-    assert len(packet2) == 550
-    assert utilization2 == 0.55
+    assert quality2 == 50
+    assert len(packet2) == 600
+    assert utilization2 == 600 / 1024
 
 
 def test_transport_refresh_can_change_target_utilization() -> None:
@@ -563,13 +563,13 @@ def test_transport_refresh_can_change_target_utilization() -> None:
     plans = iter(
         [
             PacketTransportPlan(
-                max_payload_bytes=1000,
+                max_payload_bytes=1024,
                 compression="auto",
                 target_utilization=0.80,
                 packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
             ),
             PacketTransportPlan(
-                max_payload_bytes=1000,
+                max_payload_bytes=1024,
                 compression="auto",
                 target_utilization=0.60,
                 packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
@@ -600,5 +600,5 @@ def test_transport_refresh_can_change_target_utilization() -> None:
     )
 
     assert frames == 2
-    assert qualities == [80, 75, 70, 65, 80, 75, 70, 65, 60, 55, 50, 45]
-    assert [len(packet) for packet in producer.sent_packets] == [750, 550]
+    assert qualities == [80, 75, 70, 80, 75, 70, 65, 60, 55, 50]
+    assert [len(packet) for packet in producer.sent_packets] == [800, 600]
