@@ -322,6 +322,9 @@ def create_app(
                     "visionrig/sensor-packet/v2",
                 ],
                 "sensor_packet_compressions": ["none", "zlib"],
+                "sensor_packet_transport_schema": (
+                    "visionrig/sensor-packet-transport/v1"
+                ),
                 "overload_policy": "reject",
                 "runtime": asdict(sensor_ingress.stats()),
             },
