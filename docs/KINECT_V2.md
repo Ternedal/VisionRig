@@ -54,16 +54,16 @@ disabled sensor stays physically closed while heartbeat reports
 
 Local Kinect capture still passes RGB, hardware depth and IR directly as
 frame-local sensor data. For remote transport, VisionRig now supports
-SensorPacket/v1 through the authenticated gateway: encoded RGB plus optional
+SensorPacket v1/v2 through the authenticated gateway: encoded RGB plus optional
 color-aligned uint16 metric depth and uint16 IR. Raw planes remain frame-local
 after decode and are never exposed through PerceptionEvent.
 
 VisionRig 0.39.0 adds the dedicated remote producer path. The Kinect adapter
 uses the SDK mapper on the producer machine to build a dense color-aligned
 uint16 millimeter plane. `visionrig-producer --kinect-v2` JPEG-encodes RGB,
-packages aligned depth plus IR as SensorPacket/v1, and sends it through the
-authenticated gateway using the same durable sequence/drop state as other
-producers. The server deliberately remains independent of Kinect SDK calibration
+packages aligned depth plus IR as zlib-compressed SensorPacket/v2 by default,
+and sends it through the authenticated gateway using the same durable
+sequence/drop state as other producers. The server deliberately remains independent of Kinect SDK calibration
 objects.
 
 Run remote producer mode:
