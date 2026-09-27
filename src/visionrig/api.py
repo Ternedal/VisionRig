@@ -220,6 +220,11 @@ def create_app(
             "critical": 0,
             "unknown": 0,
         }
+        capability_refresh_counts = {
+            "current": 0,
+            "stale": 0,
+            "unknown": 0,
+        }
         attention = []
         attention_total = 0
 
@@ -276,6 +281,15 @@ def create_app(
                 transport_status = "unknown"
             transport_counts[transport_status] += 1
 
+            capability_refresh_status = (
+                runtime_source.capability_refresh_status
+                if runtime_source is not None
+                else "unknown"
+            )
+            if capability_refresh_status not in {"current", "stale"}:
+                capability_refresh_status = "unknown"
+            capability_refresh_counts[capability_refresh_status] += 1
+
             attention_reasons = []
             if control_status == "pending":
                 attention_reasons.append("control_pending")
@@ -283,6 +297,8 @@ def create_app(
                 attention_reasons.append("presence")
             if transport_status in {"warning", "critical"}:
                 attention_reasons.append("packet_transport")
+            if capability_refresh_status == "stale":
+                attention_reasons.append("capability_refresh")
 
             needs_attention = bool(attention_reasons)
             if needs_attention:
@@ -295,6 +311,17 @@ def create_app(
                         "presence": presence,
                         "control_status": control_status,
                         "transport_status": transport_status,
+                        "capability_refresh_status": capability_refresh_status,
+                        "negotiated_max_payload_bytes": (
+                            runtime_source.negotiated_max_payload_bytes
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "capability_refresh_age_seconds": (
+                            runtime_source.capability_refresh_age_seconds
+                            if runtime_source is not None
+                            else None
+                        ),
                         "packet_transport": packet_transport,
                         "reasons": attention_reasons,
                         "pending_seconds": (
@@ -306,7 +333,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v4",
+            "schema": "visionrig/sensor-fleet-summary/v5",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -314,6 +341,7 @@ def create_app(
             "presence": presence_counts,
             "control": control_counts,
             "transport": transport_counts,
+            "capability_refresh": capability_refresh_counts,
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -324,7 +352,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v30",
+            "schema": "visionrig/health/v31",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
