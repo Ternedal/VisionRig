@@ -155,3 +155,32 @@ machine:
 10. never treat a VisionRig recognition hint as identity authority.
 
 This makes the Python producer an executable reference for Kotlin/Quest clients.
+
+
+## Transport capability negotiation
+
+VisionRig 0.45.0 removes the reference Kinect producer's assumption that the
+remote gateway/core accept the same payload size as the local default.
+
+Before opening Kinect capture, the producer authenticates to:
+
+`GET /api/v1/producer-capabilities`
+
+The gateway queries only loopback core `/health`, extracts the bounded sensor
+ingress transport fields, and returns
+`visionrig/producer-capabilities/v1` with:
+
+- `max_payload_bytes = min(gateway_max_payload_bytes, core_max_payload_bytes)`;
+- the individual gateway/core limits for diagnostics;
+- supported SensorPacket schemas;
+- supported packet compression modes.
+
+The Kinect producer requires SensorPacket/v2 and chooses:
+
+`effective_packet_budget = min(local_max_packet_bytes, negotiated_max_payload_bytes)`
+
+The local `--max-packet-bytes` /
+`VISIONRIG_PRODUCER_MAX_PACKET_BYTES` value is therefore an upper cap, not a
+claim about the remote service. Negotiation is fail-closed for remote Kinect:
+invalid credentials, unavailable core health, malformed capability responses or
+missing SensorPacket/v2 support stop before capture opens.
