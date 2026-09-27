@@ -423,3 +423,13 @@ interval.
 This makes repeated transport instability directly actionable in dashboards
 without scanning every catalog row. Equal recurrence counts retain the first
 source in deterministic sorted source-id order.
+
+
+## VisionRig 0.67.0: latest packet-target recovery
+
+Fleet telemetry now exposes the most recent recovery from a sustained
+packet-target pressure episode. The summary includes the recovered source id
+and server-clock recovery timestamp.
+
+This gives dashboards a direct recovery signal alongside current pressure and
+recurrence hotspot telemetry, without changing attention or capture policy.

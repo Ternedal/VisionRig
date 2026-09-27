@@ -340,6 +340,8 @@ def create_app(
         packet_target_max_recurrence_count = 0
         packet_target_most_recurrent_source_id = None
         packet_target_most_recurrent_last_interval_seconds = None
+        packet_target_latest_recovery_utc = None
+        packet_target_latest_recovery_source_id = None
         attention = []
         attention_total = 0
 
@@ -459,6 +461,15 @@ def create_app(
                 )
                 if runtime_source.packet_target_last_recovered_utc is not None:
                     packet_target_recovered_sources += 1
+                    if (
+                        packet_target_latest_recovery_utc is None
+                        or runtime_source.packet_target_last_recovered_utc
+                        > packet_target_latest_recovery_utc
+                    ):
+                        packet_target_latest_recovery_utc = (
+                            runtime_source.packet_target_last_recovered_utc
+                        )
+                        packet_target_latest_recovery_source_id = source_id
                 packet_target_recurrence_total += (
                     runtime_source.packet_target_recurrence_count
                 )
@@ -595,7 +606,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v16",
+            "schema": "visionrig/sensor-fleet-summary/v17",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -643,6 +654,10 @@ def create_app(
                     packet_target_most_recurrent_last_interval_seconds
                 ),
             },
+            "packet_target_latest_recovery": {
+                "source_id": packet_target_latest_recovery_source_id,
+                "recovered_utc": packet_target_latest_recovery_utc,
+            },
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -653,7 +668,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v45",
+            "schema": "visionrig/health/v46",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -722,7 +737,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v17",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v18",
             },
         }
 
@@ -910,7 +925,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v17",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v18",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

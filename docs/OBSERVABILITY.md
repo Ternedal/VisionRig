@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v16` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v17` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v17` with:
+`visionrig/sensor-bootstrap-snapshot/v18` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v45` and advertises the desired-state
+`GET /health` uses `visionrig/health/v46` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -664,3 +664,24 @@ order.
 Bootstrap v17 embeds fleet v16 and health advances to v45. The hotspot is
 process-local diagnostic telemetry only; it does not create attention, semantic
 events or automatic control action.
+
+
+### Latest packet-target recovery
+
+VisionRig 0.67.0 extends fleet summary v17 with
+`packet_target_latest_recovery`. The aggregate exposes:
+
+- `source_id`: source with the most recent sustained-pressure recovery;
+- `recovered_utc`: server-clock timestamp of that recovery.
+
+Only recoveries from sustained episodes participate. Transient over-target runs
+that clear before the sustained threshold do not create recovery telemetry.
+If no runtime source has recovered from sustained pressure, both fields are
+`null`.
+
+When two sources share an identical recovery timestamp, deterministic sorted
+source-id processing retains the first source.
+
+Bootstrap v18 embeds fleet v17 and health advances to v46. The latest-recovery
+summary is process-local operational telemetry only; it creates no semantic
+change event, alert, or control action.
