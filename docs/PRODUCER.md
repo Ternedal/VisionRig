@@ -214,40 +214,26 @@ indefinitely using a stale remembered limit.
 
 ## Negotiation heartbeat telemetry
 
-VisionRig 0.47.0 extends producer heartbeat to
-`visionrig/sensor-heartbeat/v3`. Remote Kinect publishes the effective
-negotiated packet budget together with the UTC timestamp of the most recent
-successful capability refresh and the configured refresh interval.
-
-The tuple is sent on the normal control heartbeat after a successful
-negotiation/refresh. Core runtime status can therefore distinguish a currently
-refreshed transport contract from a stale one without trusting the age of the
-last video frame.
-
-Heartbeat v2 remains accepted for older producers. V2 has no negotiation
-telemetry and appears as `capability_refresh_status=unknown`. V3 negotiation
-fields are all-or-nothing; partial tuples are rejected rather than interpreted.
-
-
-## Negotiation heartbeat telemetry
-
 VisionRig 0.47.0 upgrades new producer heartbeats to
-`visionrig/sensor-heartbeat/v3`. The existing v2 heartbeat remains accepted by
-the core for backward compatibility.
+`visionrig/sensor-heartbeat/v3`. The core still accepts v2 for backward
+compatibility.
 
-When the producer uses negotiated packet capabilities, v3 sends these fields as
-one complete set:
+When negotiated packet capabilities are in use, v3 publishes one complete
+telemetry tuple:
 
 - `negotiated_max_payload_bytes`;
-- `capability_refreshed_utc`;
+- timezone-aware `capability_refreshed_utc`;
 - `capability_refresh_seconds`.
 
-The runtime status surface derives the refresh age and classifies it as
-`current` while the latest successful refresh is no older than twice the
-configured refresh interval, otherwise `stale`. Producers without negotiation
-telemetry are `unknown`.
+The tuple is sent on normal control heartbeats after successful capability
+negotiation or refresh. Runtime status exposes the negotiated ceiling, refresh
+timestamp, derived age, and `capability_refresh_status`: `current` while the
+last successful refresh is no older than twice the declared refresh interval,
+`stale` after that, and `unknown` for producers that do not publish the
+tuple.
 
 The fields are transient producer telemetry. They do not modify persistent
-sensor metadata or state revision. A change in the negotiated payload budget
-does emit a semantic `runtime_changed` event; merely refreshing the timestamp
-with the same budget does not.
+sensor metadata or registry `state_revision`. A changed negotiated payload
+budget emits one semantic `runtime_changed` event; refreshing only the
+timestamp with the same budget does not create change-feed noise.
+
