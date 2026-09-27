@@ -213,6 +213,7 @@ class SensorHeartbeatReceipt(BaseModel):
 class SensorSourceStats:
     source_id: str
     source_type: str
+    heartbeat_schema_id: str | None
     device: str | None
     capabilities: tuple[str, ...]
     capture_active: bool | None
@@ -262,6 +263,7 @@ class SensorIngressStats:
 @dataclass(slots=True)
 class _MutableSourceStats:
     source_type: str
+    heartbeat_schema_id: str | None
     device: str | None
     capabilities: tuple[str, ...]
     capture_active: bool | None
@@ -364,6 +366,7 @@ class SensorIngress:
             if current is None:
                 self._sources[heartbeat.source_id] = _MutableSourceStats(
                     source_type=heartbeat.source_type,
+                    heartbeat_schema_id=heartbeat.schema_id,
                     device=heartbeat.device,
                     capabilities=capabilities,
                     capture_active=heartbeat.capture_active,
@@ -422,6 +425,7 @@ class SensorIngress:
                 )
             else:
                 current.source_type = heartbeat.source_type
+                current.heartbeat_schema_id = heartbeat.schema_id
                 current.device = heartbeat.device
                 current.capabilities = capabilities
                 current.capture_active = heartbeat.capture_active
@@ -504,6 +508,7 @@ class SensorIngress:
             if current is None:
                 self._sources[source_id] = _MutableSourceStats(
                     source_type=source_type,
+                    heartbeat_schema_id=None,
                     device=device,
                     capabilities=(),
                     capture_active=True,
@@ -553,6 +558,7 @@ class SensorIngress:
                 SensorSourceStats(
                     source_id=source_id,
                     source_type=state.source_type,
+                    heartbeat_schema_id=state.heartbeat_schema_id,
                     device=state.device,
                     capabilities=state.capabilities,
                     capture_active=state.capture_active,
@@ -659,7 +665,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v15",
+                schema="visionrig/sensor-runtime-status/v16",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
