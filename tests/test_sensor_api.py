@@ -50,7 +50,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v11"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v12"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v34"
+    assert health["schema"] == "visionrig/health/v35"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -429,7 +429,7 @@ def test_fleet_marks_packet_target_compliance_and_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v7"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v8"
     assert fleet["packet_target"] == {
         "within_target": 0,
         "above_target": 1,
