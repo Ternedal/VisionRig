@@ -157,7 +157,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v28"
+    assert health["schema"] == "visionrig/health/v29"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -484,7 +484,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     response = client.get("/api/v1/sensors/fleet")
     assert response.status_code == 200
     fleet = response.json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v3"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v4"
     assert fleet["state_revision"] == 5
     assert fleet["change_consistency"]["status"] == "synced"
     assert fleet["change_consistency"]["journal_state_revision"] == 5
@@ -517,7 +517,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v28"
+    assert health["schema"] == "visionrig/health/v29"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
