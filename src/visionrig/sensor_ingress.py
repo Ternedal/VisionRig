@@ -30,6 +30,7 @@ from .sensor_packet import (
 
 SensorSourceType = Literal["camera", "screen", "vr", "image"]
 SensorPresence = Literal["online", "stale", "offline"]
+PACKET_TARGET_ATTENTION_STREAK_THRESHOLD = 3
 
 
 class SensorIngressError(RuntimeError):
@@ -224,6 +225,8 @@ class SensorSourceStats:
     packet_target_above_since_utc: str | None
     packet_target_above_seconds: float | None
     packet_target_last_above_utc: str | None
+    packet_target_sustained_episode_count: int
+    packet_target_last_recovered_utc: str | None
     capability_refreshed_utc: str | None
     capability_refresh_observed_utc: str | None
     capability_refresh_age_seconds: float | None
@@ -268,6 +271,8 @@ class _MutableSourceStats:
     packet_target_above_streak: int
     packet_target_above_since_utc: datetime | None
     packet_target_last_above_utc: datetime | None
+    packet_target_sustained_episode_count: int
+    packet_target_last_recovered_utc: datetime | None
     capability_refreshed_utc: datetime | None
     capability_refresh_observed_utc: datetime | None
     capability_refresh_seconds: float | None
@@ -395,6 +400,8 @@ class SensorIngress:
                         )
                         else None
                     ),
+                    packet_target_sustained_episode_count=0,
+                    packet_target_last_recovered_utc=None,
                     capability_refreshed_utc=heartbeat.capability_refreshed_utc,
                     capability_refresh_observed_utc=(
                         now if heartbeat.capability_refreshed_utc is not None else None
@@ -432,8 +439,18 @@ class SensorIngress:
                     if current.packet_target_above_streak == 0:
                         current.packet_target_above_since_utc = now
                     current.packet_target_above_streak += 1
+                    if (
+                        current.packet_target_above_streak
+                        == PACKET_TARGET_ATTENTION_STREAK_THRESHOLD
+                    ):
+                        current.packet_target_sustained_episode_count += 1
                     current.packet_target_last_above_utc = now
                 else:
+                    if (
+                        current.packet_target_above_streak
+                        >= PACKET_TARGET_ATTENTION_STREAK_THRESHOLD
+                    ):
+                        current.packet_target_last_recovered_utc = now
                     current.packet_target_above_streak = 0
                     current.packet_target_above_since_utc = None
                 if heartbeat.capability_refreshed_utc is None:
@@ -481,6 +498,8 @@ class SensorIngress:
                     packet_target_above_streak=0,
                     packet_target_above_since_utc=None,
                     packet_target_last_above_utc=None,
+                    packet_target_sustained_episode_count=0,
+                    packet_target_last_recovered_utc=None,
                     capability_refreshed_utc=None,
                     capability_refresh_observed_utc=None,
                     capability_refresh_seconds=None,
@@ -547,6 +566,14 @@ class SensorIngress:
                         if state.packet_target_last_above_utc is not None
                         else None
                     ),
+                    packet_target_sustained_episode_count=(
+                        state.packet_target_sustained_episode_count
+                    ),
+                    packet_target_last_recovered_utc=(
+                        state.packet_target_last_recovered_utc.isoformat()
+                        if state.packet_target_last_recovered_utc is not None
+                        else None
+                    ),
                     capability_refreshed_utc=(
                         state.capability_refreshed_utc.isoformat()
                         if state.capability_refreshed_utc is not None
@@ -609,7 +636,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v13",
+                schema="visionrig/sensor-runtime-status/v14",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,

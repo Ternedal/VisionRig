@@ -299,3 +299,17 @@ last observed. Fleet summary v9 classifies target pressure as `clear`,
 existing bounded attention list. This keeps alerting quiet while giving control
 surfaces enough temporal context to distinguish spikes from persistent producer
 adaptation problems.
+
+
+## VisionRig 0.58.0: sustained pressure episodes
+
+Runtime status v14 now counts sustained packet-target pressure episodes and
+records the latest recovery time after a sustained run. The episode counter
+increments exactly once when an over-target streak first reaches the shared
+three-heartbeat sustained threshold; remaining above target does not inflate the
+count. Recovery is recorded only when a sustained run returns to a compliant or
+unknown measurement.
+
+Fleet summary v10 exposes the aggregate sustained-episode count and how many
+sources have recovered from at least one sustained episode. Attention entries
+also include each source's episode count and last recovery timestamp.
