@@ -877,3 +877,29 @@ migration work only: they do not affect `attention_total`, desired state,
 capture authority, or semantic change events.
 
 Bootstrap v26 embeds fleet v24 and health advances to v54.
+
+
+### Heartbeat upgrade distance
+
+VisionRig 0.76.0 extends fleet summary v25 heartbeat upgrade candidates with
+two remediation fields:
+
+- `upgrade_stage`: `contract_upgrade` for known v2-v5 producers or
+  `establish_heartbeat` for runtime sources with no accepted heartbeat;
+- `versions_behind`: integer distance from heartbeat v6 for known contracts
+  (v5=1, v4=2, v3=3, v2=4), or `null` when no heartbeat contract is known.
+
+The candidate list is sorted across the full runtime candidate set before the
+32-entry bound is applied. Known contracts are ordered by descending
+`versions_behind`, then source id. Sources without a heartbeat follow the
+known-version candidates, also in deterministic source-id order.
+
+This ensures the bounded list cannot hide more outdated producers merely
+because alphabetically earlier v5 producers filled the first 32 slots.
+
+`heartbeat_upgrade_candidate_total` remains the unbounded total and
+`heartbeat_upgrade_candidates_truncated` reports whether the prioritized list
+was cut. The ordering is remediation metadata only and does not alter
+`attention_total`, desired state, capture authority, or semantic events.
+
+Bootstrap v27 embeds fleet v25 and health advances to v55.
