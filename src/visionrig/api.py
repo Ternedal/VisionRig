@@ -19,6 +19,7 @@ from .pipeline import Frame, PassthroughStage, PerceptionPipeline
 from .runtime import VisionRuntime
 from .sensor_events import SensorChangeBatch, SensorChangeJournal
 from .sensor_ingress import (
+    PACKET_TARGET_ATTENTION_STREAK_THRESHOLD,
     SensorDecodeError,
     SensorFrameReceipt,
     SensorHeartbeat,
@@ -263,7 +264,11 @@ def create_app(
             "sustained": 0,
             "unknown": 0,
         }
-        packet_target_attention_streak_threshold = 3
+        packet_target_attention_streak_threshold = (
+            PACKET_TARGET_ATTENTION_STREAK_THRESHOLD
+        )
+        packet_target_sustained_episode_total = 0
+        packet_target_recovered_sources = 0
         attention = []
         attention_total = 0
 
@@ -373,6 +378,12 @@ def create_app(
             else:
                 packet_target_pressure_status = "transient"
             packet_target_pressure_counts[packet_target_pressure_status] += 1
+            if runtime_source is not None:
+                packet_target_sustained_episode_total += (
+                    runtime_source.packet_target_sustained_episode_count
+                )
+                if runtime_source.packet_target_last_recovered_utc is not None:
+                    packet_target_recovered_sources += 1
 
             attention_reasons = []
             if control_status == "pending":
@@ -428,6 +439,16 @@ def create_app(
                             if runtime_source is not None
                             else None
                         ),
+                        "packet_target_sustained_episode_count": (
+                            runtime_source.packet_target_sustained_episode_count
+                            if runtime_source is not None
+                            else 0
+                        ),
+                        "packet_target_last_recovered_utc": (
+                            runtime_source.packet_target_last_recovered_utc
+                            if runtime_source is not None
+                            else None
+                        ),
                         "capability_refresh_age_seconds": (
                             runtime_source.capability_refresh_age_seconds
                             if runtime_source is not None
@@ -444,7 +465,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v9",
+            "schema": "visionrig/sensor-fleet-summary/v10",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -459,6 +480,10 @@ def create_app(
             "packet_target_attention_streak_threshold": (
                 packet_target_attention_streak_threshold
             ),
+            "packet_target_sustained_episode_total": (
+                packet_target_sustained_episode_total
+            ),
+            "packet_target_recovered_sources": packet_target_recovered_sources,
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -469,7 +494,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v36",
+            "schema": "visionrig/health/v37",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -538,7 +563,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v8",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v9",
             },
         }
 
@@ -656,7 +681,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v8",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v9",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
