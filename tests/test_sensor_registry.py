@@ -106,6 +106,12 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "status": "active",
         "retired_utc": None,
     }
+    assert source["packet_target"] == {
+        "stability": "stable",
+        "flap_window_seconds": 120.0,
+        "recurrence_count": 0,
+        "last_recurrence_seconds": None,
+    }
     assert source["control"] == {
         "desired_enabled": True,
         "desired_revision": 0,
@@ -134,6 +140,12 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
     catalog = client.get("/api/v1/sensors/catalog").json()
     assert catalog["sources"][0]["runtime"] is None
     assert catalog["sources"][0]["metadata"]["enabled"] is False
+    assert catalog["sources"][0]["packet_target"] == {
+        "stability": "unknown",
+        "flap_window_seconds": 120.0,
+        "recurrence_count": 0,
+        "last_recurrence_seconds": None,
+    }
 
 
 def test_metadata_patch_does_not_disable_ingress() -> None:
