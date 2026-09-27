@@ -24,6 +24,7 @@ VisionRig includes:
 - **authenticated gateway/core transport capability negotiation for remote producers**
 - **live capability refresh so remote Kinect adapts to payload-limit changes without restart**
 - **negotiated SensorPacket compression strategy with live raw/zlib fallback**
+- **negotiated packet-pressure thresholds so adaptive JPEG follows server policy**
 - **heartbeat v3/v4 observability for negotiated producer budget, compression and refresh freshness**
 - **fleet attention for stale producer capability negotiation**
 - **clock-skew-safe capability freshness using VisionRig-observed refresh time**
@@ -238,3 +239,17 @@ See:
 - docs/PERCEPTION_V3.md
 - docs/MODELRIG_BRIDGE.md
 - docs/OBSERVABILITY.md
+
+
+### Negotiated packet-pressure policy
+
+VisionRig 0.52.0 extends the authenticated producer capability contract to
+`visionrig/producer-capabilities/v2`. In addition to the effective byte
+ceiling and supported SensorPacket modes, the gateway now forwards the core's
+current packet warning/critical utilization thresholds.
+
+The remote Kinect producer uses the negotiated warning threshold as the adaptive
+RGB JPEG target. A server policy change therefore takes effect at the next
+capability refresh without changing depth/IR semantics or restarting capture.
+Older v1 capability responses remain parseable and fall back to the historical
+80% warning target.

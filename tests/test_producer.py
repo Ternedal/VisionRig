@@ -211,7 +211,7 @@ def test_producer_fetches_and_validates_transport_capabilities() -> None:
         return httpx.Response(
             200,
             json={
-                "schema": "visionrig/producer-capabilities/v1",
+                "schema": "visionrig/producer-capabilities/v2",
                 "max_payload_bytes": 4 * 1024 * 1024,
                 "gateway_max_payload_bytes": 8 * 1024 * 1024,
                 "core_max_payload_bytes": 4 * 1024 * 1024,
@@ -220,6 +220,8 @@ def test_producer_fetches_and_validates_transport_capabilities() -> None:
                     "visionrig/sensor-packet/v2",
                 ],
                 "sensor_packet_compressions": ["none", "zlib"],
+                "packet_payload_warning_utilization": 0.72,
+                "packet_payload_critical_utilization": 0.93,
             },
         )
 
@@ -236,6 +238,8 @@ def test_producer_fetches_and_validates_transport_capabilities() -> None:
     assert seen["path"] == "/api/v1/producer-capabilities"
     assert seen["authorization"] == f"Bearer {TOKEN}"
     assert capabilities.max_payload_bytes == 4 * 1024 * 1024
+    assert capabilities.packet_payload_warning_utilization == 0.72
+    assert capabilities.packet_payload_critical_utilization == 0.93
 
 
 def test_producer_rejects_capabilities_without_sensor_packet_v2() -> None:
@@ -327,3 +331,58 @@ def test_producer_uses_heartbeat_v4_when_compression_is_negotiated() -> None:
 
     assert seen["body"]["schema_id"] == "visionrig/sensor-heartbeat/v4"
     assert seen["body"]["negotiated_packet_compression"] == "auto"
+
+
+def test_producer_capabilities_v1_remains_backward_compatible() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "schema": "visionrig/producer-capabilities/v1",
+                "max_payload_bytes": 1024 * 1024,
+                "gateway_max_payload_bytes": 1024 * 1024,
+                "core_max_payload_bytes": 1024 * 1024,
+                "sensor_packet_schemas": ["visionrig/sensor-packet/v2"],
+                "sensor_packet_compressions": ["none", "zlib"],
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="kinect",
+            source_type="camera",
+            client=client,
+        )
+        capabilities = producer.fetch_capabilities()
+
+    assert capabilities.schema == "visionrig/producer-capabilities/v1"
+    assert capabilities.packet_payload_warning_utilization is None
+    assert capabilities.packet_payload_critical_utilization is None
+
+
+def test_producer_rejects_v2_capabilities_without_thresholds() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "schema": "visionrig/producer-capabilities/v2",
+                "max_payload_bytes": 1024 * 1024,
+                "gateway_max_payload_bytes": 1024 * 1024,
+                "core_max_payload_bytes": 1024 * 1024,
+                "sensor_packet_schemas": ["visionrig/sensor-packet/v2"],
+                "sensor_packet_compressions": ["none"],
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        producer = GatewayFrameProducer(
+            gateway_url="http://100.64.0.2:8111",
+            token=TOKEN,
+            source_id="kinect",
+            source_type="camera",
+            client=client,
+        )
+        with pytest.raises(ProducerProtocolError, match="invalid VisionRig"):
+            producer.fetch_capabilities()

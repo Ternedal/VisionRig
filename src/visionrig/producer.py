@@ -6,7 +6,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .producer_state import (
     ProducerStateStore,
@@ -31,12 +31,48 @@ class ProducerProtocolError(ProducerError):
 class ProducerCapabilities(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema: str = Field(pattern="^visionrig/producer-capabilities/v1$")
+    schema: Literal[
+        "visionrig/producer-capabilities/v1",
+        "visionrig/producer-capabilities/v2",
+    ]
     max_payload_bytes: int = Field(ge=1024, le=64 * 1024 * 1024)
     gateway_max_payload_bytes: int = Field(ge=1024, le=64 * 1024 * 1024)
     core_max_payload_bytes: int = Field(ge=1024, le=64 * 1024 * 1024)
     sensor_packet_schemas: tuple[str, ...]
     sensor_packet_compressions: tuple[str, ...]
+    packet_payload_warning_utilization: float | None = Field(
+        default=None,
+        gt=0.0,
+        lt=1.0,
+    )
+    packet_payload_critical_utilization: float | None = Field(
+        default=None,
+        gt=0.0,
+        le=1.0,
+    )
+
+    @model_validator(mode="after")
+    def validate_payload_thresholds(self) -> "ProducerCapabilities":
+        values = (
+            self.packet_payload_warning_utilization,
+            self.packet_payload_critical_utilization,
+        )
+        supplied = [value is not None for value in values]
+        if any(supplied) and not all(supplied):
+            raise ValueError("packet payload thresholds must be supplied together")
+        if self.schema == "visionrig/producer-capabilities/v2" and not all(supplied):
+            raise ValueError("producer-capabilities/v2 requires payload thresholds")
+        if all(supplied):
+            assert self.packet_payload_warning_utilization is not None
+            assert self.packet_payload_critical_utilization is not None
+            if (
+                self.packet_payload_warning_utilization
+                >= self.packet_payload_critical_utilization
+            ):
+                raise ValueError(
+                    "packet payload warning threshold must be below critical"
+                )
+        return self
 
 
 @dataclass(frozen=True, slots=True)

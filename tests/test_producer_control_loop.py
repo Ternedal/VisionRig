@@ -477,11 +477,13 @@ def test_live_transport_refresh_can_change_packet_encoder_strategy() -> None:
             PacketTransportPlan(
                 max_payload_bytes=2048,
                 compression="auto",
+                target_utilization=0.80,
                 packet_encoder=lambda _frame, jpeg: b"auto:" + jpeg,
             ),
             PacketTransportPlan(
                 max_payload_bytes=2048,
                 compression="none",
+                target_utilization=0.70,
                 packet_encoder=lambda _frame, jpeg: b"raw:" + jpeg,
             ),
         ]
@@ -520,3 +522,83 @@ def test_live_transport_refresh_can_change_packet_encoder_strategy() -> None:
 def test_select_packet_compression_rejects_unknown_only_modes() -> None:
     with pytest.raises(Exception, match="no supported SensorPacket compression"):
         _select_packet_compression(("future-codec",))
+
+
+def test_packet_budget_uses_negotiated_target_utilization() -> None:
+    frame = SimpleNamespace(payload=b"frame")
+
+    packet, quality, utilization = _encode_packet_with_budget(
+        frame=frame,
+        packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
+        encode_jpeg=lambda _payload, q: b"x" * (q * 10),
+        initial_quality=80,
+        min_quality=30,
+        max_packet_bytes=2000,
+        target_utilization=0.50,
+    )
+
+    assert quality == 80
+    assert len(packet) == 900
+    assert utilization == 0.45
+
+    packet2, quality2, utilization2 = _encode_packet_with_budget(
+        frame=frame,
+        packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
+        encode_jpeg=lambda _payload, q: b"x" * (q * 10),
+        initial_quality=80,
+        min_quality=30,
+        max_packet_bytes=1024,
+        target_utilization=0.60,
+    )
+
+    assert quality2 == 50
+    assert len(packet2) == 600
+    assert utilization2 == 600 / 1024
+
+
+def test_transport_refresh_can_change_target_utilization() -> None:
+    clock = FakeClock()
+    producer = FakeProducer([True, True])
+    source = FakeSource("kinect")
+    plans = iter(
+        [
+            PacketTransportPlan(
+                max_payload_bytes=1024,
+                compression="auto",
+                target_utilization=0.80,
+                packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
+            ),
+            PacketTransportPlan(
+                max_payload_bytes=1024,
+                compression="auto",
+                target_utilization=0.60,
+                packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
+            ),
+        ]
+    )
+    qualities: list[int] = []
+
+    frames = _run_controlled_capture(
+        producer=producer,
+        source_factory=lambda: source,
+        source_type="camera",
+        capabilities=("rgb", "depth", "infrared"),
+        fps=1.0,
+        jpeg_quality=80,
+        max_frames=2,
+        control_poll_seconds=1.0,
+        verbose=False,
+        encode_jpeg=lambda _payload, q: (
+            qualities.append(q) or (b"x" * (q * 10))
+        ),
+        packet_encoder=lambda _frame, jpeg: jpeg,
+        packet_transport_provider=lambda: next(plans),
+        capability_refresh_seconds=1.0,
+        min_jpeg_quality=30,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+
+    assert frames == 2
+    assert qualities == [80, 75, 70, 80, 75, 70, 65, 60, 55, 50]
+    assert [len(packet) for packet in producer.sent_packets] == [800, 600]
