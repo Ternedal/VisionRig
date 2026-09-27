@@ -150,7 +150,7 @@ def create_gateway_app(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.4.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.5.0")
 
     async def request_upstream(method: str, path: str, **kwargs) -> httpx.Response:
         target = config.target_base_url + path
@@ -175,14 +175,56 @@ def create_gateway_app(
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v4",
+            "schema": "visionrig/sensor-gateway-health/v5",
             "target_scope": "loopback-only",
             "routes": [
                 "/api/v1/frames/ingest",
                 "/api/v1/sensor-packets/ingest",
                 "/api/v1/sensors/heartbeat",
                 "/api/v1/sensors/{source_id}/desired-state",
+                "/api/v1/producer-capabilities",
             ],
+        }
+
+    @app.get("/api/v1/producer-capabilities")
+    async def producer_capabilities(request: Request) -> dict[str, object]:
+        _require_auth(request, config.token)
+        upstream = await request_upstream("GET", "/health")
+        if upstream.status_code != 200:
+            raise HTTPException(
+                status_code=502,
+                detail="VisionRig core health unavailable for producer negotiation",
+            )
+        try:
+            body = upstream.json()
+            sensor_ingress = body["sensor_ingress"]
+            core_max_payload = int(sensor_ingress["max_frame_bytes"])
+            packet_schemas = tuple(sensor_ingress["sensor_packet_schemas"])
+            packet_compressions = tuple(
+                sensor_ingress["sensor_packet_compressions"]
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="VisionRig core health lacks producer transport capabilities",
+            ) from exc
+
+        if not 1024 <= core_max_payload <= 64 * 1024 * 1024:
+            raise HTTPException(
+                status_code=502,
+                detail="VisionRig core reported an invalid sensor payload limit",
+            )
+
+        return {
+            "schema": "visionrig/producer-capabilities/v1",
+            "max_payload_bytes": min(
+                config.max_payload_bytes,
+                core_max_payload,
+            ),
+            "gateway_max_payload_bytes": config.max_payload_bytes,
+            "core_max_payload_bytes": core_max_payload,
+            "sensor_packet_schemas": list(packet_schemas),
+            "sensor_packet_compressions": list(packet_compressions),
         }
 
     @app.get("/api/v1/sensors/{source_id}/desired-state")
