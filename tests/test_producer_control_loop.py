@@ -230,6 +230,7 @@ def test_encode_kinect_packet_uses_aligned_depth_and_infrared() -> None:
     assert header.schema_id == "visionrig/sensor-packet/v2"
     assert header.depth is not None
     assert header.depth.compression == "zlib"
+    assert header.schema_id == "visionrig/sensor-packet/v2"
     assert decoded.rgb_payload == b"jpeg"
     assert np.array_equal(decoded.depth_mm, depth)
     assert np.array_equal(decoded.infrared, infrared)
