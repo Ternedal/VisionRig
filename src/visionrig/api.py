@@ -216,6 +216,17 @@ def create_app(
             "journal_state_revision": journal_revision,
         }
 
+    def packet_target_overshoot(runtime_source) -> tuple[float | None, float | None]:
+        if runtime_source is None:
+            return None, None
+        target = runtime_source.negotiated_packet_target_utilization
+        observed = runtime_source.observed_packet_utilization
+        if target is None or observed is None:
+            return None, None
+        delta = max(0.0, observed - target)
+        ratio = delta / target
+        return round(delta, 6), round(ratio, 6)
+
     def packet_target_compliance_status(runtime_source) -> str:
         if runtime_source is None:
             return "unknown"
@@ -316,6 +327,9 @@ def create_app(
             "flapping": 0,
             "unknown": 0,
         }
+        packet_target_overshoot_measured_sources = 0
+        packet_target_max_overshoot_delta = None
+        packet_target_max_overshoot_ratio = None
         attention = []
         attention_total = 0
 
@@ -427,6 +441,19 @@ def create_app(
 
             packet_target_stability = packet_target_stability_status(runtime_source)
             packet_target_stability_counts[packet_target_stability] += 1
+            packet_target_overshoot_delta, packet_target_overshoot_ratio = (
+                packet_target_overshoot(runtime_source)
+            )
+            if packet_target_overshoot_delta is not None:
+                packet_target_overshoot_measured_sources += 1
+                packet_target_max_overshoot_delta = max(
+                    packet_target_max_overshoot_delta or 0.0,
+                    packet_target_overshoot_delta,
+                )
+                packet_target_max_overshoot_ratio = max(
+                    packet_target_max_overshoot_ratio or 0.0,
+                    packet_target_overshoot_ratio or 0.0,
+                )
 
             attention_reasons = []
             if control_status == "pending":
@@ -466,6 +493,12 @@ def create_app(
                         "observed_packet_utilization": observed_utilization,
                         "packet_target_status": packet_target_status,
                         "packet_target_pressure_status": packet_target_pressure,
+                        "packet_target_overshoot_delta": (
+                            packet_target_overshoot_delta
+                        ),
+                        "packet_target_overshoot_ratio": (
+                            packet_target_overshoot_ratio
+                        ),
                         "packet_target_above_streak": packet_target_above_streak,
                         "packet_target_above_since_utc": (
                             runtime_source.packet_target_above_since_utc
@@ -519,7 +552,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v12",
+            "schema": "visionrig/sensor-fleet-summary/v13",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -542,6 +575,11 @@ def create_app(
             "packet_target_recurring_sources": packet_target_recurring_sources,
             "packet_target_stability": packet_target_stability_counts,
             "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
+            "packet_target_overshoot": {
+                "measured_sources": packet_target_overshoot_measured_sources,
+                "max_delta": packet_target_max_overshoot_delta,
+                "max_ratio": packet_target_max_overshoot_ratio,
+            },
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -552,7 +590,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v41",
+            "schema": "visionrig/health/v42",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -621,7 +659,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v13",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v14",
             },
         }
 
@@ -692,6 +730,9 @@ def create_app(
             discovery = registry.get_discovery(source_id)
             packet_target_stability = packet_target_stability_status(runtime_source)
             packet_target_status = packet_target_compliance_status(runtime_source)
+            packet_target_overshoot_delta, packet_target_overshoot_ratio = (
+                packet_target_overshoot(runtime_source)
+            )
             packet_target_pressure = packet_target_pressure_status(
                 runtime_source,
                 packet_target_status,
@@ -732,6 +773,8 @@ def create_app(
                             if runtime_source is not None
                             else None
                         ),
+                        "overshoot_delta": packet_target_overshoot_delta,
+                        "overshoot_ratio": packet_target_overshoot_ratio,
                         "attention_streak_threshold": (
                             PACKET_TARGET_ATTENTION_STREAK_THRESHOLD
                         ),
@@ -793,7 +836,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v10",
+            "schema": "visionrig/sensor-catalog/v11",
             "sources": sources,
         }
 
@@ -804,7 +847,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v13",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v14",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
