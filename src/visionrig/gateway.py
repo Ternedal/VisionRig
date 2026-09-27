@@ -221,6 +221,7 @@ def create_gateway_app(
             "service": "visionrig-sensor-gateway",
             "schema": "visionrig/sensor-gateway-health/v8",
             "target_scope": "loopback-only",
+            "producer_capabilities_schema": "visionrig/producer-capabilities/v2",
             "routes": [
                 "/api/v1/frames/ingest",
                 "/api/v1/sensor-packets/ingest",
