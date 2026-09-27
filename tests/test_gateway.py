@@ -136,6 +136,7 @@ async def test_gateway_forwards_authenticated_heartbeat_only_to_fixed_route() ->
             response = await caller.post(
                 "/api/v1/sensors/heartbeat",
                 json={
+                    "schema_id": "visionrig/sensor-heartbeat/v3",
                     "source_id": "quest",
                     "source_type": "vr",
                     "device": "quest-2",
