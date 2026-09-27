@@ -455,11 +455,18 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
         "sustained": 1,
         "unknown": 0,
     }
+    assert fleet["packet_target_overshoot"] == {
+        "measured_sources": 1,
+        "max_delta": 0.04,
+        "max_ratio": 0.055556,
+    }
     assert fleet["attention_total"] == 1
     item = fleet["attention"][0]
     assert item["source_id"] == "kinect-over-target"
     assert item["packet_target_status"] == "above_target"
     assert item["packet_target_pressure_status"] == "sustained"
+    assert item["packet_target_overshoot_delta"] == 0.04
+    assert item["packet_target_overshoot_ratio"] == 0.055556
     assert item["packet_target_above_streak"] == 3
     assert item["packet_target_above_since_utc"] is not None
     assert item["packet_target_above_seconds"] is not None
@@ -689,6 +696,8 @@ def test_catalog_exposes_flapping_packet_target_stability() -> None:
     assert packet_target["stability"] == "flapping"
     assert packet_target["target_utilization"] == 0.72
     assert packet_target["observed_utilization"] == 0.76
+    assert packet_target["overshoot_delta"] == 0.04
+    assert packet_target["overshoot_ratio"] == 0.055556
     assert packet_target["attention_streak_threshold"] == 3
     assert packet_target["above_streak"] == 3
     assert packet_target["above_since_utc"] is not None
@@ -699,3 +708,35 @@ def test_catalog_exposes_flapping_packet_target_stability() -> None:
     assert packet_target["flap_window_seconds"] == 60.0
     assert packet_target["recurrence_count"] == 1
     assert packet_target["last_recurrence_seconds"] == 30.0
+
+
+def test_packet_target_overshoot_is_zero_within_target() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v6",
+            "source_id": "kinect-overshoot-zero",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T16:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": 0.70,
+        },
+    )
+    assert response.status_code == 200
+
+    catalog = client.get("/api/v1/sensors/catalog").json()
+    packet_target = catalog["sources"][0]["packet_target"]
+    assert packet_target["status"] == "within_target"
+    assert packet_target["overshoot_delta"] == 0.0
+    assert packet_target["overshoot_ratio"] == 0.0
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["packet_target_overshoot"] == {
+        "measured_sources": 1,
+        "max_delta": 0.0,
+        "max_ratio": 0.0,
+    }
