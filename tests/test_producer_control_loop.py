@@ -46,7 +46,7 @@ class FakeProducer:
         self.state_index = 0
         self.heartbeats: list[tuple[tuple[str, ...], bool | None, int | None]] = []
         self.negotiation_heartbeats: list[
-            tuple[int | None, str | None, float | None, str | None]
+            tuple[int | None, str | None, float | None, str | None, float | None]
         ] = []
         self.sent: list[bytes] = []
         self.sent_packets: list[bytes] = []
@@ -67,6 +67,7 @@ class FakeProducer:
         capability_refreshed_utc: str | None = None,
         capability_refresh_seconds: float | None = None,
         negotiated_packet_compression: str | None = None,
+        negotiated_packet_target_utilization: float | None = None,
     ):
         self.heartbeats.append((capabilities, capture_active, applied_revision))
         self.negotiation_heartbeats.append(
@@ -75,6 +76,7 @@ class FakeProducer:
                 capability_refreshed_utc,
                 capability_refresh_seconds,
                 negotiated_packet_compression,
+                negotiated_packet_target_utilization,
             )
         )
         return SimpleNamespace(source_id="cam")
