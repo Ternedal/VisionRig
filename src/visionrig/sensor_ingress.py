@@ -342,14 +342,7 @@ class SensorIngress:
                     heartbeat_count=state.heartbeat_count,
                     dropped_frames_total=state.dropped_frames_total,
                     packet_transport=(
-                        {
-                            **asdict(state.packet_transport),
-                            "payload_utilization": round(
-                                state.packet_transport.packet_bytes
-                                / self._max_payload_bytes,
-                                6,
-                            ),
-                        }
+                        asdict(state.packet_transport)
                         if state.packet_transport is not None
                         else None
                     ),
@@ -358,7 +351,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v5",
+                schema="visionrig/sensor-runtime-status/v6",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
@@ -419,7 +412,10 @@ class SensorIngress:
 
             try:
                 packet = decode_sensor_packet(payload)
-                packet_transport = describe_sensor_packet_transport(payload)
+                packet_transport = describe_sensor_packet_transport(
+                    payload,
+                    max_payload_bytes=self._max_payload_bytes,
+                )
                 image = self._decoder.decode(
                     packet.rgb_payload,
                     packet.rgb_content_type,
