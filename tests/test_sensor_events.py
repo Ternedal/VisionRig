@@ -43,13 +43,16 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
     )
 
     heartbeat = {
-        "schema_id": "visionrig/sensor-heartbeat/v2",
+        "schema_id": "visionrig/sensor-heartbeat/v3",
         "source_id": "camera-a",
         "source_type": "camera",
         "device": "usb-camera",
         "capabilities": ["rgb"],
         "capture_active": True,
         "applied_revision": 0,
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T06:30:00+00:00",
+        "capability_refresh_seconds": 30.0,
     }
     assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
 
@@ -751,3 +754,56 @@ def test_change_feed_emits_budget_change_but_not_refresh_timestamp_only() -> Non
     assert batch["entries"][0]["event"]["payload"][
         "negotiated_max_payload_bytes"
     ] == 2097152
+
+
+def test_negotiated_budget_change_emits_runtime_event_but_timestamp_refresh_does_not() -> None:
+    registry = SensorRegistry()
+    journal = SensorChangeJournal(stream_id="negotiation-stream")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_registry=registry,
+            sensor_change_journal=journal,
+        )
+    )
+    base = {
+        "schema_id": "visionrig/sensor-heartbeat/v3",
+        "source_id": "remote-kinect",
+        "source_type": "camera",
+        "device": "kinect-v2",
+        "capabilities": ["rgb", "depth", "infrared"],
+        "capture_active": True,
+        "applied_revision": 0,
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T06:30:00+00:00",
+        "capability_refresh_seconds": 30.0,
+    }
+    assert client.post("/api/v1/sensors/heartbeat", json=base).status_code == 200
+    first = client.get("/api/v1/sensors/changes").json()
+    cursor = first["next_cursor"]
+
+    timestamp_only = dict(base)
+    timestamp_only["capability_refreshed_utc"] = "2026-09-27T06:30:30+00:00"
+    assert client.post("/api/v1/sensors/heartbeat", json=timestamp_only).status_code == 200
+    quiet = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert quiet["entries"] == []
+
+    changed_budget = dict(timestamp_only)
+    changed_budget["negotiated_max_payload_bytes"] = 2097152
+    assert client.post("/api/v1/sensors/heartbeat", json=changed_budget).status_code == 200
+    changed = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert [entry["event"]["kind"] for entry in changed["entries"]] == [
+        "runtime_changed"
+    ]
+    assert changed["entries"][0]["event"]["payload"] == {
+        "capture_active": True,
+        "applied_revision": 0,
+        "negotiated_max_payload_bytes": 2097152,
+        "presence": "online",
+    }
