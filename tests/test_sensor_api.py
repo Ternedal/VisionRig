@@ -48,7 +48,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v4"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v5"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -59,11 +59,12 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_sequence"] == 5
     assert source["accepted_frames"] == 2
     assert source["dropped_frames_total"] == 3
+    assert source["packet_transport"] is None
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v27"
-    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v3"
+    assert health["schema"] == "visionrig/health/v28"
+    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v4"
     assert health["sensor_ingress"]["sensor_packet_schemas"] == [
         "visionrig/sensor-packet/v1",
         "visionrig/sensor-packet/v2",
