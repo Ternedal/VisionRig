@@ -233,17 +233,22 @@ class GatewayFrameProducer:
         capability_refresh_seconds: float | None = None,
         negotiated_packet_compression: str | None = None,
         negotiated_packet_target_utilization: float | None = None,
+        observed_packet_utilization: float | None = None,
     ) -> SensorHeartbeatReceipt:
         """Publish producer liveness without capturing or sending a frame."""
         target = self._base_url + "/api/v1/sensors/heartbeat"
         payload = {
             "schema_id": (
-                "visionrig/sensor-heartbeat/v5"
-                if negotiated_packet_target_utilization is not None
+                "visionrig/sensor-heartbeat/v6"
+                if observed_packet_utilization is not None
                 else (
+                    "visionrig/sensor-heartbeat/v5"
+                    if negotiated_packet_target_utilization is not None
+                    else (
                     "visionrig/sensor-heartbeat/v4"
                     if negotiated_packet_compression is not None
                     else "visionrig/sensor-heartbeat/v3"
+                    )
                 )
             ),
             "source_id": self._source_id,
@@ -259,6 +264,7 @@ class GatewayFrameProducer:
             "negotiated_packet_target_utilization": (
                 negotiated_packet_target_utilization
             ),
+            "observed_packet_utilization": observed_packet_utilization,
         }
         kwargs = {
             "json": payload,
