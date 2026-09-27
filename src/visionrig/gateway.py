@@ -33,6 +33,17 @@ class GatewayHeartbeat(BaseModel):
     capabilities: tuple[str, ...] = Field(default_factory=tuple, max_length=32)
     capture_active: bool | None = None
     applied_revision: int | None = Field(default=None, ge=0)
+    negotiated_max_payload_bytes: int | None = Field(
+        default=None,
+        ge=1024,
+        le=64 * 1024 * 1024,
+    )
+    capability_refreshed_utc: str | None = Field(default=None, max_length=64)
+    capability_refresh_seconds: float | None = Field(
+        default=None,
+        ge=1.0,
+        le=3600.0,
+    )
 
 
 def _validate_loopback_target(value: str) -> str:
@@ -150,7 +161,7 @@ def create_gateway_app(
     *,
     client: httpx.AsyncClient | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="VisionRig Sensor Gateway", version="0.5.0")
+    app = FastAPI(title="VisionRig Sensor Gateway", version="0.6.0")
 
     async def request_upstream(method: str, path: str, **kwargs) -> httpx.Response:
         target = config.target_base_url + path
@@ -175,7 +186,7 @@ def create_gateway_app(
         return {
             "status": "ok",
             "service": "visionrig-sensor-gateway",
-            "schema": "visionrig/sensor-gateway-health/v5",
+            "schema": "visionrig/sensor-gateway-health/v6",
             "target_scope": "loopback-only",
             "routes": [
                 "/api/v1/frames/ingest",
@@ -252,13 +263,18 @@ def create_gateway_app(
             "POST",
             "/api/v1/sensors/heartbeat",
             json={
-                "schema_id": "visionrig/sensor-heartbeat/v2",
+                "schema_id": "visionrig/sensor-heartbeat/v3",
                 "source_id": body.source_id,
                 "source_type": body.source_type,
                 "device": body.device,
                 "capabilities": list(body.capabilities),
                 "capture_active": body.capture_active,
                 "applied_revision": body.applied_revision,
+                "negotiated_max_payload_bytes": (
+                    body.negotiated_max_payload_bytes
+                ),
+                "capability_refreshed_utc": body.capability_refreshed_utc,
+                "capability_refresh_seconds": body.capability_refresh_seconds,
             },
         )
         return _relay(upstream)
