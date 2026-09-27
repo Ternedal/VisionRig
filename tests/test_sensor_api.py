@@ -876,3 +876,50 @@ def test_fleet_identifies_most_recurrent_packet_target_source() -> None:
         fleet["packet_target_recurrence_hotspot"]["last_recurrence_seconds"]
         is not None
     )
+
+
+def test_fleet_reports_latest_packet_target_recovery() -> None:
+    now = [datetime(2026, 9, 27, 19, 0, tzinfo=timezone.utc)]
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: now[0],
+        )
+    )
+    base = {
+        "schema_id": "visionrig/sensor-heartbeat/v6",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T19:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+
+    def sustained(source_id: str) -> None:
+        payload = dict(base)
+        payload["source_id"] = source_id
+        payload["observed_packet_utilization"] = 0.80
+        for _ in range(3):
+            assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
+
+    def recover(source_id: str) -> None:
+        payload = dict(base)
+        payload["source_id"] = source_id
+        payload["observed_packet_utilization"] = 0.70
+        assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
+
+    sustained("camera-first-recovery")
+    recover("camera-first-recovery")
+
+    now[0] = datetime(2026, 9, 27, 19, 2, tzinfo=timezone.utc)
+    sustained("camera-latest-recovery")
+    recover("camera-latest-recovery")
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v17"
+    assert fleet["packet_target_recovered_sources"] == 2
+    assert fleet["packet_target_latest_recovery"] == {
+        "source_id": "camera-latest-recovery",
+        "recovered_utc": "2026-09-27T19:02:00+00:00",
+    }
