@@ -168,12 +168,13 @@ Before opening Kinect capture, the producer authenticates to:
 
 The gateway queries only loopback core `/health`, extracts the bounded sensor
 ingress transport fields, and returns
-`visionrig/producer-capabilities/v1` with:
+`visionrig/producer-capabilities/v2` with:
 
 - `max_payload_bytes = min(gateway_max_payload_bytes, core_max_payload_bytes)`;
 - the individual gateway/core limits for diagnostics;
 - supported SensorPacket schemas;
-- supported packet compression modes.
+- supported packet compression modes;
+- packet payload warning and critical utilization thresholds.
 
 The Kinect producer requires SensorPacket/v2 and chooses:
 
@@ -283,3 +284,24 @@ strategy, the reference producer sends:
 Budget-only compatibility paths continue to use heartbeat v3. Core accepts v2,
 v3 and v4. A change in compression strategy emits one semantic
 `runtime_changed` event; timestamp-only capability refreshes remain quiet.
+
+
+## Negotiated packet-pressure target
+
+VisionRig 0.52.0 makes the server-advertised packet pressure thresholds part of
+the producer capability contract. The gateway returns
+`producer-capabilities/v2` with
+`packet_payload_warning_utilization` and
+`packet_payload_critical_utilization` copied from the loopback core's bounded
+sensor-ingress health contract.
+
+The reference Kinect producer uses the negotiated **warning** utilization as the
+target passed to adaptive JPEG budgeting. For example, if the core changes its
+warning threshold from 0.80 to 0.70, the next capability refresh causes RGB
+quality adaptation to target below 70% of the effective byte ceiling. Metric
+depth and IR are unchanged.
+
+The producer still accepts legacy `producer-capabilities/v1` responses for
+compatibility. Since v1 did not carry thresholds, that path falls back to the
+historical 0.80 warning target. V2 threshold fields are all required and must
+satisfy `0 < warning < critical <= 1`; malformed policy is fail-closed.
