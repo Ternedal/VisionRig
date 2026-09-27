@@ -112,8 +112,9 @@ identity/enrollment layer rather than widening this contract.
 `GET /api/v1/producer-capabilities` is bearer-authenticated and returns only
 bounded transport information needed before remote capture starts. The gateway
 reads the loopback core health response and extracts the sensor-ingress maximum
-payload plus supported SensorPacket schemas/compressions. It does not proxy the
-full core health response.
+payload plus supported SensorPacket schemas/compressions and packet
+warning/critical utilization thresholds. It does not proxy the full core health
+response.
 
 The effective advertised payload ceiling is the lower of the gateway and core
 limits. If core health is unavailable, malformed, or lacks the expected bounded
@@ -130,3 +131,16 @@ Heartbeat v4 additionally carries the negotiated packet compression strategy
 and is used by current remote Kinect producers. Heartbeat v3 remains valid for
 budget-only negotiation telemetry, while core continues to accept v2 for
 backward compatibility.
+
+
+## Packet pressure threshold negotiation
+
+VisionRig 0.52.0 upgrades the authenticated producer capability response to
+`visionrig/producer-capabilities/v2`. The gateway copies the core's bounded
+`sensor_packet_payload_thresholds.warning` and `.critical` values into the
+producer response after validating `0 < warning < critical <= 1`.
+
+The gateway does not invent or independently tune these values. Missing or
+invalid threshold policy produces HTTP 502 instead of silently falling back,
+while producer clients may still parse an older v1 response from an older
+gateway for backward compatibility.
