@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v11` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v12` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v10` with:
+`visionrig/sensor-bootstrap-snapshot/v11` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v38` and advertises the desired-state
+`GET /health` uses `visionrig/health/v39` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -474,7 +474,7 @@ registry revisions or change capture authority.
 
 ### Sustained pressure recurrence
 
-VisionRig 0.59.0 adds recurrence telemetry on top of sustained episode and
+VisionRig 0.60.0 adds recurrence telemetry on top of sustained episode and
 recovery tracking. Runtime status v15 exposes:
 
 - `packet_target_recurrence_count`, incremented when a sustained episode begins
