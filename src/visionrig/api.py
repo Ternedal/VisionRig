@@ -332,6 +332,11 @@ def create_app(
             "flapping": 0,
             "unknown": 0,
         }
+        packet_target_measurement_coverage = {
+            "complete": 0,
+            "target_only": 0,
+            "unavailable": 0,
+        }
         packet_target_overshoot_measured_sources = 0
         packet_target_max_overshoot_delta = None
         packet_target_max_overshoot_ratio = None
@@ -432,6 +437,12 @@ def create_app(
                 if runtime_source is not None
                 else None
             )
+            if target_utilization is None:
+                packet_target_measurement_coverage["unavailable"] += 1
+            elif observed_utilization is None:
+                packet_target_measurement_coverage["target_only"] += 1
+            else:
+                packet_target_measurement_coverage["complete"] += 1
             packet_target_status = packet_target_compliance_status(runtime_source)
             packet_target_counts[packet_target_status] += 1
 
@@ -624,7 +635,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v19",
+            "schema": "visionrig/sensor-fleet-summary/v20",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -646,6 +657,7 @@ def create_app(
             "packet_target_recurrence_total": packet_target_recurrence_total,
             "packet_target_recurring_sources": packet_target_recurring_sources,
             "packet_target_stability": packet_target_stability_counts,
+            "packet_target_measurement_coverage": packet_target_measurement_coverage,
             "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
             "packet_target_overshoot": {
                 "measured_sources": packet_target_overshoot_measured_sources,
@@ -687,7 +699,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v48",
+            "schema": "visionrig/health/v49",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -756,7 +768,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v20",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v21",
             },
         }
 
@@ -944,7 +956,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v20",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v21",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
