@@ -24,8 +24,11 @@ payload ceiling and capability-refresh freshness,
 ## Heartbeat
 
 `POST /api/v1/sensors/heartbeat` accepts
-`visionrig/sensor-heartbeat/v2`. Cross-device clients use the same route
-through the authenticated sensor gateway.
+`visionrig/sensor-heartbeat/v2` and `visionrig/sensor-heartbeat/v3`. Cross-device clients use the same route
+through the authenticated sensor gateway. V3 adds optional all-or-nothing
+producer negotiation telemetry: `negotiated_max_payload_bytes`,
+`capability_refreshed_utc` and `capability_refresh_seconds`. V2 remains
+accepted for backward compatibility.
 
 Heartbeat v3 adds an optional all-or-nothing producer transport negotiation
 tuple:
@@ -339,3 +342,21 @@ that source to the existing bounded attention list with
 advertises the exact thresholds under
 `sensor_ingress.sensor_packet_payload_thresholds`: warning at 0.80 and
 critical at 0.95.
+
+
+### Producer capability negotiation telemetry
+
+Runtime status v7 exposes, per source:
+
+- the latest negotiated maximum payload bytes;
+- the producer-reported refresh timestamp;
+- refresh age in seconds;
+- derived refresh status: `current`, `stale` or `unknown`.
+
+A refresh is considered `stale` when its age exceeds twice the producer's
+reported refresh interval. This is derived runtime observability only; it does
+not mutate registry/control state.
+
+Heartbeat timestamp-only refreshes do not create semantic change-feed events.
+A changed negotiated payload ceiling does create one `runtime_changed` event
+so UI clients can react immediately to a meaningful transport contract change.
