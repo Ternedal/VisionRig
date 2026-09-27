@@ -354,6 +354,15 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "heartbeat_upgrade_candidates": [],
         "heartbeat_upgrade_candidate_total": 0,
         "heartbeat_upgrade_candidates_truncated": False,
+        "producer_readiness": {
+            "runtime_sources": 0,
+            "heartbeat_v6_sources": 0,
+            "heartbeat_upgrade_required": 0,
+            "heartbeat_v6_ratio": None,
+            "packet_measurement_complete_sources": 0,
+            "packet_measurement_gap_sources": 0,
+            "packet_measurement_complete_ratio": None,
+        },
         "packet_target_flap_window_seconds": 120.0,
         "packet_target_overshoot": {
             "measured_sources": 0,
