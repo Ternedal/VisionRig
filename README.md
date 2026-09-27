@@ -21,6 +21,7 @@ VisionRig includes:
 - **fleet attention for SensorPacket payload pressure with warning/critical thresholds**
 - **remote Kinect v2 producer with producer-side color/depth alignment**
 - **producer-side Kinect packet budgeting with adaptive RGB JPEG quality**
+- **authenticated gateway/core transport capability negotiation for remote producers**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
@@ -174,6 +175,14 @@ packet budget (8 MiB by default) and lowers only RGB JPEG quality in 5-point
 steps until the packet is below the 80% warning threshold where possible.
 Depth/IR are never degraded. If the packet still exceeds the hard local budget
 at minimum JPEG quality, it fails before sequence reservation/send.
+
+Before Kinect capture opens, the reference producer now requests
+`GET /api/v1/producer-capabilities` through the authenticated gateway. The
+gateway reads only the loopback core health transport section and returns the
+effective payload ceiling as `min(gateway_limit, core_limit)` plus supported
+SensorPacket schemas/compressions. The producer then uses
+`min(local_cap, negotiated_cap)` as its packet budget and fails closed if the
+transport contract cannot be negotiated.
 
 `GET /api/v1/sensors/status` exposes the most recent accepted SensorPacket
 transport telemetry per source: total packet bytes, RGB bytes, raw/wire
