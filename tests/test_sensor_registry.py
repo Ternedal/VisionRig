@@ -159,6 +159,8 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
         "stability": "unknown",
         "target_utilization": None,
         "observed_utilization": None,
+        "overshoot_delta": None,
+        "overshoot_ratio": None,
         "attention_streak_threshold": 3,
         "above_streak": 0,
         "above_since_utc": None,
