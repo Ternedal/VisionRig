@@ -30,6 +30,8 @@ from .sensor_ingress import (
 )
 from .sensor_packet import (
     SENSOR_PACKET_MEDIA_TYPE,
+    SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION,
+    SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION,
     SensorPacketError,
     inspect_sensor_packet,
 )
@@ -205,6 +207,12 @@ def create_app(
             "pending": 0,
             "unknown": 0,
         }
+        transport_counts = {
+            "normal": 0,
+            "warning": 0,
+            "critical": 0,
+            "unknown": 0,
+        }
         attention = []
         attention_total = 0
 
@@ -247,13 +255,29 @@ def create_app(
                 control_status = "pending"
             control_counts[control_status] += 1
 
-            needs_attention = (
-                control_status == "pending"
-                or (
-                    lifecycle == "active"
-                    and presence != "online"
-                )
+            packet_transport = (
+                runtime_source.packet_transport
+                if runtime_source is not None
+                else None
             )
+            transport_status = (
+                packet_transport.get("payload_status")
+                if packet_transport is not None
+                else None
+            )
+            if transport_status not in {"normal", "warning", "critical"}:
+                transport_status = "unknown"
+            transport_counts[transport_status] += 1
+
+            attention_reasons = []
+            if control_status == "pending":
+                attention_reasons.append("control_pending")
+            if lifecycle == "active" and presence != "online":
+                attention_reasons.append("presence")
+            if transport_status in {"warning", "critical"}:
+                attention_reasons.append("packet_transport")
+
+            needs_attention = bool(attention_reasons)
             if needs_attention:
                 attention_total += 1
             if needs_attention and len(attention) < 32:
@@ -263,6 +287,9 @@ def create_app(
                         "lifecycle": lifecycle,
                         "presence": presence,
                         "control_status": control_status,
+                        "transport_status": transport_status,
+                        "packet_transport": packet_transport,
+                        "reasons": attention_reasons,
                         "pending_seconds": (
                             registry.control_pending_seconds(source_id)
                             if control_status == "pending"
@@ -272,13 +299,14 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v3",
+            "schema": "visionrig/sensor-fleet-summary/v4",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
             "lifecycle": lifecycle_counts,
             "presence": presence_counts,
             "control": control_counts,
+            "transport": transport_counts,
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -289,7 +317,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v28",
+            "schema": "visionrig/health/v29",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -309,7 +337,7 @@ def create_app(
                 else {"enabled": False}
             ),
             "sensor_ingress": {
-                "schema": "visionrig/sensor-ingress/v4",
+                "schema": "visionrig/sensor-ingress/v5",
                 "max_frame_bytes": sensor_ingress.max_payload_bytes,
                 "media_types": [
                     "image/jpeg",
@@ -323,8 +351,12 @@ def create_app(
                 ],
                 "sensor_packet_compressions": ["none", "zlib"],
                 "sensor_packet_transport_schema": (
-                    "visionrig/sensor-packet-transport/v1"
+                    "visionrig/sensor-packet-transport/v2"
                 ),
+                "sensor_packet_payload_thresholds": {
+                    "warning": SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION,
+                    "critical": SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION,
+                },
                 "overload_policy": "reject",
                 "runtime": asdict(sensor_ingress.stats()),
             },

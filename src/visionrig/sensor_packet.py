@@ -19,6 +19,8 @@ _MAGIC_V1 = b"VRSP1\x00"
 _MAGIC_V2 = b"VRSP2\x00"
 _HEADER_LENGTH = struct.Struct(">I")
 _MAX_PLANE_RAW_BYTES = 32 * 1024 * 1024
+SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION = 0.80
+SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION = 0.95
 
 
 class SensorPacketError(ValueError):
@@ -64,7 +66,11 @@ class SensorPacketTransport:
     infrared_compression: str | None
     numeric_wire_bytes: int
     numeric_raw_bytes: int
+    numeric_saved_bytes: int
     numeric_compression_ratio: float | None
+    payload_utilization: float | None
+    payload_headroom_bytes: int | None
+    payload_status: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -179,7 +185,11 @@ def inspect_sensor_packet(payload: bytes) -> SensorPacketHeader:
     return header
 
 
-def describe_sensor_packet_transport(payload: bytes) -> SensorPacketTransport:
+def describe_sensor_packet_transport(
+    payload: bytes,
+    *,
+    max_payload_bytes: int | None = None,
+) -> SensorPacketTransport:
     header = inspect_sensor_packet(payload)
 
     def plane_sizes(plane: SensorPacketPlane | None) -> tuple[int, int, str | None]:
@@ -197,8 +207,25 @@ def describe_sensor_packet_transport(payload: bytes) -> SensorPacketTransport:
         if numeric_raw > 0
         else None
     )
+    saved = numeric_raw - numeric_wire
+
+    utilization = None
+    headroom = None
+    payload_status = None
+    if max_payload_bytes is not None:
+        if max_payload_bytes <= 0:
+            raise ValueError("max_payload_bytes must be > 0")
+        utilization = round(len(payload) / max_payload_bytes, 6)
+        headroom = max(0, max_payload_bytes - len(payload))
+        if utilization >= SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION:
+            payload_status = "critical"
+        elif utilization >= SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION:
+            payload_status = "warning"
+        else:
+            payload_status = "normal"
+
     return SensorPacketTransport(
-        schema="visionrig/sensor-packet-transport/v1",
+        schema="visionrig/sensor-packet-transport/v2",
         packet_schema=header.schema_id,
         packet_bytes=len(payload),
         rgb_bytes=header.rgb_byte_length,
@@ -210,7 +237,11 @@ def describe_sensor_packet_transport(payload: bytes) -> SensorPacketTransport:
         infrared_compression=ir_compression,
         numeric_wire_bytes=numeric_wire,
         numeric_raw_bytes=numeric_raw,
+        numeric_saved_bytes=saved,
         numeric_compression_ratio=ratio,
+        payload_utilization=utilization,
+        payload_headroom_bytes=headroom,
+        payload_status=payload_status,
     )
 
 

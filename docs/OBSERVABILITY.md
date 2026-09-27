@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v5`.
+Schema: `visionrig/sensor-runtime-status/v6`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -153,7 +153,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v3` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v4` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -288,7 +288,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v28` and advertises the desired-state
+`GET /health` uses `visionrig/health/v29` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -304,9 +304,19 @@ embeddings are never returned by these surfaces.
 
 When a source's latest accepted visual input was SensorPacket v1/v2, runtime
 status includes `packet_transport`
-(`visionrig/sensor-packet-transport/v1`) with byte counts, per-plane
-compression, combined numeric compression ratio, and utilization of the
-configured ingress payload limit. It is deliberately transient observability,
+(`visionrig/sensor-packet-transport/v2`) with byte counts, per-plane
+compression, numeric bytes saved, combined numeric compression ratio, payload
+headroom, utilization of the configured ingress payload limit, and derived
+normal/warning/critical payload status. It is deliberately transient observability,
 not persistent registry state, and is cleared by a later accepted plain encoded
 frame. Health advertises the transport telemetry schema under
 `sensor_ingress.sensor_packet_transport_schema`.
+
+
+Fleet summary v4 also counts transport status across known sensors
+(`normal/warning/critical/unknown`). A warning or critical latest packet adds
+that source to the existing bounded attention list with
+`reason = packet_transport`, alongside any presence or control reasons. Health
+advertises the exact thresholds under
+`sensor_ingress.sensor_packet_payload_thresholds`: warning at 0.80 and
+critical at 0.95.

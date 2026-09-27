@@ -48,7 +48,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v5"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v6"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -63,8 +63,8 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v28"
-    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v4"
+    assert health["schema"] == "visionrig/health/v29"
+    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v5"
     assert health["sensor_ingress"]["sensor_packet_schemas"] == [
         "visionrig/sensor-packet/v1",
         "visionrig/sensor-packet/v2",
@@ -74,8 +74,12 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         "zlib",
     ]
     assert health["sensor_ingress"]["sensor_packet_transport_schema"] == (
-        "visionrig/sensor-packet-transport/v1"
+        "visionrig/sensor-packet-transport/v2"
     )
+    assert health["sensor_ingress"]["sensor_packet_payload_thresholds"] == {
+        "warning": 0.8,
+        "critical": 0.95,
+    }
     assert health["sensor_ingress"]["runtime"]["accepted_total"] == 2
 
 

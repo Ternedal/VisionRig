@@ -387,7 +387,7 @@ def test_sensor_packet_transport_description_reports_wire_and_raw_bytes() -> Non
     )
     telemetry = describe_sensor_packet_transport(packet)
 
-    assert telemetry.schema == "visionrig/sensor-packet-transport/v1"
+    assert telemetry.schema == "visionrig/sensor-packet-transport/v2"
     assert telemetry.packet_schema == "visionrig/sensor-packet/v2"
     assert telemetry.packet_bytes == len(packet)
     assert telemetry.rgb_bytes == len(b"jpeg-data")
@@ -397,10 +397,16 @@ def test_sensor_packet_transport_description_reports_wire_and_raw_bytes() -> Non
     assert telemetry.numeric_wire_bytes == (
         telemetry.depth_wire_bytes + telemetry.infrared_wire_bytes
     )
+    assert telemetry.numeric_saved_bytes == (
+        telemetry.numeric_raw_bytes - telemetry.numeric_wire_bytes
+    )
     assert telemetry.numeric_compression_ratio == round(
         telemetry.numeric_wire_bytes / telemetry.numeric_raw_bytes,
         6,
     )
+    assert telemetry.payload_utilization is None
+    assert telemetry.payload_headroom_bytes is None
+    assert telemetry.payload_status is None
 
 
 def test_sensor_status_exposes_packet_transport_and_clears_on_plain_frame(
@@ -436,15 +442,18 @@ def test_sensor_status_exposes_packet_transport_and_clears_on_plain_frame(
 
     source = client.get("/api/v1/sensors/status").json()["sources"][0]
     telemetry = source["packet_transport"]
-    assert telemetry["schema"] == "visionrig/sensor-packet-transport/v1"
+    assert telemetry["schema"] == "visionrig/sensor-packet-transport/v2"
     assert telemetry["packet_schema"] == "visionrig/sensor-packet/v2"
     assert telemetry["packet_bytes"] == len(packet)
     assert telemetry["depth_raw_bytes"] == depth.nbytes
+    assert telemetry["numeric_saved_bytes"] > 0
     assert telemetry["numeric_compression_ratio"] < 1.0
     assert telemetry["payload_utilization"] == round(
         len(packet) / (1024 * 1024),
         6,
     )
+    assert telemetry["payload_headroom_bytes"] == (1024 * 1024) - len(packet)
+    assert telemetry["payload_status"] == "normal"
 
     plain = client.post(
         "/api/v1/frames/ingest",
@@ -460,3 +469,78 @@ def test_sensor_status_exposes_packet_transport_and_clears_on_plain_frame(
 
     refreshed = client.get("/api/v1/sensors/status").json()["sources"][0]
     assert refreshed["packet_transport"] is None
+
+
+def test_sensor_packet_transport_payload_status_thresholds() -> None:
+    packet = encode_sensor_packet(
+        rgb_payload=b"x" * 4096,
+        rgb_content_type="image/jpeg",
+    )
+    size = len(packet)
+
+    normal = describe_sensor_packet_transport(
+        packet,
+        max_payload_bytes=size * 2,
+    )
+    warning = describe_sensor_packet_transport(
+        packet,
+        max_payload_bytes=max(size, int(size / 0.85)),
+    )
+    critical = describe_sensor_packet_transport(
+        packet,
+        max_payload_bytes=max(size, int(size / 0.97)),
+    )
+
+    assert normal.payload_status == "normal"
+    assert normal.payload_utilization < 0.80
+    assert warning.payload_status == "warning"
+    assert 0.80 <= warning.payload_utilization < 0.95
+    assert critical.payload_status == "critical"
+    assert critical.payload_utilization >= 0.95
+    assert critical.payload_headroom_bytes >= 0
+
+
+def test_packet_transport_warning_enters_fleet_attention(monkeypatch) -> None:
+    monkeypatch.setattr(sensor_ingress, "OpenCVImageDecoder", lambda: FakeCVDecoder())
+    packet = encode_sensor_packet(
+        rgb_payload=b"x" * 4096,
+        rgb_content_type="image/jpeg",
+    )
+    max_payload = max(len(packet), (len(packet) * 100 + 84) // 85)
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            max_sensor_frame_bytes=max_payload,
+        )
+    )
+
+    response = client.post(
+        "/api/v1/sensor-packets/ingest",
+        params={
+            "source_id": "near-limit-camera",
+            "source_type": "camera",
+            "frame_sequence": 1,
+        },
+        content=packet,
+        headers={"content-type": SENSOR_PACKET_MEDIA_TYPE},
+    )
+    assert response.status_code == 200
+
+    runtime = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert runtime["packet_transport"]["payload_status"] == "warning"
+    assert 0.80 <= runtime["packet_transport"]["payload_utilization"] < 0.95
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v4"
+    assert fleet["transport"] == {
+        "normal": 0,
+        "warning": 1,
+        "critical": 0,
+        "unknown": 0,
+    }
+    assert fleet["attention_total"] == 1
+    item = fleet["attention"][0]
+    assert item["source_id"] == "near-limit-camera"
+    assert item["transport_status"] == "warning"
+    assert item["reasons"] == ["packet_transport"]
+    assert item["packet_transport"]["payload_status"] == "warning"
