@@ -227,3 +227,16 @@ last video frame.
 Heartbeat v2 remains accepted for older producers. V2 has no negotiation
 telemetry and appears as `capability_refresh_status=unknown`. V3 negotiation
 fields are all-or-nothing; partial tuples are rejected rather than interpreted.
+
+
+## Clock-skew-safe freshness
+
+VisionRig 0.49.0 no longer computes negotiation freshness from the producer's
+wall-clock timestamp. The producer-reported `capability_refreshed_utc` remains
+part of heartbeat v3 as a refresh token and diagnostic timestamp, but core also
+records `capability_refresh_observed_utc` when that token is first seen.
+
+Repeated heartbeats carrying the same refresh timestamp do not reset the local
+freshness age. A genuinely new refresh timestamp resets the server-observed age
+to zero. Fleet/runtime stale detection therefore depends only on VisionRig's
+clock and cannot be fooled by a producer clock that is years behind or ahead.
