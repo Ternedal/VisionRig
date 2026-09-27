@@ -18,6 +18,7 @@ VisionRig includes:
 - authenticated cross-device sensor gateway
 - **bounded binary SensorPacket v1/v2 transport for RGB + color-aligned metric depth + infrared**
 - **per-source SensorPacket transport telemetry with compression ratio and ingress-limit utilization**
+- **fleet attention for SensorPacket payload pressure with warning/critical thresholds**
 - **remote Kinect v2 producer with producer-side color/depth alignment**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
@@ -171,9 +172,13 @@ machine as normal frames.
 
 `GET /api/v1/sensors/status` exposes the most recent accepted SensorPacket
 transport telemetry per source: total packet bytes, RGB bytes, raw/wire
-depth+IR bytes, per-plane compression, numeric compression ratio and fraction of
-the configured ingress byte limit. A later accepted non-packet RGB frame clears
-that telemetry so dashboards do not display stale transport data.
+depth+IR bytes, per-plane compression, numeric compression ratio, saved bytes,
+headroom and fraction of the configured ingress byte limit. Payload utilization
+below 80% is `normal`, 80% through <95% is `warning`, and 95%+ is
+`critical`. Warning/critical sources enter the bounded fleet attention list
+with reason `packet_transport`; VisionRig does not automatically disable them.
+A later accepted non-packet RGB frame clears that telemetry so dashboards do not
+display stale transport data.
 
 Raw pixels and embedding vectors do not enter Consciousness Core. All .mrvision
 matches remain non-authoritative.
