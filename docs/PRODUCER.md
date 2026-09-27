@@ -48,7 +48,8 @@ visionrig-producer --kinect-v2 --source-id kinect-living-room --fps 5 --verbose
 
 Kinect mode JPEG-encodes RGB, color-aligns the hardware depth plane on the
 producer machine using the Kinect mapper, and sends RGB + aligned uint16 depth +
-uint16 IR as SensorPacket/v1. It uses the same persistent sequence/drop state,
+uint16 IR as zlib-compressed SensorPacket/v2 by default. RGB remains JPEG; only
+the numeric depth/IR planes are compressed. It uses the same persistent sequence/drop state,
 desired-state polling and heartbeat acknowledgement as the webcam producer.
 
 The producer polls desired state every two seconds by default. Override with
