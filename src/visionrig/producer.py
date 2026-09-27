@@ -6,6 +6,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
 from .producer_state import (
     ProducerStateStore,
@@ -25,6 +26,17 @@ class ProducerAuthError(ProducerError):
 
 class ProducerProtocolError(ProducerError):
     pass
+
+
+class ProducerCapabilities(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema: str = Field(pattern="^visionrig/producer-capabilities/v1$")
+    max_payload_bytes: int = Field(ge=1024, le=64 * 1024 * 1024)
+    gateway_max_payload_bytes: int = Field(ge=1024, le=64 * 1024 * 1024)
+    core_max_payload_bytes: int = Field(ge=1024, le=64 * 1024 * 1024)
+    sensor_packet_schemas: tuple[str, ...]
+    sensor_packet_compressions: tuple[str, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +149,42 @@ class GatewayFrameProducer:
             pending_dropped_frames=self._pending_dropped,
             next_sequence=self._next_sequence,
         )
+
+    def fetch_capabilities(self) -> ProducerCapabilities:
+        target = self._base_url + "/api/v1/producer-capabilities"
+        kwargs = {
+            "headers": {"authorization": f"Bearer {self._token}"},
+            "timeout": self._timeout,
+        }
+        try:
+            if self._client is not None:
+                response = self._client.get(target, **kwargs)
+            else:
+                with httpx.Client() as client:
+                    response = client.get(target, **kwargs)
+        except httpx.HTTPError as exc:
+            raise ProducerError(
+                "VisionRig gateway producer capabilities unavailable"
+            ) from exc
+
+        if response.status_code in {401, 403}:
+            raise ProducerAuthError("VisionRig gateway rejected producer credentials")
+        if response.status_code != 200:
+            raise ProducerProtocolError(
+                f"VisionRig producer capabilities endpoint returned HTTP "
+                f"{response.status_code}"
+            )
+        try:
+            capabilities = ProducerCapabilities.model_validate(response.json())
+        except Exception as exc:
+            raise ProducerProtocolError(
+                "invalid VisionRig producer capabilities response"
+            ) from exc
+        if "visionrig/sensor-packet/v2" not in capabilities.sensor_packet_schemas:
+            raise ProducerProtocolError(
+                "VisionRig gateway/core does not advertise SensorPacket/v2"
+            )
+        return capabilities
 
     def send_heartbeat(
         self,
