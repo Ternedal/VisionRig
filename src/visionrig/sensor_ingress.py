@@ -106,7 +106,8 @@ class SensorHeartbeat(BaseModel):
         "visionrig/sensor-heartbeat/v3",
         "visionrig/sensor-heartbeat/v4",
         "visionrig/sensor-heartbeat/v5",
-    ] = "visionrig/sensor-heartbeat/v5"
+        "visionrig/sensor-heartbeat/v6",
+    ] = "visionrig/sensor-heartbeat/v6"
     source_id: str = Field(min_length=1, max_length=128)
     source_type: SensorSourceType
     device: str | None = Field(default=None, max_length=256)
@@ -130,6 +131,11 @@ class SensorHeartbeat(BaseModel):
         gt=0.0,
         lt=1.0,
     )
+    observed_packet_utilization: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+    )
 
     @model_validator(mode="after")
     def validate_negotiation_telemetry(self) -> "SensorHeartbeat":
@@ -149,6 +155,7 @@ class SensorHeartbeat(BaseModel):
                 has_negotiation
                 or self.negotiated_packet_compression is not None
                 or self.negotiated_packet_target_utilization is not None
+                or self.observed_packet_utilization is not None
             ):
                 raise ValueError(
                     "sensor-heartbeat/v2 does not support negotiation telemetry"
@@ -157,19 +164,29 @@ class SensorHeartbeat(BaseModel):
             if (
                 self.negotiated_packet_compression is not None
                 or self.negotiated_packet_target_utilization is not None
+                or self.observed_packet_utilization is not None
             ):
                 raise ValueError(
                     "sensor-heartbeat/v3 does not support packet negotiation details"
                 )
         elif self.schema_id == "visionrig/sensor-heartbeat/v4":
-            if self.negotiated_packet_target_utilization is not None:
+            if (
+                self.negotiated_packet_target_utilization is not None
+                or self.observed_packet_utilization is not None
+            ):
                 raise ValueError(
-                    "sensor-heartbeat/v4 does not support negotiated target utilization"
+                    "sensor-heartbeat/v4 does not support target utilization telemetry"
+                )
+        elif self.schema_id == "visionrig/sensor-heartbeat/v5":
+            if self.observed_packet_utilization is not None:
+                raise ValueError(
+                    "sensor-heartbeat/v5 does not support observed packet utilization"
                 )
         if (
             (
                 self.negotiated_packet_compression is not None
                 or self.negotiated_packet_target_utilization is not None
+                or self.observed_packet_utilization is not None
             )
             and not has_negotiation
         ):
@@ -202,6 +219,7 @@ class SensorSourceStats:
     negotiated_max_payload_bytes: int | None
     negotiated_packet_compression: str | None
     negotiated_packet_target_utilization: float | None
+    observed_packet_utilization: float | None
     capability_refreshed_utc: str | None
     capability_refresh_observed_utc: str | None
     capability_refresh_age_seconds: float | None
@@ -242,6 +260,7 @@ class _MutableSourceStats:
     negotiated_max_payload_bytes: int | None
     negotiated_packet_compression: str | None
     negotiated_packet_target_utilization: float | None
+    observed_packet_utilization: float | None
     capability_refreshed_utc: datetime | None
     capability_refresh_observed_utc: datetime | None
     capability_refresh_seconds: float | None
@@ -338,6 +357,7 @@ class SensorIngress:
                     negotiated_packet_target_utilization=(
                         heartbeat.negotiated_packet_target_utilization
                     ),
+                    observed_packet_utilization=heartbeat.observed_packet_utilization,
                     capability_refreshed_utc=heartbeat.capability_refreshed_utc,
                     capability_refresh_observed_utc=(
                         now if heartbeat.capability_refreshed_utc is not None else None
@@ -365,6 +385,7 @@ class SensorIngress:
                 current.negotiated_packet_target_utilization = (
                     heartbeat.negotiated_packet_target_utilization
                 )
+                current.observed_packet_utilization = heartbeat.observed_packet_utilization
                 if heartbeat.capability_refreshed_utc is None:
                     current.capability_refresh_observed_utc = None
                 elif (
@@ -406,6 +427,7 @@ class SensorIngress:
                     negotiated_max_payload_bytes=None,
                     negotiated_packet_compression=None,
                     negotiated_packet_target_utilization=None,
+                    observed_packet_utilization=None,
                     capability_refreshed_utc=None,
                     capability_refresh_observed_utc=None,
                     capability_refresh_seconds=None,
@@ -449,6 +471,7 @@ class SensorIngress:
                     negotiated_packet_target_utilization=(
                         state.negotiated_packet_target_utilization
                     ),
+                    observed_packet_utilization=state.observed_packet_utilization,
                     capability_refreshed_utc=(
                         state.capability_refreshed_utc.isoformat()
                         if state.capability_refreshed_utc is not None
@@ -511,7 +534,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v10",
+                schema="visionrig/sensor-runtime-status/v11",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,

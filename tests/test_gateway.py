@@ -472,3 +472,47 @@ async def test_gateway_forwards_heartbeat_v5_target_utilization() -> None:
     assert response.status_code == 200
     assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v5"
     assert seen["json"]["negotiated_packet_target_utilization"] == 0.72
+
+
+@pytest.mark.asyncio
+async def test_gateway_forwards_heartbeat_v6_observed_packet_utilization() -> None:
+    seen = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen["json"] = __import__("json").loads((await request.aread()).decode())
+        return httpx.Response(
+            200,
+            json={
+                "schema_id": "visionrig/sensor-heartbeat-receipt/v1",
+                "status": "accepted",
+                "source_id": "kinect",
+                "seen_utc": "2026-09-27T11:00:00+00:00",
+                "production_authority": False,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
+        app = create_gateway_app(GatewayConfig(token=TOKEN), client=upstream)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://gateway",
+        ) as caller:
+            response = await caller.post(
+                "/api/v1/sensors/heartbeat",
+                json={
+                    "schema_id": "visionrig/sensor-heartbeat/v6",
+                    "source_id": "kinect",
+                    "source_type": "camera",
+                    "negotiated_max_payload_bytes": 4194304,
+                    "capability_refreshed_utc": "2026-09-27T11:00:00+00:00",
+                    "capability_refresh_seconds": 30.0,
+                    "negotiated_packet_compression": "auto",
+                    "negotiated_packet_target_utilization": 0.72,
+                    "observed_packet_utilization": 0.691,
+                },
+                headers={"authorization": f"Bearer {TOKEN}"},
+            )
+
+    assert response.status_code == 200
+    assert seen["json"]["schema_id"] == "visionrig/sensor-heartbeat/v6"
+    assert seen["json"]["observed_packet_utilization"] == 0.691

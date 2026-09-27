@@ -320,3 +320,16 @@ and older v3/v2 contracts remain accepted by the core.
 
 The target is observability only. It does not change server-side desired state
 or grant the producer any new authority.
+
+
+## Heartbeat v6 observed packet utilization
+
+VisionRig 0.54.0 extends producer telemetry with
+`observed_packet_utilization`. For adaptive Kinect SensorPacket capture this is
+the most recent encoded packet size divided by the negotiated payload ceiling.
+
+The producer continues to report
+`negotiated_packet_target_utilization` as policy and now reports
+`observed_packet_utilization` as measurement. This makes it possible to see
+whether JPEG adaptation is actually operating near the requested budget without
+turning normal packet-size variation into semantic control events.

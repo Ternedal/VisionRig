@@ -260,3 +260,12 @@ Heartbeat v5 extends transient producer negotiation observability with
 fraction the producer applies when adapting RGB JPEG quality. It is exposed in
 runtime/catalog/fleet surfaces and only emits `runtime_changed` when the target
 policy itself changes; ordinary capability refresh timestamps remain quiet.
+
+
+## VisionRig 0.54.0: observed packet utilization
+
+Heartbeat v6 adds `observed_packet_utilization` alongside the negotiated packet
+target. The reference Kinect producer reports the latest achieved SensorPacket
+utilization, and the gateway/core expose it through runtime status v11. The
+measurement is intentionally transient and does not generate semantic
+`runtime_changed` events.

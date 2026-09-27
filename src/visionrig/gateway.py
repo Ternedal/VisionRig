@@ -31,7 +31,8 @@ class GatewayHeartbeat(BaseModel):
         "visionrig/sensor-heartbeat/v3",
         "visionrig/sensor-heartbeat/v4",
         "visionrig/sensor-heartbeat/v5",
-    ] = "visionrig/sensor-heartbeat/v5"
+        "visionrig/sensor-heartbeat/v6",
+    ] = "visionrig/sensor-heartbeat/v6"
     source_id: str = Field(min_length=1, max_length=128)
     source_type: Literal["camera", "screen", "vr", "image"]
     device: str | None = Field(default=None, max_length=256)
@@ -54,6 +55,11 @@ class GatewayHeartbeat(BaseModel):
         default=None,
         gt=0.0,
         lt=1.0,
+    )
+    observed_packet_utilization: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
     )
 
     @model_validator(mode="after")
@@ -79,17 +85,29 @@ class GatewayHeartbeat(BaseModel):
             if (
                 self.negotiated_packet_compression is not None
                 or self.negotiated_packet_target_utilization is not None
+                or self.observed_packet_utilization is not None
             ):
                 raise ValueError(
                     "sensor-heartbeat/v3 does not support packet negotiation details"
                 )
         elif self.schema_id == "visionrig/sensor-heartbeat/v4":
-            if self.negotiated_packet_target_utilization is not None:
+            if (
+                self.negotiated_packet_target_utilization is not None
+                or self.observed_packet_utilization is not None
+            ):
                 raise ValueError(
-                    "sensor-heartbeat/v4 does not support negotiated target utilization"
+                    "sensor-heartbeat/v4 does not support target utilization telemetry"
+                )
+        elif self.schema_id == "visionrig/sensor-heartbeat/v5":
+            if self.observed_packet_utilization is not None:
+                raise ValueError(
+                    "sensor-heartbeat/v5 does not support observed packet utilization"
                 )
         if (
-            self.negotiated_packet_target_utilization is not None
+            (
+                self.negotiated_packet_target_utilization is not None
+                or self.observed_packet_utilization is not None
+            )
             and not all(supplied)
         ):
             raise ValueError(
@@ -352,6 +370,7 @@ def create_gateway_app(
                 "negotiated_packet_target_utilization": (
                     body.negotiated_packet_target_utilization
                 ),
+                "observed_packet_utilization": body.observed_packet_utilization,
             },
         )
         return _relay(upstream)

@@ -50,7 +50,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         assert response.status_code == 200
 
     body = client.get("/api/v1/sensors/status").json()
-    assert body["schema"] == "visionrig/sensor-runtime-status/v10"
+    assert body["schema"] == "visionrig/sensor-runtime-status/v11"
     assert body["accepted_total"] == 2
     assert body["active_processing"] is False
     source = body["sources"][0]
@@ -72,6 +72,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
         "visionrig/sensor-heartbeat/v3",
         "visionrig/sensor-heartbeat/v4",
         "visionrig/sensor-heartbeat/v5",
+        "visionrig/sensor-heartbeat/v6",
     ]
     assert health["sensor_ingress"]["sensor_packet_schemas"] == [
         "visionrig/sensor-packet/v1",
@@ -362,6 +363,46 @@ def test_sensor_heartbeat_v4_rejects_target_utilization() -> None:
             "capability_refresh_seconds": 30.0,
             "negotiated_packet_compression": "auto",
             "negotiated_packet_target_utilization": 0.72,
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_sensor_heartbeat_v6_exposes_observed_packet_utilization() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v6",
+            "source_id": "kinect-v6",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T11:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": 0.691,
+        },
+    )
+    assert response.status_code == 200
+    source = client.get("/api/v1/sensors/status").json()["sources"][0]
+    assert source["observed_packet_utilization"] == 0.691
+
+
+def test_sensor_heartbeat_v5_rejects_observed_packet_utilization() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    response = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v5",
+            "source_id": "bad-v5",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-27T11:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": 0.691,
         },
     )
     assert response.status_code == 422

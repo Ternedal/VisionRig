@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v10`.
+Schema: `visionrig/sensor-runtime-status/v11`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -24,8 +24,7 @@ payload ceiling, negotiated packet compression and capability-refresh freshness,
 ## Heartbeat
 
 `POST /api/v1/sensors/heartbeat` accepts
-`visionrig/sensor-heartbeat/v2`, `visionrig/sensor-heartbeat/v3` and
-`visionrig/sensor-heartbeat/v4`. Cross-device clients use the same route
+`visionrig/sensor-heartbeat/v2` through `visionrig/sensor-heartbeat/v6`. Cross-device clients use the same route
 through the authenticated sensor gateway.
 
 Heartbeat v3 adds an optional all-or-nothing producer transport negotiation
@@ -375,3 +374,20 @@ accepted for backward compatibility and report no target-utilization value.
 Changing the target policy is operationally meaningful and emits one
 `runtime_changed` event. Refreshing the same policy with a newer capability
 timestamp remains quiet, preserving the no-heartbeat-spam change-feed contract.
+
+
+### Observed packet utilization
+
+Heartbeat v6 adds `observed_packet_utilization`, the actual size of the most
+recent budgeted SensorPacket divided by the negotiated maximum payload size.
+The value is bounded to 0..1 and is only valid together with the complete
+producer negotiation tuple.
+
+Runtime status v11 exposes both the negotiated target and the observed value,
+so operators can distinguish policy from achieved transport behavior. The
+reference Kinect producer updates the observed value after each successfully
+encoded budgeted packet and publishes it on the next heartbeat.
+
+Observed utilization is transient measurement telemetry. Changes do not emit
+`runtime_changed` events, avoiding change-feed churn from normal frame-to-frame
+size variation.

@@ -59,6 +59,7 @@ class _ProducerClient(Protocol):
         capability_refresh_seconds: float | None = None,
         negotiated_packet_compression: str | None = None,
         negotiated_packet_target_utilization: float | None = None,
+        observed_packet_utilization: float | None = None,
     ): ...
     def send_encoded(self, payload: bytes, *, content_type: str = "image/jpeg"): ...
     def send_packet(self, payload: bytes): ...
@@ -212,6 +213,7 @@ def _run_controlled_capture(
     current_packet_encoder = packet_encoder
     current_packet_compression: str | None = None
     current_packet_target_utilization = SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION
+    observed_packet_utilization: float | None = None
     capability_refreshed_utc: str | None = None
     deadline = monotonic()
     frames = 0
@@ -328,6 +330,11 @@ def _run_controlled_capture(
                             if packet_transport_provider is not None
                             else None
                         ),
+                        observed_packet_utilization=(
+                            observed_packet_utilization
+                            if packet_transport_provider is not None
+                            else None
+                        ),
                     )
                     sleep(control_poll_seconds)
                     continue
@@ -376,6 +383,11 @@ def _run_controlled_capture(
                         if packet_transport_provider is not None
                         else None
                     ),
+                    observed_packet_utilization=(
+                        observed_packet_utilization
+                        if packet_transport_provider is not None
+                        else None
+                    ),
                 )
 
             if source is None:
@@ -407,6 +419,7 @@ def _run_controlled_capture(
                     )
                 )
                 result = producer.send_packet(packet)
+                observed_packet_utilization = packet_utilization
             frames += 1
 
             if verbose or result.status != "accepted":
