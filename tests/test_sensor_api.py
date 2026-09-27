@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v42"
+    assert health["schema"] == "visionrig/health/v43"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -442,7 +442,7 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v13"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v14"
     assert fleet["packet_target_attention_streak_threshold"] == 3
     assert fleet["packet_target"] == {
         "within_target": 0,
