@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v14`.
+Schema: `visionrig/sensor-runtime-status/v15`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v10` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v11` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v9` with:
+`visionrig/sensor-bootstrap-snapshot/v10` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v37` and advertises the desired-state
+`GET /health` uses `visionrig/health/v38` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -450,7 +450,7 @@ change-feed events.
 
 ### Sustained pressure episodes and recovery
 
-VisionRig 0.58.0 extends the process-local packet-target diagnostics with
+VisionRig 0.59.0 extends the process-local packet-target diagnostics with
 episode semantics. Runtime status v14 exposes:
 
 - `packet_target_sustained_episode_count`, incremented exactly once when an
