@@ -236,27 +236,6 @@ def test_sensor_heartbeat_v3_exposes_negotiated_transport_runtime_state() -> Non
     assert source["capability_refresh_status"] == "current"
 
 
-def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
-
-    response = client.post(
-        "/api/v1/sensors/heartbeat",
-        json={
-            "schema_id": "visionrig/sensor-heartbeat/v3",
-            "source_id": "kinect-stale-capabilities",
-            "source_type": "camera",
-            "negotiated_max_payload_bytes": 4 * 1024 * 1024,
-            "capability_refreshed_utc": "2020-01-01T00:00:00+00:00",
-            "capability_refresh_seconds": 30.0,
-        },
-    )
-    assert response.status_code == 200
-
-    source = client.get("/api/v1/sensors/status").json()["sources"][0]
-    assert source["capability_refresh_status"] == "stale"
-    assert source["capability_refresh_age_seconds"] > 60
-
-
 def test_sensor_heartbeat_v3_rejects_partial_negotiation_telemetry() -> None:
     client = TestClient(create_app(PerceptionPipeline()))
 
@@ -271,97 +250,6 @@ def test_sensor_heartbeat_v3_rejects_partial_negotiation_telemetry() -> None:
     )
 
     assert response.status_code == 422
-
-
-def test_sensor_heartbeat_v3_exposes_negotiated_budget_and_refresh_status() -> None:
-    client = TestClient(
-        create_app(
-            PerceptionPipeline(),
-            sensor_stale_after_seconds=10,
-            sensor_offline_after_seconds=30,
-        )
-    )
-    response = client.post(
-        "/api/v1/sensors/heartbeat",
-        json={
-            "schema_id": "visionrig/sensor-heartbeat/v3",
-            "source_id": "remote-kinect",
-            "source_type": "camera",
-            "device": "kinect-v2",
-            "capabilities": ["rgb", "depth", "infrared"],
-            "capture_active": True,
-            "applied_revision": 4,
-            "negotiated_max_payload_bytes": 4194304,
-            "capability_refreshed_utc": "2099-01-01T00:00:00+00:00",
-            "capability_refresh_seconds": 30.0,
-        },
-    )
-    assert response.status_code == 200
-
-    source = client.get("/api/v1/sensors/status").json()["sources"][0]
-    assert source["negotiated_max_payload_bytes"] == 4194304
-    assert source["capability_refreshed_utc"] == "2099-01-01T00:00:00+00:00"
-    assert source["capability_refresh_age_seconds"] == 0.0
-    assert source["capability_refresh_status"] == "current"
-
-
-def test_sensor_heartbeat_v3_rejects_partial_negotiation_telemetry() -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
-    response = client.post(
-        "/api/v1/sensors/heartbeat",
-        json={
-            "schema_id": "visionrig/sensor-heartbeat/v3",
-            "source_id": "broken-kinect",
-            "source_type": "camera",
-            "negotiated_max_payload_bytes": 4194304,
-        },
-    )
-    assert response.status_code == 422
-
-
-def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
-    response = client.post(
-        "/api/v1/sensors/heartbeat",
-        json={
-            "schema_id": "visionrig/sensor-heartbeat/v3",
-            "source_id": "stale-kinect",
-            "source_type": "camera",
-            "capture_active": True,
-            "applied_revision": 0,
-            "negotiated_max_payload_bytes": 4194304,
-            "capability_refreshed_utc": "2000-01-01T00:00:00+00:00",
-            "capability_refresh_seconds": 30.0,
-        },
-    )
-    assert response.status_code == 200
-    source = client.get("/api/v1/sensors/status").json()["sources"][0]
-    assert source["capability_refresh_status"] == "stale"
-    assert source["capability_refresh_age_seconds"] > 60.0
-
-
-def test_sensor_heartbeat_v3_marks_old_capability_refresh_stale() -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
-    response = client.post(
-        "/api/v1/sensors/heartbeat",
-        json={
-            "schema_id": "visionrig/sensor-heartbeat/v3",
-            "source_id": "stale-kinect",
-            "source_type": "camera",
-            "device": "kinect-v2",
-            "capabilities": ["rgb", "depth", "infrared"],
-            "capture_active": True,
-            "applied_revision": 1,
-            "negotiated_max_payload_bytes": 2097152,
-            "capability_refreshed_utc": "2020-01-01T00:00:00+00:00",
-            "capability_refresh_seconds": 30.0,
-        },
-    )
-    assert response.status_code == 200
-    source = client.get("/api/v1/sensors/status").json()["sources"][0]
-    assert source["negotiated_max_payload_bytes"] == 2097152
-    assert source["capability_refresh_status"] == "stale"
-    assert source["capability_refresh_age_seconds"] > 60.0
 
 
 def test_negotiation_refresh_status_becomes_stale_from_time_only() -> None:
