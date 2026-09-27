@@ -23,6 +23,7 @@ VisionRig includes:
 - **producer-side Kinect packet budgeting with adaptive RGB JPEG quality**
 - **authenticated gateway/core transport capability negotiation for remote producers**
 - **live capability refresh so remote Kinect adapts to payload-limit changes without restart**
+- **heartbeat v3 negotiation telemetry with negotiated budget freshness observability**
 - **heartbeat v3 negotiation telemetry with current/stale runtime status**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
@@ -189,6 +190,13 @@ transport contract is refreshed every 30 seconds by default; if the effective
 remote ceiling changes, the next packet uses the new budget without resetting
 the durable frame sequence. A failed refresh stops capture through the existing
 fail-closed cleanup path rather than continuing on stale transport assumptions.
+
+Heartbeat v3 now reports the effective negotiated payload budget, the UTC time
+of the latest successful capability refresh, and the configured refresh
+interval. Runtime status derives `current/stale/unknown` freshness plus age
+without advancing persistent registry state. Budget changes emit a semantic
+`runtime_changed` event; timestamp-only refreshes do not, avoiding change-feed
+heartbeat spam.
 Heartbeat v3 reports the active negotiated packet ceiling, last successful
 capability-refresh UTC and refresh interval back to VisionRig. Runtime/catalog
 surfaces derive `current`, `stale` or `unknown` freshness without
