@@ -212,7 +212,8 @@ Events are emitted only for semantic state changes:
 - operator metadata changes;
 - desired control revision changes;
 - retire, restore and permanent forget;
-- producer `capture_active` / `applied_revision` changes.
+- producer `capture_active` / `applied_revision` changes;
+- changed negotiated producer payload ceiling.
 
 Heartbeat refreshes that only update last-seen/counters do not emit events.
 Likewise, online/stale/offline is derived from elapsed time; the passage of time
@@ -346,37 +347,22 @@ critical at 0.95.
 
 ### Producer capability negotiation telemetry
 
-Runtime status v7 exposes, per source:
+Heartbeat v3 may carry one all-or-nothing transport negotiation tuple:
 
-- the latest negotiated maximum payload bytes;
-- the producer-reported refresh timestamp;
-- refresh age in seconds;
-- derived refresh status: `current`, `stale` or `unknown`.
+- `negotiated_max_payload_bytes`;
+- timezone-aware `capability_refreshed_utc`;
+- `capability_refresh_seconds`.
 
-A refresh is considered `stale` when its age exceeds twice the producer's
-reported refresh interval. This is derived runtime observability only; it does
-not mutate registry/control state.
+Runtime status v7 exposes those values plus
+`capability_refresh_age_seconds` and `capability_refresh_status`.
+`current` means the latest successful refresh is no older than two declared
+refresh intervals; after that it becomes `stale`. Producers that do not publish
+the tuple, including heartbeat v2 clients, report `unknown`.
 
-Heartbeat timestamp-only refreshes do not create semantic change-feed events.
-A changed negotiated payload ceiling does create one `runtime_changed` event
-so UI clients can react immediately to a meaningful transport contract change.
+This is time-derived runtime observability only. It is not persisted in the
+sensor registry, does not advance `state_revision`, and does not change desired
+capture state. A negotiated payload ceiling change emits one
+`runtime_changed` event. A heartbeat that only advances the successful refresh
+timestamp is intentionally quiet in the semantic change feed, so UI clients can
+use low-cadence runtime/fleet polling for freshness without heartbeat spam.
 
-
-### Producer capability negotiation freshness
-
-Heartbeat v3 may carry the producer's effective
-`negotiated_max_payload_bytes`, `capability_refreshed_utc` and
-`capability_refresh_seconds`. Runtime status v7 exposes those values plus:
-
-- `capability_refresh_age_seconds`;
-- `capability_refresh_status`: `current`, `stale`, or `unknown`.
-
-`current` means the last successful negotiation is no older than two refresh
-intervals. The status is time-derived runtime telemetry; it is not persisted in
-the sensor registry and does not advance `state_revision`.
-
-A negotiated budget change is operationally meaningful and emits
-`runtime_changed`. A heartbeat that only advances the successful refresh
-timestamp is intentionally quiet in the semantic change feed. UIs can therefore
-use low-cadence runtime/fleet polling for freshness without receiving heartbeat
-spam through the change journal.
