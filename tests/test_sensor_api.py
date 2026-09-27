@@ -827,3 +827,52 @@ def test_fleet_reports_longest_sustained_packet_pressure() -> None:
         "longest_source_id": "camera-old-pressure",
         "longest_since_utc": "2026-09-27T17:00:00+00:00",
     }
+
+
+def test_fleet_identifies_most_recurrent_packet_target_source() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    base = {
+        "schema_id": "visionrig/sensor-heartbeat/v6",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-27T18:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+
+    def sustained(source_id: str) -> None:
+        payload = dict(base)
+        payload["source_id"] = source_id
+        payload["observed_packet_utilization"] = 0.80
+        for _ in range(3):
+            assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
+
+    def recover(source_id: str) -> None:
+        payload = dict(base)
+        payload["source_id"] = source_id
+        payload["observed_packet_utilization"] = 0.70
+        assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
+
+    sustained("camera-one-repeat")
+    recover("camera-one-repeat")
+    sustained("camera-one-repeat")
+
+    sustained("camera-two-repeats")
+    recover("camera-two-repeats")
+    sustained("camera-two-repeats")
+    recover("camera-two-repeats")
+    sustained("camera-two-repeats")
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v16"
+    assert fleet["packet_target_recurrence_total"] == 3
+    assert fleet["packet_target_recurring_sources"] == 2
+    assert fleet["packet_target_recurrence_hotspot"]["max_recurrence_count"] == 2
+    assert fleet["packet_target_recurrence_hotspot"]["source_id"] == (
+        "camera-two-repeats"
+    )
+    assert (
+        fleet["packet_target_recurrence_hotspot"]["last_recurrence_seconds"]
+        is not None
+    )
