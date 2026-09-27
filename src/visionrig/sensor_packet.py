@@ -19,6 +19,8 @@ _MAGIC_V1 = b"VRSP1\x00"
 _MAGIC_V2 = b"VRSP2\x00"
 _HEADER_LENGTH = struct.Struct(">I")
 _MAX_PLANE_RAW_BYTES = 32 * 1024 * 1024
+SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION = 0.80
+SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION = 0.95
 
 
 class SensorPacketError(ValueError):
@@ -215,9 +217,9 @@ def describe_sensor_packet_transport(
             raise ValueError("max_payload_bytes must be > 0")
         utilization = round(len(payload) / max_payload_bytes, 6)
         headroom = max(0, max_payload_bytes - len(payload))
-        if utilization >= 0.95:
+        if utilization >= SENSOR_PACKET_PAYLOAD_CRITICAL_UTILIZATION:
             payload_status = "critical"
-        elif utilization >= 0.80:
+        elif utilization >= SENSOR_PACKET_PAYLOAD_WARNING_UTILIZATION:
             payload_status = "warning"
         else:
             payload_status = "normal"
