@@ -57,7 +57,7 @@ def _encode_kinect_packet(frame: Any, rgb_jpeg: bytes) -> bytes:
         rgb_content_type="image/jpeg",
         depth_mm=depth,
         infrared=frame.sensor_data.get("infrared"),
-        compression="zlib",
+        compression="auto",
     )
 
 
