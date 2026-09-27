@@ -364,6 +364,8 @@ def create_app(
         packet_target_latest_recovery_utc = None
         packet_target_latest_recovery_source_id = None
         packet_target_latest_recovery_age_seconds = None
+        packet_target_measurement_gaps = []
+        packet_target_measurement_gap_total = 0
         attention = []
         attention_total = 0
 
@@ -452,6 +454,25 @@ def create_app(
                 runtime_source
             )
             packet_target_measurement_coverage[packet_target_measurement] += 1
+            if (
+                runtime_source is not None
+                and packet_target_measurement != "complete"
+            ):
+                packet_target_measurement_gap_total += 1
+                if len(packet_target_measurement_gaps) < 32:
+                    packet_target_measurement_gaps.append(
+                        {
+                            "source_id": source_id,
+                            "measurement": packet_target_measurement,
+                            "presence": runtime_source.presence,
+                            "negotiated_packet_target_utilization": (
+                                target_utilization
+                            ),
+                            "observed_packet_utilization": (
+                                observed_utilization
+                            ),
+                        }
+                    )
             packet_target_status = packet_target_compliance_status(runtime_source)
             packet_target_counts[packet_target_status] += 1
 
@@ -644,7 +665,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v20",
+            "schema": "visionrig/sensor-fleet-summary/v21",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -698,6 +719,14 @@ def create_app(
                 "recovered_utc": packet_target_latest_recovery_utc,
                 "age_seconds": packet_target_latest_recovery_age_seconds,
             },
+            "packet_target_measurement_gaps": packet_target_measurement_gaps,
+            "packet_target_measurement_gap_total": (
+                packet_target_measurement_gap_total
+            ),
+            "packet_target_measurement_gaps_truncated": (
+                packet_target_measurement_gap_total
+                > len(packet_target_measurement_gaps)
+            ),
             "attention": attention,
             "attention_total": attention_total,
             "attention_truncated": attention_total > len(attention),
@@ -708,7 +737,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v50",
+            "schema": "visionrig/health/v51",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -777,7 +806,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v22",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v23",
             },
         }
 
@@ -969,7 +998,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v22",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v23",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
