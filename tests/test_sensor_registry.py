@@ -107,6 +107,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "retired_utc": None,
     }
     assert source["packet_target"] == {
+        "measurement": "unavailable",
         "status": "unknown",
         "pressure": "unknown",
         "stability": "unknown",
@@ -154,6 +155,7 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
     assert catalog["sources"][0]["runtime"] is None
     assert catalog["sources"][0]["metadata"]["enabled"] is False
     assert catalog["sources"][0]["packet_target"] == {
+        "measurement": "unavailable",
         "status": "unknown",
         "pressure": "unknown",
         "stability": "unknown",
