@@ -13,7 +13,7 @@ None of these is perception identity authority.
 
 `GET /api/v1/sensors/status`
 
-Schema: `visionrig/sensor-runtime-status/v14`.
+Schema: `visionrig/sensor-runtime-status/v15`.
 
 Per source it exposes source/device identity, declared capabilities, last
 sequence, accepted frames, producer-reported drops, heartbeat count,
@@ -176,7 +176,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v10` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v11` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +270,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v9` with:
+`visionrig/sensor-bootstrap-snapshot/v10` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +312,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v37` and advertises the desired-state
+`GET /health` uses `visionrig/health/v38` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -470,3 +470,28 @@ episode count and last recovery timestamp.
 
 These fields remain transient operational telemetry and do not advance semantic
 registry revisions or change capture authority.
+
+
+### Sustained pressure recurrence
+
+VisionRig 0.59.0 adds recurrence telemetry on top of sustained episode and
+recovery tracking. Runtime status v15 exposes:
+
+- `packet_target_recurrence_count`, incremented when a sustained episode begins
+  after at least one prior sustained recovery;
+- `packet_target_last_recurrence_seconds`, the server-clock interval from the
+  most recent sustained recovery to the point where the new episode reaches the
+  shared sustained threshold.
+
+The first sustained episode is not a recurrence. Remaining continuously above
+target does not increase recurrence count, and transient over-target runs that
+recover before the sustained threshold are not recurrences.
+
+Fleet summary v11 exposes `packet_target_recurrence_total` and
+`packet_target_recurring_sources`. Attention entries carry the per-source
+recurrence count and latest recurrence interval so an operator can identify
+repeatedly unstable producers without introducing automatic capture policy.
+
+Like the other packet-target diagnostics, recurrence data is process-local
+operational telemetry and does not advance semantic registry state or emit
+heartbeat-driven semantic change events.

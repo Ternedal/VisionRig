@@ -227,6 +227,8 @@ class SensorSourceStats:
     packet_target_last_above_utc: str | None
     packet_target_sustained_episode_count: int
     packet_target_last_recovered_utc: str | None
+    packet_target_recurrence_count: int
+    packet_target_last_recurrence_seconds: float | None
     capability_refreshed_utc: str | None
     capability_refresh_observed_utc: str | None
     capability_refresh_age_seconds: float | None
@@ -273,6 +275,8 @@ class _MutableSourceStats:
     packet_target_last_above_utc: datetime | None
     packet_target_sustained_episode_count: int
     packet_target_last_recovered_utc: datetime | None
+    packet_target_recurrence_count: int
+    packet_target_last_recurrence_seconds: float | None
     capability_refreshed_utc: datetime | None
     capability_refresh_observed_utc: datetime | None
     capability_refresh_seconds: float | None
@@ -402,6 +406,8 @@ class SensorIngress:
                     ),
                     packet_target_sustained_episode_count=0,
                     packet_target_last_recovered_utc=None,
+                    packet_target_recurrence_count=0,
+                    packet_target_last_recurrence_seconds=None,
                     capability_refreshed_utc=heartbeat.capability_refreshed_utc,
                     capability_refresh_observed_utc=(
                         now if heartbeat.capability_refreshed_utc is not None else None
@@ -444,6 +450,17 @@ class SensorIngress:
                         == PACKET_TARGET_ATTENTION_STREAK_THRESHOLD
                     ):
                         current.packet_target_sustained_episode_count += 1
+                        if current.packet_target_last_recovered_utc is not None:
+                            current.packet_target_recurrence_count += 1
+                            current.packet_target_last_recurrence_seconds = round(
+                                max(
+                                    0.0,
+                                    (
+                                        now - current.packet_target_last_recovered_utc
+                                    ).total_seconds(),
+                                ),
+                                3,
+                            )
                     current.packet_target_last_above_utc = now
                 else:
                     if (
@@ -500,6 +517,8 @@ class SensorIngress:
                     packet_target_last_above_utc=None,
                     packet_target_sustained_episode_count=0,
                     packet_target_last_recovered_utc=None,
+                    packet_target_recurrence_count=0,
+                    packet_target_last_recurrence_seconds=None,
                     capability_refreshed_utc=None,
                     capability_refresh_observed_utc=None,
                     capability_refresh_seconds=None,
@@ -574,6 +593,10 @@ class SensorIngress:
                         if state.packet_target_last_recovered_utc is not None
                         else None
                     ),
+                    packet_target_recurrence_count=state.packet_target_recurrence_count,
+                    packet_target_last_recurrence_seconds=(
+                        state.packet_target_last_recurrence_seconds
+                    ),
                     capability_refreshed_utc=(
                         state.capability_refreshed_utc.isoformat()
                         if state.capability_refreshed_utc is not None
@@ -636,7 +659,7 @@ class SensorIngress:
                 for source_id, state in sorted(self._sources.items())
             )
             return SensorIngressStats(
-                schema="visionrig/sensor-runtime-status/v14",
+                schema="visionrig/sensor-runtime-status/v15",
                 stale_after_seconds=self._stale_after_seconds,
                 offline_after_seconds=self._offline_after_seconds,
                 accepted_total=self._accepted_total,
