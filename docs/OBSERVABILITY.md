@@ -592,3 +592,28 @@ within target, both maxima are `0.0`.
 Bootstrap v14 embeds catalog v11 and fleet v13; health advances to v42. The
 overshoot fields are process-local operational telemetry and create no semantic
 change events or automatic control action.
+
+
+### Worst packet-target source
+
+VisionRig 0.64.0 extends fleet summary v14 so
+`packet_target_overshoot` identifies the source behind the current maximum
+overshoot. In addition to measured-source count and maximum delta/ratio, the
+aggregate exposes:
+
+- `worst_source_id`;
+- `worst_target_utilization`;
+- `worst_observed_utilization`.
+
+The representative is selected by maximum overshoot delta. Source ids are
+processed in deterministic sorted order, so equal maximum deltas retain the
+first source rather than producing an unstable winner between requests.
+
+If no complete target/observed pair exists, all worst-source fields remain
+`null`. A measured fleet entirely within target still identifies the first
+measured source with a maximum delta of `0.0`; this reflects which measurement
+anchors the aggregate, not an alert.
+
+Bootstrap v15 embeds fleet v14 and health advances to v43. This remains
+process-local diagnostic telemetry and does not alter attention or control
+policy.
