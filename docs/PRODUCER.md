@@ -250,3 +250,19 @@ The selection is refreshed together with the negotiated payload ceiling. A
 running producer can therefore move between adaptive, forced-zlib and raw-v2
 encoding between frames without reopening Kinect, changing frame sequence state,
 or touching depth/IR semantics.
+
+
+## Clock-skew-safe negotiation freshness
+
+VisionRig 0.50.0 separates the producer-reported refresh timestamp from the
+freshness clock used by core.
+
+Heartbeat v3 still carries `capability_refreshed_utc` as the producer's
+refresh token/diagnostic timestamp. When VisionRig first observes a new token it
+records its own `capability_refresh_observed_utc`. Runtime freshness age and
+`current/stale` classification use only that server-observed timestamp.
+
+Repeated heartbeats with the same producer refresh token do not reset age. A
+genuinely new refresh token resets the server-observed age to zero. Producer
+wall-clock skew can therefore no longer create false stale/current states,
+while both timestamps remain visible for diagnostics.
