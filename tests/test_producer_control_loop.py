@@ -310,3 +310,106 @@ def test_packet_budget_failure_happens_before_send_and_sequence_reservation() ->
 
     assert producer.sent_packets == []
     assert source.closed is True
+
+
+def test_capability_refresh_updates_packet_budget_between_frames() -> None:
+    clock = FakeClock()
+    producer = FakeProducer([True, True])
+    source = FakeSource("kinect")
+    budgets = iter([2000, 1024])
+    qualities: list[int] = []
+
+    def encode_jpeg(_payload, quality: int) -> bytes:
+        qualities.append(quality)
+        return b"x" * (quality * 10)
+
+    frames = _run_controlled_capture(
+        producer=producer,
+        source_factory=lambda: source,
+        source_type="camera",
+        capabilities=("rgb", "depth", "infrared"),
+        fps=1.0,
+        jpeg_quality=80,
+        max_frames=2,
+        control_poll_seconds=1.0,
+        verbose=False,
+        encode_jpeg=encode_jpeg,
+        packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
+        packet_budget_provider=lambda: next(budgets),
+        capability_refresh_seconds=1.0,
+        min_jpeg_quality=30,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+    )
+
+    assert frames == 2
+    assert qualities == [80, 80, 75, 70]
+    assert [len(packet) for packet in producer.sent_packets] == [900, 800]
+    assert source.closed is True
+
+
+def test_capability_refresh_failure_closes_capture_before_next_frame() -> None:
+    clock = FakeClock()
+    producer = FakeProducer([True, True])
+    source = FakeSource("kinect")
+    calls = 0
+
+    def budget_provider() -> int:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return 2048
+        raise RuntimeError("capability refresh failed")
+
+    try:
+        _run_controlled_capture(
+            producer=producer,
+            source_factory=lambda: source,
+            source_type="camera",
+            capabilities=("rgb", "depth", "infrared"),
+            fps=1.0,
+            jpeg_quality=80,
+            max_frames=2,
+            control_poll_seconds=1.0,
+            verbose=False,
+            encode_jpeg=lambda _payload, q: b"x" * q,
+            packet_encoder=lambda _frame, jpeg: b"h" * 100 + jpeg,
+            packet_budget_provider=budget_provider,
+            capability_refresh_seconds=1.0,
+            min_jpeg_quality=30,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+    except RuntimeError as exc:
+        assert "capability refresh failed" in str(exc)
+    else:
+        raise AssertionError("capability refresh failure must stop capture")
+
+    assert len(producer.sent_packets) == 1
+    assert source.reads == 1
+    assert source.closed is True
+
+
+def test_packet_budget_provider_requires_packet_encoder() -> None:
+    clock = FakeClock()
+    producer = FakeProducer([True])
+
+    try:
+        _run_controlled_capture(
+            producer=producer,
+            source_factory=lambda: FakeSource("camera"),
+            source_type="camera",
+            capabilities=("rgb",),
+            fps=1.0,
+            jpeg_quality=80,
+            max_frames=1,
+            control_poll_seconds=1.0,
+            verbose=False,
+            packet_budget_provider=lambda: 2048,
+            monotonic=clock.monotonic,
+            sleep=clock.sleep,
+        )
+    except ValueError as exc:
+        assert "requires packet_encoder" in str(exc)
+    else:
+        raise AssertionError("packet budget provider without packet encoder must fail")

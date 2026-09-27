@@ -22,6 +22,7 @@ VisionRig includes:
 - **remote Kinect v2 producer with producer-side color/depth alignment**
 - **producer-side Kinect packet budgeting with adaptive RGB JPEG quality**
 - **authenticated gateway/core transport capability negotiation for remote producers**
+- **live capability refresh so remote Kinect adapts to payload-limit changes without restart**
 - crash-safe webcam/screen reference producer
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
@@ -182,7 +183,11 @@ gateway reads only the loopback core health transport section and returns the
 effective payload ceiling as `min(gateway_limit, core_limit)` plus supported
 SensorPacket schemas/compressions. The producer then uses
 `min(local_cap, negotiated_cap)` as its packet budget and fails closed if the
-transport contract cannot be negotiated.
+transport contract cannot be negotiated. During capture the same bounded
+transport contract is refreshed every 30 seconds by default; if the effective
+remote ceiling changes, the next packet uses the new budget without resetting
+the durable frame sequence. A failed refresh stops capture through the existing
+fail-closed cleanup path rather than continuing on stale transport assumptions.
 
 `GET /api/v1/sensors/status` exposes the most recent accepted SensorPacket
 transport telemetry per source: total packet bytes, RGB bytes, raw/wire

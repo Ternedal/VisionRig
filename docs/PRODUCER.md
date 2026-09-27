@@ -184,3 +184,29 @@ The local `--max-packet-bytes` /
 claim about the remote service. Negotiation is fail-closed for remote Kinect:
 invalid credentials, unavailable core health, malformed capability responses or
 missing SensorPacket/v2 support stop before capture opens.
+
+
+## Live capability refresh
+
+VisionRig 0.46.0 refreshes the authenticated producer capability contract while
+remote Kinect capture is running. The default refresh interval is 30 seconds:
+
+```powershell
+$env:VISIONRIG_PRODUCER_CAPABILITY_REFRESH_SECONDS="30"
+# or:
+visionrig-producer --kinect-v2 --capability-refresh-seconds 30
+```
+
+The accepted range is 1..3600 seconds. Each refresh recomputes:
+
+`effective_packet_budget = min(local_max_packet_bytes, negotiated_max_payload_bytes)`
+
+before the next frame is encoded. A lower gateway/core limit therefore changes
+the very next packet budget without reopening the source and without consuming
+or resetting the durable frame sequence.
+
+Capability refresh remains fail-closed. If the authenticated route is
+unavailable, malformed, unauthorized, or loses required SensorPacket/v2
+support, the error propagates through the existing controlled-capture
+`finally` path and closes the capture source. The producer does not continue
+indefinitely using a stale remembered limit.
