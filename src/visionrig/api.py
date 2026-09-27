@@ -252,6 +252,11 @@ def create_app(
     def packet_target_stability_status(runtime_source) -> str:
         if runtime_source is None:
             return "unknown"
+        if (
+            runtime_source.negotiated_packet_target_utilization is None
+            or runtime_source.observed_packet_utilization is None
+        ):
+            return "unknown"
         if runtime_source.packet_target_recurrence_count == 0:
             return "stable"
         if (
@@ -619,7 +624,7 @@ def create_app(
                 )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v18",
+            "schema": "visionrig/sensor-fleet-summary/v19",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -682,7 +687,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v47",
+            "schema": "visionrig/health/v48",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -751,7 +756,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v19",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v20",
             },
         }
 
@@ -928,7 +933,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v11",
+            "schema": "visionrig/sensor-catalog/v12",
             "sources": sources,
         }
 
@@ -939,7 +944,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v19",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v20",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
