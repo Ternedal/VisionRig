@@ -521,3 +521,23 @@ attention reason or alter capture policy.
 
 Health embeds the same fleet v12 payload. Bootstrap advances with the fleet
 contract so UI clients receive one internally consistent snapshot.
+
+
+### Catalog packet-target stability projection
+
+VisionRig 0.61.0 projects the recurrence stability model into sensor catalog v9.
+Each source now includes a `packet_target` object with:
+
+- `stability`: `stable`, `recurring`, `flapping` or `unknown`;
+- `flap_window_seconds`: the effective configured classification window;
+- `recurrence_count`: sustained recurrences observed in process-local runtime;
+- `last_recurrence_seconds`: latest recovery-to-recurrence interval.
+
+The catalog and fleet use one shared classifier, preventing the same sensor from
+being labelled differently across UI surfaces. A known sensor with no current
+runtime is `unknown`, while an active runtime with no recurrence history is
+`stable`.
+
+Bootstrap v12 embeds catalog v9 alongside fleet v12. Health advances to v40.
+The projection remains process-local transport observability and has no control
+authority.
