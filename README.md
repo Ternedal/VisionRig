@@ -553,3 +553,18 @@ follow the known-version candidates and use `versions_behind = null`.
 
 This keeps migration ordering deterministic and explainable without introducing
 an opaque score, alert policy, or automatic producer upgrade behavior.
+
+
+## VisionRig 0.77.0: producer readiness summary
+
+Fleet telemetry now exposes a compact `producer_readiness` summary for UI and
+operator dashboards.
+
+The summary reports runtime producer count, heartbeat-v6 coverage, producers
+still requiring a heartbeat upgrade, complete packet-target measurement count,
+measurement-gap count, and normalized readiness ratios for heartbeat and packet
+measurement coverage.
+
+Ratios are `null` when no runtime producers exist. This is descriptive
+progress telemetry only; it does not classify the fleet as good/bad and does
+not alter attention, capture, or control policy.
