@@ -450,7 +450,7 @@ change-feed events.
 
 ### Sustained pressure episodes and recovery
 
-VisionRig 0.59.0 extends the process-local packet-target diagnostics with
+VisionRig 0.58.0 extends the process-local packet-target diagnostics with
 episode semantics. Runtime status v14 exposes:
 
 - `packet_target_sustained_episode_count`, incremented exactly once when an
@@ -470,3 +470,28 @@ episode count and last recovery timestamp.
 
 These fields remain transient operational telemetry and do not advance semantic
 registry revisions or change capture authority.
+
+
+### Sustained pressure recurrence
+
+VisionRig 0.59.0 adds recurrence telemetry on top of sustained episode and
+recovery tracking. Runtime status v15 exposes:
+
+- `packet_target_recurrence_count`, incremented when a sustained episode begins
+  after at least one prior sustained recovery;
+- `packet_target_last_recurrence_seconds`, the server-clock interval from the
+  most recent sustained recovery to the point where the new episode reaches the
+  shared sustained threshold.
+
+The first sustained episode is not a recurrence. Remaining continuously above
+target does not increase recurrence count, and transient over-target runs that
+recover before the sustained threshold are not recurrences.
+
+Fleet summary v11 exposes `packet_target_recurrence_total` and
+`packet_target_recurring_sources`. Attention entries carry the per-source
+recurrence count and latest recurrence interval so an operator can identify
+repeatedly unstable producers without introducing automatic capture policy.
+
+Like the other packet-target diagnostics, recurrence data is process-local
+operational telemetry and does not advance semantic registry state or emit
+heartbeat-driven semantic change events.
