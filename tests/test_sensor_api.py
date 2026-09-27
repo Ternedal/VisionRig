@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v49"
+    assert health["schema"] == "visionrig/health/v50"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -698,7 +698,7 @@ def test_catalog_exposes_flapping_packet_target_stability() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
 
     catalog = client.get("/api/v1/sensors/catalog").json()
-    assert catalog["schema"] == "visionrig/sensor-catalog/v12"
+    assert catalog["schema"] == "visionrig/sensor-catalog/v13"
     packet_target = catalog["sources"][0]["packet_target"]
     assert packet_target["status"] == "above_target"
     assert packet_target["pressure"] == "sustained"
@@ -983,5 +983,9 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
 
     catalog = client.get("/api/v1/sensors/catalog").json()
     by_id = {source["source_id"]: source for source in catalog["sources"]}
+    assert by_id["camera-target-only"]["packet_target"]["measurement"] == (
+        "target_only"
+    )
     assert by_id["camera-target-only"]["packet_target"]["stability"] == "unknown"
+    assert by_id["camera-measured"]["packet_target"]["measurement"] == "complete"
     assert by_id["camera-measured"]["packet_target"]["stability"] == "stable"

@@ -75,7 +75,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v12"
+    assert body["schema"] == "visionrig/sensor-catalog/v13"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -107,6 +107,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "retired_utc": None,
     }
     assert source["packet_target"] == {
+        "measurement": "unavailable",
         "status": "unknown",
         "pressure": "unknown",
         "stability": "unknown",
@@ -154,6 +155,7 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
     assert catalog["sources"][0]["runtime"] is None
     assert catalog["sources"][0]["metadata"]["enabled"] is False
     assert catalog["sources"][0]["packet_target"] == {
+        "measurement": "unavailable",
         "status": "unknown",
         "pressure": "unknown",
         "stability": "unknown",
@@ -204,7 +206,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v49"
+    assert health["schema"] == "visionrig/health/v50"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -632,7 +634,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v49"
+    assert health["schema"] == "visionrig/health/v50"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]
