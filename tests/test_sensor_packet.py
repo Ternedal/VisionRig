@@ -531,7 +531,7 @@ def test_packet_transport_warning_enters_fleet_attention(monkeypatch) -> None:
     assert 0.80 <= runtime["packet_transport"]["payload_utilization"] < 0.95
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v8"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v9"
     assert fleet["transport"] == {
         "normal": 0,
         "warning": 1,
