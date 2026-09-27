@@ -497,3 +497,18 @@ telemetry upgrade.
 Measurement gaps are deliberately separate from fleet attention: incomplete
 observability should be visible without being promoted to an operational
 incident.
+
+
+## VisionRig 0.73.0: actionable measurement-gap remediation
+
+Runtime sensor status now retains the producer's latest heartbeat schema id.
+Packet-target measurement-gap diagnostics expose that schema together with
+`required_schema_id: visionrig/sensor-heartbeat/v6`.
+
+This turns an incomplete telemetry finding into an actionable producer upgrade
+signal: dashboards can distinguish, for example, a v5 producer that only reports
+the negotiated target from a v6 producer with complete measurement telemetry.
+
+The measurement-gap list remains bounded to 32 deterministic source-id ordered
+entries. Its total and truncation fields continue to describe the full fleet,
+and it remains separate from operational attention.
