@@ -481,3 +481,19 @@ The same shared classifier now drives both catalog projection and fleet
 measurement coverage, so dashboards can explain an `unknown` packet-target
 status directly on the affected sensor row without duplicating inference logic
 client-side.
+
+
+## VisionRig 0.72.0: packet-target measurement gap diagnostics
+
+Fleet observability now exposes a bounded, non-alerting list of runtime sources
+with incomplete packet-target telemetry.
+
+Each gap entry identifies the source, its measurement state, current presence,
+negotiated target utilization and observed utilization. Complete sources are
+excluded. Known catalog sources without runtime state are also excluded so this
+list remains focused on producers that are currently connected but need a
+telemetry upgrade.
+
+Measurement gaps are deliberately separate from fleet attention: incomplete
+observability should be visible without being promoted to an operational
+incident.
