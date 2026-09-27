@@ -412,7 +412,7 @@ emit semantic change events.
 
 ### Sustained packet-target attention
 
-VisionRig 0.57.0 keeps the instantaneous fleet compliance classification, but
+VisionRig 0.56.0 keeps the instantaneous fleet compliance classification, but
 does not raise `packet_target` attention for a single oversized observation.
 Runtime status v12 tracks `packet_target_above_streak`, the number of
 consecutive heartbeat-v6 measurements whose observed utilization exceeds the
@@ -426,3 +426,23 @@ resets the streak to zero immediately.
 
 This debounce state is process-local transport telemetry. It does not advance
 registry state, alter desired capture state, or emit semantic change events.
+
+
+### Packet-target pressure duration
+
+VisionRig 0.57.0 adds temporal context to the packet-target debounce signal.
+Runtime status v13 exposes:
+
+- `packet_target_above_since_utc` while a consecutive over-target run is active;
+- `packet_target_above_seconds`, derived from the server clock;
+- `packet_target_last_above_utc`, retained after recovery for diagnosis.
+
+Fleet summary v9 aggregates the current pressure state as `clear`,
+`transient`, `sustained` or `unknown`. `transient` means the latest
+measurement is above target but the configured three-heartbeat attention
+threshold has not yet been reached. `sustained` means the threshold has been
+reached and the source is eligible for `packet_target` attention.
+
+The timestamps and duration are process-local transport telemetry. They do not
+advance registry state, alter desired capture state, or generate semantic
+change-feed events.
