@@ -987,6 +987,8 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
             "source_id": "camera-target-only",
             "measurement": "target_only",
             "presence": "online",
+            "heartbeat_schema_id": "visionrig/sensor-heartbeat/v5",
+            "required_schema_id": "visionrig/sensor-heartbeat/v6",
             "negotiated_packet_target_utilization": 0.72,
             "observed_packet_utilization": None,
         }
@@ -995,9 +997,52 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
 
     catalog = client.get("/api/v1/sensors/catalog").json()
     by_id = {source["source_id"]: source for source in catalog["sources"]}
+    assert by_id["camera-target-only"]["runtime"]["heartbeat_schema_id"] == (
+        "visionrig/sensor-heartbeat/v5"
+    )
+    assert by_id["camera-measured"]["runtime"]["heartbeat_schema_id"] == (
+        "visionrig/sensor-heartbeat/v6"
+    )
     assert by_id["camera-target-only"]["packet_target"]["measurement"] == (
         "target_only"
     )
     assert by_id["camera-target-only"]["packet_target"]["stability"] == "unknown"
     assert by_id["camera-measured"]["packet_target"]["measurement"] == "complete"
     assert by_id["camera-measured"]["packet_target"]["stability"] == "stable"
+
+
+def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+
+    for index in range(40):
+        response = client.post(
+            "/api/v1/sensors/heartbeat",
+            json={
+                "schema_id": "visionrig/sensor-heartbeat/v5",
+                "source_id": f"camera-gap-{index:02d}",
+                "source_type": "camera",
+                "negotiated_max_payload_bytes": 4194304,
+                "capability_refreshed_utc": "2026-09-27T20:30:00+00:00",
+                "capability_refresh_seconds": 30.0,
+                "negotiated_packet_compression": "auto",
+                "negotiated_packet_target_utilization": 0.72,
+            },
+        )
+        assert response.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v22"
+    assert fleet["packet_target_measurement_gap_total"] == 40
+    assert len(fleet["packet_target_measurement_gaps"]) == 32
+    assert fleet["packet_target_measurement_gaps_truncated"] is True
+    assert fleet["packet_target_measurement_gaps"][0]["source_id"] == "camera-gap-00"
+    assert fleet["packet_target_measurement_gaps"][-1]["source_id"] == "camera-gap-31"
+    assert all(
+        item["heartbeat_schema_id"] == "visionrig/sensor-heartbeat/v5"
+        for item in fleet["packet_target_measurement_gaps"]
+    )
+    assert all(
+        item["required_schema_id"] == "visionrig/sensor-heartbeat/v6"
+        for item in fleet["packet_target_measurement_gaps"]
+    )
+    assert fleet["attention_total"] == 0
