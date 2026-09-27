@@ -643,3 +643,24 @@ sorted source-id order.
 Bootstrap v16 embeds fleet v15 and health advances to v44. The summary is
 process-local operational telemetry only; it creates no semantic event and
 changes no capture or adaptation policy.
+
+
+### Packet-target recurrence hotspot
+
+VisionRig 0.66.0 extends fleet summary v16 with
+`packet_target_recurrence_hotspot`. The aggregate contains:
+
+- `max_recurrence_count`: highest sustained recurrence count among runtime
+  sources;
+- `source_id`: source owning that highest count;
+- `last_recurrence_seconds`: that source's latest recovery-to-recurrence
+  interval.
+
+Sources with zero recurrence do not become a hotspot. If no source has
+recurred, the count is zero and the source/interval fields are `null`.
+Equal positive counts retain the first source in deterministic sorted source-id
+order.
+
+Bootstrap v17 embeds fleet v16 and health advances to v45. The hotspot is
+process-local diagnostic telemetry only; it does not create attention, semantic
+events or automatic control action.
