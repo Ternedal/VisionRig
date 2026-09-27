@@ -61,8 +61,8 @@ after decode and are never exposed through PerceptionEvent.
 VisionRig 0.39.0 adds the dedicated remote producer path. The Kinect adapter
 uses the SDK mapper on the producer machine to build a dense color-aligned
 uint16 millimeter plane. `visionrig-producer --kinect-v2` JPEG-encodes RGB,
-packages aligned depth plus IR as zlib-compressed SensorPacket/v2 by default,
-and sends it through the authenticated gateway using the same durable
+packages aligned depth plus IR as SensorPacket/v2 with adaptive per-plane
+compression, and sends it through the authenticated gateway using the same durable
 sequence/drop state as other producers. The server deliberately remains independent of Kinect SDK calibration
 objects.
 

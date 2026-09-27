@@ -252,7 +252,7 @@ def encode_sensor_packet(
     rgb_content_type: str,
     depth_mm: Any | None = None,
     infrared: Any | None = None,
-    compression: Literal["none", "zlib"] = "none",
+    compression: Literal["none", "zlib", "auto"] = "none",
 ) -> bytes:
     if not rgb_payload:
         raise SensorPacketError("RGB payload is empty")
@@ -268,7 +268,7 @@ def encode_sensor_packet(
             raise SensorPacketError("encoding depth/infrared requires numpy") from exc
         np = None  # type: ignore[assignment]
 
-    if compression not in {"none", "zlib"}:
+    if compression not in {"none", "zlib", "auto"}:
         raise SensorPacketError("unsupported plane compression")
 
     planes: list[bytes] = []
@@ -280,20 +280,26 @@ def encode_sensor_packet(
         raw_depth_bytes = depth.tobytes(order="C")
         if len(raw_depth_bytes) > _MAX_PLANE_RAW_BYTES:
             raise SensorPacketError("depth raw plane exceeds safety limit")
-        depth_bytes = (
-            zlib.compress(raw_depth_bytes)
-            if compression == "zlib"
-            else raw_depth_bytes
-        )
+        compressed_depth_bytes = zlib.compress(raw_depth_bytes)
+        depth_compression: Literal["none", "zlib"]
+        if compression == "zlib":
+            depth_compression = "zlib"
+            depth_bytes = compressed_depth_bytes
+        elif compression == "auto" and len(compressed_depth_bytes) < len(raw_depth_bytes):
+            depth_compression = "zlib"
+            depth_bytes = compressed_depth_bytes
+        else:
+            depth_compression = "none"
+            depth_bytes = raw_depth_bytes
         depth_header = SensorPacketPlane(
             width=int(depth.shape[1]),
             height=int(depth.shape[0]),
             dtype="uint16",
             byte_length=len(depth_bytes),
             raw_byte_length=(
-                len(raw_depth_bytes) if compression != "none" else None
+                len(raw_depth_bytes) if depth_compression == "zlib" else None
             ),
-            compression=compression,
+            compression=depth_compression,
             alignment="color",
         )
         planes.append(depth_bytes)
@@ -306,24 +312,30 @@ def encode_sensor_packet(
         raw_ir_bytes = ir.tobytes(order="C")
         if len(raw_ir_bytes) > _MAX_PLANE_RAW_BYTES:
             raise SensorPacketError("infrared raw plane exceeds safety limit")
-        ir_bytes = (
-            zlib.compress(raw_ir_bytes)
-            if compression == "zlib"
-            else raw_ir_bytes
-        )
+        compressed_ir_bytes = zlib.compress(raw_ir_bytes)
+        ir_compression: Literal["none", "zlib"]
+        if compression == "zlib":
+            ir_compression = "zlib"
+            ir_bytes = compressed_ir_bytes
+        elif compression == "auto" and len(compressed_ir_bytes) < len(raw_ir_bytes):
+            ir_compression = "zlib"
+            ir_bytes = compressed_ir_bytes
+        else:
+            ir_compression = "none"
+            ir_bytes = raw_ir_bytes
         ir_header = SensorPacketPlane(
             width=int(ir.shape[1]),
             height=int(ir.shape[0]),
             dtype="uint16",
             byte_length=len(ir_bytes),
             raw_byte_length=(
-                len(raw_ir_bytes) if compression != "none" else None
+                len(raw_ir_bytes) if ir_compression == "zlib" else None
             ),
-            compression=compression,
+            compression=ir_compression,
         )
         planes.append(ir_bytes)
 
-    packet_version = "v2" if compression != "none" else "v1"
+    packet_version = "v2" if compression in {"zlib", "auto"} else "v1"
     header = SensorPacketHeader(
         schema_id=f"visionrig/sensor-packet/{packet_version}",
         rgb_content_type=normalized_rgb_type,
