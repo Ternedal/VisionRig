@@ -62,7 +62,16 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v26"
+    assert health["schema"] == "visionrig/health/v27"
+    assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v3"
+    assert health["sensor_ingress"]["sensor_packet_schemas"] == [
+        "visionrig/sensor-packet/v1",
+        "visionrig/sensor-packet/v2",
+    ]
+    assert health["sensor_ingress"]["sensor_packet_compressions"] == [
+        "none",
+        "zlib",
+    ]
     assert health["sensor_ingress"]["runtime"]["accepted_total"] == 2
 
 
