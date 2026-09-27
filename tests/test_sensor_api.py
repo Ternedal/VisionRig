@@ -983,5 +983,9 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
 
     catalog = client.get("/api/v1/sensors/catalog").json()
     by_id = {source["source_id"]: source for source in catalog["sources"]}
+    assert by_id["camera-target-only"]["packet_target"]["measurement"] == (
+        "target_only"
+    )
     assert by_id["camera-target-only"]["packet_target"]["stability"] == "unknown"
+    assert by_id["camera-measured"]["packet_target"]["measurement"] == "complete"
     assert by_id["camera-measured"]["packet_target"]["stability"] == "stable"
