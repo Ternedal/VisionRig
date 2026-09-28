@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -371,12 +371,53 @@ def create_app(
     def producer_readiness_payload() -> dict[str, object]:
         return readiness_projection(sensor_ingress.stats().sources)
 
-    def online_producer_readiness_payload() -> dict[str, object]:
+    def online_producer_readiness_payload(
+        runtime_sources=None,
+    ) -> dict[str, object]:
+        sources = (
+            sensor_ingress.stats().sources
+            if runtime_sources is None
+            else runtime_sources
+        )
         return readiness_projection(
             source
-            for source in sensor_ingress.stats().sources
+            for source in sources
             if source.presence == "online"
         )
+
+    def online_producer_readiness_expiry_payload(
+        runtime_sources,
+    ) -> dict[str, object]:
+        online_sources = [
+            source for source in runtime_sources if source.presence == "online"
+        ]
+        if not online_sources:
+            return {
+                "next_change_utc": None,
+                "next_change_seconds": None,
+                "source_id": None,
+            }
+
+        next_source = min(
+            online_sources,
+            key=lambda source: (
+                source.age_seconds,
+                source.source_id,
+            ),
+        )
+        remaining_seconds = max(
+            0.0,
+            runtime_status.stale_after_seconds - next_source.age_seconds,
+        )
+        next_change_utc = (
+            datetime.fromisoformat(next_source.last_seen_utc)
+            + timedelta(seconds=runtime_status.stale_after_seconds)
+        )
+        return {
+            "next_change_utc": next_change_utc.isoformat(),
+            "next_change_seconds": round(remaining_seconds, 3),
+            "source_id": next_source.source_id,
+        }
 
     def refresh_producer_readiness_transition() -> None:
         current_readiness = producer_readiness_payload()
@@ -936,13 +977,18 @@ def create_app(
         }
 
         producer_readiness = producer_readiness_payload()
-        online_producer_readiness = online_producer_readiness_payload()
+        online_producer_readiness = online_producer_readiness_payload(
+            runtime_status.sources
+        )
+        online_producer_readiness_expiry = (
+            online_producer_readiness_expiry_payload(runtime_status.sources)
+        )
         producer_readiness_transition = producer_readiness_transition_payload(
             producer_readiness
         )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v29",
+            "schema": "visionrig/sensor-fleet-summary/v30",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -976,6 +1022,9 @@ def create_app(
             ),
             "producer_readiness": producer_readiness,
             "online_producer_readiness": online_producer_readiness,
+            "online_producer_readiness_expiry": (
+                online_producer_readiness_expiry
+            ),
             "producer_readiness_transition": producer_readiness_transition,
             "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
             "packet_target_overshoot": {
@@ -1026,7 +1075,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v60",
+            "schema": "visionrig/health/v61",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -1095,7 +1144,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v32",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             },
         }
 
@@ -1291,7 +1340,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v32",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
