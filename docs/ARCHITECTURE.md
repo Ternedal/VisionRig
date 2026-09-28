@@ -130,7 +130,7 @@ depth remains valid but cannot manufacture metric ordering.
 
 ## Current repository state
 
-As of VisionRig 0.88.0, `main` is the authoritative implementation branch.
+As of VisionRig 0.89.0, `main` is the authoritative implementation branch.
 Historical feature branches may remain for provenance, but they are not a source
 of newer runtime behavior unless explicitly rebased into a new pull request.
 
@@ -148,3 +148,8 @@ WorldSnapshot remains v3 because infrared summaries are transient sensor
 observations rather than durable visual-world state. ModelRig admission remains
 non-authoritative and receives only the bounded normalized summary, never raw IR
 pixels.
+
+
+### V7 qualification hardening
+
+VisionRig 0.89.0 tightens generic physical qualification so a fresh camera/VR frame is not sufficient by itself: the qualifying PerceptionEvent/v4 must also contain at least one bounded semantic observation (entity, relation, landmark, depth, infrared summary, or non-empty scene label) before an exact-bound ModelRig receipt can satisfy the gate.
