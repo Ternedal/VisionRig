@@ -568,3 +568,18 @@ measurement coverage.
 Ratios are `null` when no runtime producers exist. This is descriptive
 progress telemetry only; it does not classify the fleet as good/bad and does
 not alter attention, capture, or control policy.
+
+
+## VisionRig 0.78.0: producer readiness transitions
+
+Fleet telemetry now retains the latest process-local producer-readiness
+transition instead of comparing against the immediately previous HTTP poll.
+
+The transition records the previous readiness snapshot, server-clock change
+timestamp, and deltas for heartbeat-v6 coverage and complete packet-target
+measurement coverage. Repeated fleet/health reads do not advance or erase the
+transition when readiness is unchanged.
+
+An empty runtime fleet establishes no transition baseline, so startup with zero
+producers does not create a misleading readiness regression or improvement.
+This remains observational telemetry only.
