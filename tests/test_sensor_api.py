@@ -83,7 +83,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v63"
+    assert health["schema"] == "visionrig/health/v64"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -460,7 +460,7 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["packet_target_attention_streak_threshold"] == 3
     assert fleet["packet_target"] == {
         "within_target": 0,
@@ -795,7 +795,7 @@ def test_packet_target_overshoot_identifies_worst_source() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 3,
         "max_delta": 0.19,
@@ -838,7 +838,7 @@ def test_fleet_reports_longest_sustained_packet_pressure() -> None:
 
     now[0] = datetime(2026, 9, 27, 17, 1, 0, tzinfo=timezone.utc)
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["packet_target_sustained_pressure"] == {
         "sources": 2,
         "longest_seconds": 60.0,
@@ -883,7 +883,7 @@ def test_fleet_identifies_most_recurrent_packet_target_source() -> None:
     sustained("camera-two-repeats")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["packet_target_recurrence_total"] == 3
     assert fleet["packet_target_recurring_sources"] == 2
     assert fleet["packet_target_recurrence_hotspot"]["max_recurrence_count"] == 2
@@ -935,7 +935,7 @@ def test_fleet_reports_latest_packet_target_recovery() -> None:
     recover("camera-latest-recovery")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["packet_target_recovered_sources"] == 2
     assert fleet["packet_target_latest_recovery"] == {
         "source_id": "camera-latest-recovery",
@@ -986,7 +986,7 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
     assert measured.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["packet_target_stability"] == {
         "stable": 1,
         "recurring": 0,
@@ -1014,6 +1014,10 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
         "runtime_sources": 2,
         "heartbeat_v6_sources": 1,
         "heartbeat_upgrade_required": 1,
+        "heartbeat_upgrade_stage_counts": {
+            "contract_upgrade": 1,
+            "establish_heartbeat": 0,
+        },
         "heartbeat_v6_ratio": 0.5,
         "packet_measurement_complete_sources": 1,
         "packet_measurement_gap_sources": 1,
@@ -1103,7 +1107,7 @@ def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
         assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["packet_target_measurement_gap_total"] == 40
     assert fleet["heartbeat_schema_coverage"] == {
         "runtime_sources": 40,
@@ -1120,6 +1124,10 @@ def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
         "runtime_sources": 40,
         "heartbeat_v6_sources": 0,
         "heartbeat_upgrade_required": 40,
+        "heartbeat_upgrade_stage_counts": {
+            "contract_upgrade": 40,
+            "establish_heartbeat": 0,
+        },
         "heartbeat_v6_ratio": 0.0,
         "packet_measurement_complete_sources": 0,
         "packet_measurement_gap_sources": 40,
@@ -1189,7 +1197,7 @@ def test_heartbeat_upgrade_candidates_prioritize_versions_behind() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     candidates = fleet["heartbeat_upgrade_candidates"]
     assert [item["source_id"] for item in candidates] == [
         "camera-z-v2",
@@ -1228,7 +1236,7 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
     assert client.post("/api/v1/sensors/heartbeat", json=v5).status_code == 200
 
     baseline = client.get("/api/v1/sensors/fleet").json()
-    assert baseline["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert baseline["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert baseline["producer_readiness"]["heartbeat_v6_ratio"] == 0.0
     assert baseline["producer_readiness_transition"] == {
         "previous": None,
@@ -1259,6 +1267,10 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
         "runtime_sources": 1,
         "heartbeat_v6_sources": 1,
         "heartbeat_upgrade_required": 0,
+        "heartbeat_upgrade_stage_counts": {
+            "contract_upgrade": 0,
+            "establish_heartbeat": 0,
+        },
         "heartbeat_v6_ratio": 1.0,
         "packet_measurement_complete_sources": 1,
         "packet_measurement_gap_sources": 0,
@@ -1269,6 +1281,10 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
         "runtime_sources": 1,
         "heartbeat_v6_sources": 0,
         "heartbeat_upgrade_required": 1,
+        "heartbeat_upgrade_stage_counts": {
+            "contract_upgrade": 1,
+            "establish_heartbeat": 0,
+        },
         "heartbeat_v6_ratio": 0.0,
         "packet_measurement_complete_sources": 0,
         "packet_measurement_gap_sources": 1,
@@ -1456,7 +1472,7 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
     )
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
     assert fleet["presence"] == {
         "online": 1,
         "stale": 0,
@@ -1467,6 +1483,10 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
         "runtime_sources": 2,
         "heartbeat_v6_sources": 1,
         "heartbeat_upgrade_required": 1,
+        "heartbeat_upgrade_stage_counts": {
+            "contract_upgrade": 1,
+            "establish_heartbeat": 0,
+        },
         "heartbeat_v6_ratio": 0.5,
         "packet_measurement_complete_sources": 1,
         "packet_measurement_gap_sources": 1,
@@ -1476,6 +1496,10 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
         "runtime_sources": 1,
         "heartbeat_v6_sources": 0,
         "heartbeat_upgrade_required": 1,
+        "heartbeat_upgrade_stage_counts": {
+            "contract_upgrade": 1,
+            "establish_heartbeat": 0,
+        },
         "heartbeat_v6_ratio": 0.0,
         "packet_measurement_complete_sources": 0,
         "packet_measurement_gap_sources": 1,
@@ -1520,3 +1544,56 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
     assert health["sensor_fleet"]["online_producer_readiness_expiry"] == (
         stale["online_producer_readiness_expiry"]
     )
+
+
+def test_producer_readiness_distinguishes_missing_heartbeat_blocker(monkeypatch) -> None:
+    monkeypatch.setattr(sensor_ingress, "OpenCVImageDecoder", lambda: FakeCVDecoder())
+    client = TestClient(
+        create_app(PerceptionPipeline(), max_sensor_frame_bytes=1024)
+    )
+
+    frame_only = client.post(
+        "/api/v1/frames/ingest",
+        params={
+            "source_id": "screen-frame-only",
+            "source_type": "screen",
+            "frame_sequence": 0,
+        },
+        content=b"encoded-frame",
+        headers={"content-type": "image/jpeg"},
+    )
+    assert frame_only.status_code == 200
+
+    v5 = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v5",
+            "source_id": "camera-v5",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-28T07:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+        },
+    )
+    assert v5.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v31"
+    assert fleet["producer_readiness"]["heartbeat_upgrade_required"] == 2
+    assert fleet["producer_readiness"]["heartbeat_upgrade_stage_counts"] == {
+        "contract_upgrade": 1,
+        "establish_heartbeat": 1,
+    }
+    assert fleet["online_producer_readiness"]["heartbeat_upgrade_stage_counts"] == {
+        "contract_upgrade": 1,
+        "establish_heartbeat": 1,
+    }
+    by_id = {
+        item["source_id"]: item
+        for item in fleet["heartbeat_upgrade_candidates"]
+    }
+    assert by_id["camera-v5"]["upgrade_stage"] == "contract_upgrade"
+    assert by_id["screen-frame-only"]["upgrade_stage"] == "establish_heartbeat"
+    assert fleet["attention_total"] == 0

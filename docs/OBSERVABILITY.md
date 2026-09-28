@@ -1164,3 +1164,22 @@ entries.
 Repeated heartbeats using the same schema remain quiet unless another existing
 semantic runtime field changes. Observed packet utilization, pressure counters,
 and refresh timestamps do not independently emit runtime changes.
+
+
+### Producer readiness blocker stages
+
+VisionRig 0.86.0 advances fleet summary to
+`visionrig/sensor-fleet-summary/v31`, bootstrap to
+`visionrig/sensor-bootstrap-snapshot/v36`, and health to
+`visionrig/health/v64`.
+
+Both `producer_readiness` and `online_producer_readiness` include
+`heartbeat_upgrade_stage_counts`:
+
+- `contract_upgrade`: runtime producers on heartbeat v2-v5;
+- `establish_heartbeat`: runtime sources that exist through frame/packet
+  ingress but have not yet published an accepted heartbeat.
+
+The two blocker counts sum to `heartbeat_upgrade_required`. Sources already on
+heartbeat v6 contribute to neither blocker count. The aggregate uses the same
+per-source readiness semantics as catalog rows and upgrade candidates.

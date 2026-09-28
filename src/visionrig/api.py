@@ -342,13 +342,27 @@ def create_app(
     def readiness_projection(runtime_sources) -> dict[str, object]:
         runtime_sources = tuple(runtime_sources)
         runtime_source_count = len(runtime_sources)
-        heartbeat_v6_sources = sum(
-            source.heartbeat_schema_id == "visionrig/sensor-heartbeat/v6"
+        source_readiness = tuple(
+            producer_source_readiness_payload(source)
             for source in runtime_sources
         )
+        heartbeat_v6_sources = sum(
+            readiness["heartbeat_v6"] is True
+            for readiness in source_readiness
+        )
+        heartbeat_upgrade_stage_counts = {
+            "contract_upgrade": sum(
+                readiness["heartbeat_upgrade_stage"] == "contract_upgrade"
+                for readiness in source_readiness
+            ),
+            "establish_heartbeat": sum(
+                readiness["heartbeat_upgrade_stage"] == "establish_heartbeat"
+                for readiness in source_readiness
+            ),
+        }
         packet_measurement_gap_sources = sum(
-            packet_target_measurement_status(source) != "complete"
-            for source in runtime_sources
+            readiness["packet_measurement_complete"] is False
+            for readiness in source_readiness
         )
         packet_measurement_complete_sources = (
             runtime_source_count - packet_measurement_gap_sources
@@ -359,6 +373,7 @@ def create_app(
             "heartbeat_upgrade_required": (
                 runtime_source_count - heartbeat_v6_sources
             ),
+            "heartbeat_upgrade_stage_counts": heartbeat_upgrade_stage_counts,
             "heartbeat_v6_ratio": (
                 round(heartbeat_v6_sources / runtime_source_count, 6)
                 if runtime_source_count
@@ -1021,7 +1036,7 @@ def create_app(
         )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v30",
+            "schema": "visionrig/sensor-fleet-summary/v31",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -1108,7 +1123,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v63",
+            "schema": "visionrig/health/v64",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -1181,7 +1196,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v35",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v36",
             },
         }
 
@@ -1384,7 +1399,7 @@ def create_app(
         snapshot_utc = effective_sensor_clock().astimezone(timezone.utc).isoformat()
         transition_state = producer_readiness_transition_snapshot()
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v35",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v36",
             "snapshot_utc": snapshot_utc,
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
