@@ -1171,7 +1171,7 @@ and refresh timestamps do not independently emit runtime changes.
 VisionRig 0.86.0 advances fleet summary to
 `visionrig/sensor-fleet-summary/v31`, bootstrap to
 `visionrig/sensor-bootstrap-snapshot/v36`, and health to
-`visionrig/health/v64`.
+`visionrig/health/v65`.
 
 Both `producer_readiness` and `online_producer_readiness` include
 `heartbeat_upgrade_stage_counts`:
@@ -1183,3 +1183,11 @@ Both `producer_readiness` and `online_producer_readiness` include
 The two blocker counts sum to `heartbeat_upgrade_required`. Sources already on
 heartbeat v6 contribute to neither blocker count. The aggregate uses the same
 per-source readiness semantics as catalog rows and upgrade candidates.
+
+
+### Infrared perception observability
+
+VisionRig 0.87.0 advertises `visionrig/perception-event/v4` and health v65.
+Perception v4 adds only bounded infrared summaries. Raw IR arrays remain
+frame-local and are not exposed through health, the event journal, world
+snapshots, or ModelRig admission.
