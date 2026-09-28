@@ -124,8 +124,8 @@ def test_physical_acceptance_requires_all_modalities_semantics_and_world_receipt
     assert receipt.production_authority is False
     assert backend.closed is True
 
-    rendered = json.dumps(receipt.model_dump(mode="json"))
-    for forbidden in ("depth_mm", "infrared", "color_bgr", "payload"):
+    rendered = receipt.model_dump(mode="json")
+    for forbidden in ("depth_mm", "color_aligned_depth_mm", "infrared", "color_bgr", "payload"):
         assert forbidden not in rendered
 
 
