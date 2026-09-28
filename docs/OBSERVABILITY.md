@@ -1128,3 +1128,7 @@ that can still observe the source as online.
 If no runtime source is currently online, all fields are `null`. The expiry
 metadata is observational only and does not schedule work, emit semantic
 events, or change capture/control policy.
+
+
+Because fleet v30 is embedded by both enclosing surfaces, the outer contracts
+advance as well. Health advances to v62 and bootstrap advances to v34.
