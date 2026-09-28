@@ -1395,3 +1395,56 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
     assert health["sensor_fleet"]["online_producer_readiness"] == (
         fleet["online_producer_readiness"]
     )
+
+
+def test_producer_readiness_distinguishes_missing_heartbeat_blocker(monkeypatch) -> None:
+    monkeypatch.setattr(sensor_ingress, "OpenCVImageDecoder", lambda: FakeCVDecoder())
+    client = TestClient(
+        create_app(PerceptionPipeline(), max_sensor_frame_bytes=1024)
+    )
+
+    frame_only = client.post(
+        "/api/v1/frames/ingest",
+        params={
+            "source_id": "screen-frame-only",
+            "source_type": "screen",
+            "frame_sequence": 0,
+        },
+        content=b"encoded-frame",
+        headers={"content-type": "image/jpeg"},
+    )
+    assert frame_only.status_code == 200
+
+    v5 = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v5",
+            "source_id": "camera-v5",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-28T07:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+        },
+    )
+    assert v5.status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
+    assert fleet["producer_readiness"]["heartbeat_upgrade_required"] == 2
+    assert fleet["producer_readiness"]["heartbeat_upgrade_stage_counts"] == {
+        "contract_upgrade": 1,
+        "establish_heartbeat": 1,
+    }
+    assert fleet["online_producer_readiness"]["heartbeat_upgrade_stage_counts"] == {
+        "contract_upgrade": 1,
+        "establish_heartbeat": 1,
+    }
+    by_id = {
+        item["source_id"]: item
+        for item in fleet["heartbeat_upgrade_candidates"]
+    }
+    assert by_id["camera-v5"]["upgrade_stage"] == "contract_upgrade"
+    assert by_id["screen-frame-only"]["upgrade_stage"] == "establish_heartbeat"
+    assert fleet["attention_total"] == 0
