@@ -188,6 +188,51 @@ class ModelRigPerceptionPublisher:
                 rejected=self._rejected,
             )
 
+    def last_result_snapshot(self) -> dict[str, object] | None:
+        """Privacy-safe exact binding for operator/physical qualification.
+
+        The snapshot intentionally excludes perception semantics and raw sensor
+        content.  It exposes only the source/frame identity and the already
+        verified ModelRig receipt refs/authority facts.
+        """
+        result = self.last_result
+        if result is None:
+            return None
+        receipt = result.receipt
+        return {
+            "status": result.status,
+            "source_id": result.source_id,
+            "frame_sequence": result.frame_sequence,
+            "reason": result.reason,
+            "receipt": (
+                {
+                    "schema": receipt.schema,
+                    "visionrig_event_ref": receipt.visionrig_event_ref,
+                    "evidence_ref": receipt.evidence_ref,
+                    "cognition_event_id": receipt.cognition_event_id,
+                    "world_changed": receipt.world_changed,
+                    "replayed": receipt.replayed,
+                    "cognition_event_queued": receipt.cognition_event_queued,
+                    "epistemic_status": receipt.epistemic_status,
+                    "confidence": receipt.confidence,
+                    "attention_salience": receipt.attention_salience,
+                    "observed_sequence": receipt.observed_sequence,
+                    "model_calls": receipt.model_calls,
+                    "self_state_store_write_applied": (
+                        receipt.self_state_store_write_applied
+                    ),
+                    "durable_memory_write_authority": (
+                        receipt.durable_memory_write_authority
+                    ),
+                    "execution_authority": receipt.execution_authority,
+                    "scheduling_authority": receipt.scheduling_authority,
+                    "production_activation": receipt.production_activation,
+                }
+                if receipt is not None
+                else None
+            ),
+        }
+
     def _record(self, result: BridgePublishResult) -> BridgePublishResult:
         with self._lock:
             if result.status == "published":
