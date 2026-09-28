@@ -271,3 +271,32 @@ def test_scene_change_is_semantically_published() -> None:
         == "published"
     )
     assert calls == 2
+
+
+def test_last_result_snapshot_is_receipt_bound_and_semantic_free() -> None:
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(receipt_for_request)),
+    )
+    accepted = event(scene_label="PRIVATE-ROOM-LABEL")
+    result = publisher.publish(accepted)
+    assert result.status == "published"
+
+    snapshot = publisher.last_result_snapshot()
+    assert snapshot is not None
+    assert snapshot["status"] == "published"
+    assert snapshot["source_id"] == accepted.source.source_id
+    assert snapshot["frame_sequence"] == accepted.frame_sequence
+    receipt = snapshot["receipt"]
+    assert isinstance(receipt, dict)
+    assert receipt["visionrig_event_ref"].startswith("visionrig-event:")
+    assert receipt["observed_sequence"] == accepted.frame_sequence
+    assert receipt["model_calls"] == 0
+    assert receipt["execution_authority"] is False
+    assert receipt["scheduling_authority"] is False
+    assert receipt["durable_memory_write_authority"] is False
+    assert receipt["production_activation"] is False
+
+    encoded = json.dumps(snapshot)
+    assert "PRIVATE-ROOM-LABEL" not in encoded
+    assert "entities" not in encoded
+    assert "landmarks" not in encoded
