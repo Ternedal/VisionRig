@@ -1035,6 +1035,28 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
     assert by_id["camera-measured"]["runtime"]["heartbeat_schema_id"] == (
         "visionrig/sensor-heartbeat/v6"
     )
+    assert by_id["camera-target-only"]["producer_readiness"] == {
+        "runtime_available": True,
+        "heartbeat_v6": False,
+        "heartbeat_upgrade_required": True,
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v5",
+        "required_heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "heartbeat_versions_behind": 1,
+        "heartbeat_upgrade_stage": "contract_upgrade",
+        "packet_measurement_complete": False,
+        "packet_measurement": "target_only",
+    }
+    assert by_id["camera-measured"]["producer_readiness"] == {
+        "runtime_available": True,
+        "heartbeat_v6": True,
+        "heartbeat_upgrade_required": False,
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "required_heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "heartbeat_versions_behind": None,
+        "heartbeat_upgrade_stage": None,
+        "packet_measurement_complete": True,
+        "packet_measurement": "complete",
+    }
     assert by_id["camera-target-only"]["packet_target"]["measurement"] == (
         "target_only"
     )
