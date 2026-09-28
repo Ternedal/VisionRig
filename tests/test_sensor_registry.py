@@ -651,6 +651,10 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
         "runtime_sources": 2,
         "heartbeat_v6_sources": 0,
         "heartbeat_upgrade_required": 2,
+        "heartbeat_upgrade_stage_counts": {
+            "contract_upgrade": 2,
+            "establish_heartbeat": 0,
+        },
         "heartbeat_v6_ratio": 0.0,
         "packet_measurement_complete_sources": 0,
         "packet_measurement_gap_sources": 2,
