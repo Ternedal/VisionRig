@@ -400,6 +400,11 @@ def _success_report(
         raise PhysicalPerceptionQualificationError(
             "physical source device changed during qualification"
         )
+    final_sequence = final_source.get("last_sequence")
+    if not isinstance(final_sequence, int) or final_sequence < frame_sequence:
+        raise PhysicalPerceptionQualificationError(
+            "physical source final sequence does not cover qualifying event"
+        )
     if int(final_source["accepted_frames"]) <= baseline_accepted:
         return None
     elapsed_ms = round((monotonic() - started) * 1000.0, 3)
@@ -422,6 +427,7 @@ def _success_report(
             "baseline_sequence": baseline_sequence,
             "accepted_frames_before": baseline_accepted,
             "accepted_frames_after": final_source.get("accepted_frames"),
+            "last_sequence_after": final_sequence,
         },
         "event": {
             "journal_cursor": candidate_cursor,
