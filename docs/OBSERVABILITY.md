@@ -934,3 +934,28 @@ or automatic action. It is a convenience projection so UI clients do not need
 to reconstruct migration progress from several separate fleet fields.
 
 Bootstrap v28 embeds fleet v26 and health advances to v56.
+
+
+### Producer readiness transitions
+
+VisionRig 0.78.0 extends fleet summary v27 with
+`producer_readiness_transition`.
+
+The transition contains:
+
+- `previous`: the prior non-empty producer-readiness snapshot;
+- `changed_utc`: server-clock timestamp when readiness last changed;
+- `heartbeat_v6_sources_delta`;
+- `heartbeat_v6_ratio_delta`;
+- `packet_measurement_complete_sources_delta`;
+- `packet_measurement_complete_ratio_delta`.
+
+State changes only when the underlying readiness snapshot changes. Ordinary UI
+polling and health checks are therefore idempotent and do not reset the
+transition. If either the stored or current runtime fleet is empty, VisionRig
+establishes a fresh baseline with no transition delta.
+
+The state is process-local and intentionally not persisted across restarts. It
+does not create semantic change events, attention reasons, or control actions.
+
+Bootstrap v29 embeds fleet v27 and health advances to v57.
