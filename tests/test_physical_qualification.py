@@ -603,3 +603,165 @@ def test_physical_qualification_rejects_replayed_receipt_on_published_result() -
             source_id="kinect-v2-0",
             frame_sequence=event["frame_sequence"],
         )
+
+
+def test_physical_qualification_rejects_event_device_identity_change() -> None:
+    event = _event()
+    event["source"]["device"] = "different-camera"
+    health_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls
+        if url.endswith("/health"):
+            health_calls += 1
+            return _health(event=event if health_calls > 1 else None)
+        if url.endswith("/api/v1/sensors/status"):
+            return {"sources": [_source(accepted=10, sequence=10)]}
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        return {
+            "schema_id": "visionrig/event-batch/v1",
+            "entries": [{"cursor": 5, "event": event}],
+            "next_cursor": 5,
+            "oldest_available_cursor": 1,
+            "newest_available_cursor": 5,
+            "gap": False,
+        }
+
+    tick = [0.0]
+    def monotonic() -> float:
+        tick[0] += 0.25
+        return tick[0]
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="no fresh physical PerceptionEvent arrived before timeout",
+    ):
+        qualify_physical_perception(
+            "http://127.0.0.1:8110",
+            source_id="kinect-v2-0",
+            timeout_seconds=1.0,
+            http_json=http_json,
+            monotonic=monotonic,
+            sleep_fn=lambda _seconds: None,
+        )
+
+
+def test_physical_qualification_rejects_final_device_change() -> None:
+    event = _event()
+    health_calls = 0
+    status_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls, status_calls
+        if url.endswith("/health"):
+            health_calls += 1
+            return _health(event=event if health_calls > 1 else None)
+        if url.endswith("/api/v1/sensors/status"):
+            status_calls += 1
+            source = _source(
+                accepted=11 if status_calls > 1 else 10,
+                sequence=11 if status_calls > 1 else 10,
+            )
+            if status_calls > 1:
+                source["device"] = "replacement-camera"
+            return {"sources": [source]}
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        return {
+            "schema_id": "visionrig/event-batch/v1",
+            "entries": [{"cursor": 5, "event": event}],
+            "next_cursor": 5,
+            "oldest_available_cursor": 1,
+            "newest_available_cursor": 5,
+            "gap": False,
+        }
+
+    tick = [0.0]
+    def monotonic() -> float:
+        tick[0] += 0.01
+        return tick[0]
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="physical source device changed during qualification",
+    ):
+        qualify_physical_perception(
+            "http://127.0.0.1:8110",
+            source_id="kinect-v2-0",
+            timeout_seconds=2.0,
+            http_json=http_json,
+            monotonic=monotonic,
+            sleep_fn=lambda _seconds: None,
+        )
+
+
+def test_physical_qualification_rejects_final_sequence_behind_qualifying_event() -> None:
+    event = _event(sequence=11)
+    health_calls = 0
+    status_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls, status_calls
+        if url.endswith("/health"):
+            health_calls += 1
+            return _health(event=event if health_calls > 1 else None)
+        if url.endswith("/api/v1/sensors/status"):
+            status_calls += 1
+            return {
+                "sources": [
+                    _source(
+                        accepted=11 if status_calls > 1 else 10,
+                        sequence=10,
+                    )
+                ]
+            }
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        return {
+            "schema_id": "visionrig/event-batch/v1",
+            "entries": [{"cursor": 5, "event": event}],
+            "next_cursor": 5,
+            "oldest_available_cursor": 1,
+            "newest_available_cursor": 5,
+            "gap": False,
+        }
+
+    tick = [0.0]
+    def monotonic() -> float:
+        tick[0] += 0.01
+        return tick[0]
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="final sequence does not cover qualifying event",
+    ):
+        qualify_physical_perception(
+            "http://127.0.0.1:8110",
+            source_id="kinect-v2-0",
+            timeout_seconds=2.0,
+            http_json=http_json,
+            monotonic=monotonic,
+            sleep_fn=lambda _seconds: None,
+        )
