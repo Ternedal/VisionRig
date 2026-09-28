@@ -37,6 +37,7 @@ visionrig-gateway-token = "visionrig.gateway_token:main"
 visionrig-producer = "visionrig.producer_cli:main"
 visionrig-profile = "visionrig.profile_cli:main"
 visionrig-kinect-acceptance = "visionrig.kinect_acceptance:main"
+visionrig-qualify-physical = "visionrig.physical_qualification:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -5,7 +5,7 @@ semantic change suppression before crossing the VisionRig -> ModelRig boundary.
 """
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass
 import hashlib
 import ipaddress
@@ -168,6 +168,7 @@ class ModelRigPerceptionPublisher:
         self._unavailable = 0
         self._rejected = 0
         self._last_result: BridgePublishResult | None = None
+        self._successful_results: deque[BridgePublishResult] = deque(maxlen=128)
 
     @property
     def endpoint(self) -> str:
@@ -188,6 +189,54 @@ class ModelRigPerceptionPublisher:
                 rejected=self._rejected,
             )
 
+    @staticmethod
+    def _result_snapshot(result: BridgePublishResult) -> dict[str, object]:
+        receipt = result.receipt
+        return {
+            "status": result.status,
+            "source_id": result.source_id,
+            "frame_sequence": result.frame_sequence,
+            "reason": result.reason,
+            "receipt": (
+                {
+                    "schema": receipt.schema,
+                    "visionrig_event_ref": receipt.visionrig_event_ref,
+                    "evidence_ref": receipt.evidence_ref,
+                    "cognition_event_id": receipt.cognition_event_id,
+                    "world_changed": receipt.world_changed,
+                    "replayed": receipt.replayed,
+                    "cognition_event_queued": receipt.cognition_event_queued,
+                    "epistemic_status": receipt.epistemic_status,
+                    "confidence": receipt.confidence,
+                    "attention_salience": receipt.attention_salience,
+                    "observed_sequence": receipt.observed_sequence,
+                    "model_calls": receipt.model_calls,
+                    "self_state_store_write_applied": (
+                        receipt.self_state_store_write_applied
+                    ),
+                    "durable_memory_write_authority": (
+                        receipt.durable_memory_write_authority
+                    ),
+                    "execution_authority": receipt.execution_authority,
+                    "scheduling_authority": receipt.scheduling_authority,
+                    "production_activation": receipt.production_activation,
+                }
+                if receipt is not None
+                else None
+            ),
+        }
+
+    def last_result_snapshot(self) -> dict[str, object] | None:
+        """Privacy-safe latest bridge result for operator observability."""
+        result = self.last_result
+        return self._result_snapshot(result) if result is not None else None
+
+    def successful_result_snapshots(self) -> list[dict[str, object]]:
+        """Bounded successful receipt bindings retained for qualification polling."""
+        with self._lock:
+            results = tuple(self._successful_results)
+        return [self._result_snapshot(result) for result in results]
+
     def _record(self, result: BridgePublishResult) -> BridgePublishResult:
         with self._lock:
             if result.status == "published":
@@ -200,6 +249,8 @@ class ModelRigPerceptionPublisher:
                 self._unavailable += 1
             elif result.status == "rejected":
                 self._rejected += 1
+            if result.status in {"published", "replayed"} and result.receipt is not None:
+                self._successful_results.append(result)
             self._last_result = result
         return result
 

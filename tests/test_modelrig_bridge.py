@@ -112,6 +112,33 @@ def test_bridge_requires_loopback_worker_url() -> None:
     assert publisher.endpoint.endswith("/experimental/consciousness/visionrig-event")
 
 
+def test_successful_bridge_receipt_survives_later_suppressed_frame() -> None:
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(receipt_for_request)),
+    )
+
+    first = publisher.publish(event(sequence=1))
+    second = publisher.publish(
+        event(
+            event_id="evt-suppressed-after-success",
+            sequence=2,
+            confidence=0.70,
+        )
+    )
+
+    assert first.status == "published"
+    assert second.status == "suppressed"
+    assert publisher.last_result_snapshot()["status"] == "suppressed"
+    successful = publisher.successful_result_snapshots()
+    assert len(successful) == 1
+    assert successful[0]["status"] == "published"
+    assert successful[0]["source_id"] == "kinect-v2-0"
+    assert successful[0]["frame_sequence"] == 1
+    assert successful[0]["receipt"]["visionrig_event_ref"] == (
+        first.receipt.visionrig_event_ref
+    )
+
+
 def test_semantically_unchanged_frames_are_suppressed() -> None:
     calls = 0
 
@@ -271,3 +298,32 @@ def test_scene_change_is_semantically_published() -> None:
         == "published"
     )
     assert calls == 2
+
+
+def test_last_result_snapshot_is_receipt_bound_and_semantic_free() -> None:
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(receipt_for_request)),
+    )
+    accepted = event(scene_label="PRIVATE-ROOM-LABEL")
+    result = publisher.publish(accepted)
+    assert result.status == "published"
+
+    snapshot = publisher.last_result_snapshot()
+    assert snapshot is not None
+    assert snapshot["status"] == "published"
+    assert snapshot["source_id"] == accepted.source.source_id
+    assert snapshot["frame_sequence"] == accepted.frame_sequence
+    receipt = snapshot["receipt"]
+    assert isinstance(receipt, dict)
+    assert receipt["visionrig_event_ref"].startswith("visionrig-event:")
+    assert receipt["observed_sequence"] == accepted.frame_sequence
+    assert receipt["model_calls"] == 0
+    assert receipt["execution_authority"] is False
+    assert receipt["scheduling_authority"] is False
+    assert receipt["durable_memory_write_authority"] is False
+    assert receipt["production_activation"] is False
+
+    encoded = json.dumps(snapshot)
+    assert "PRIVATE-ROOM-LABEL" not in encoded
+    assert "entities" not in encoded
+    assert "landmarks" not in encoded
