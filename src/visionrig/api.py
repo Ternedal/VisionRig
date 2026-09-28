@@ -1525,7 +1525,7 @@ def create_app(
                 previous_discovery=previous_discovery,
             )
             emit_runtime_change(body.source_id, previous_runtime)
-            refresh_producer_readiness_transition(source_id)
+            refresh_producer_readiness_transition(body.source_id)
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
