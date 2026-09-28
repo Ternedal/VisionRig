@@ -407,13 +407,18 @@ def create_app(
                 source.source_id,
             ),
         )
+        expiry_grace_seconds = 0.001
         remaining_seconds = max(
             0.0,
-            runtime_status.stale_after_seconds - next_source.age_seconds,
+            runtime_status.stale_after_seconds
+            + expiry_grace_seconds
+            - next_source.age_seconds,
         )
         next_change_utc = (
             datetime.fromisoformat(next_source.last_seen_utc)
-            + timedelta(seconds=runtime_status.stale_after_seconds)
+            + timedelta(
+                seconds=runtime_status.stale_after_seconds + expiry_grace_seconds
+            )
         )
         return {
             "next_change_utc": next_change_utc.isoformat(),
