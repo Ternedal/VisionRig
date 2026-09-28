@@ -9,8 +9,9 @@ from visionrig.kinect_v2 import (
     KinectV2Source,
     align_depth_mm_to_color,
 )
-from visionrig.pipeline import Frame, StageResult
+from visionrig.pipeline import Frame, PerceptionPipeline, StageResult
 from visionrig.pipeline_factory import build_pipeline
+from visionrig.spatial import SpatialRelationStage
 
 
 class _Sampler:
@@ -204,3 +205,39 @@ def test_infrared_summary_stage_is_noop_without_valid_plane() -> None:
 def test_pipeline_enables_infrared_summary_by_default() -> None:
     bundle = build_pipeline(spatial_relations=False)
     assert "infrared_summary" in bundle.pipeline.stages
+
+
+def test_infrared_summary_bounds_large_plane_sample_count() -> None:
+    infrared = np.zeros((2049, 2048), dtype=np.uint16)
+    frame = Frame(
+        source=SourceDescriptor(source_id="k-large", source_type="camera"),
+        sequence=3,
+        payload=None,
+        sensor_data={"infrared": infrared},
+    )
+
+    result = InfraredSummaryStage().process(frame, StageResult())
+
+    assert len(result.infrared) == 1
+    assert 1 <= result.infrared[0].sample_count <= 4_194_304
+
+
+def test_infrared_observation_survives_later_pipeline_stage() -> None:
+    infrared = np.full((2, 2), 32768, dtype=np.uint16)
+    frame = Frame(
+        source=SourceDescriptor(source_id="k-compose", source_type="camera"),
+        sequence=4,
+        payload=None,
+        sensor_data={"infrared": infrared},
+    )
+    pipeline = PerceptionPipeline(
+        (
+            InfraredSummaryStage(),
+            SpatialRelationStage(),
+        )
+    )
+
+    event = pipeline.process(frame)
+
+    assert len(event.infrared) == 1
+    assert event.infrared[0].sample_count == 4
