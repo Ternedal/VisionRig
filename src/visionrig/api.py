@@ -897,47 +897,12 @@ def create_app(
         )
         heartbeat_upgrade_candidate_total = len(heartbeat_upgrade_candidates)
         bounded_heartbeat_upgrade_candidates = heartbeat_upgrade_candidates[:32]
-        runtime_sources = heartbeat_schema_coverage["runtime_sources"]
-        packet_measurement_gap_runtime_sources = (
-            packet_target_measurement_gap_total
+        producer_readiness = readiness_projection(runtime_status.sources)
+        online_producer_readiness = readiness_projection(
+            source
+            for source in runtime_status.sources
+            if source.presence == "online"
         )
-        packet_measurement_complete_runtime_sources = max(
-            0,
-            runtime_sources - packet_measurement_gap_runtime_sources,
-        )
-        producer_readiness = {
-            "runtime_sources": runtime_sources,
-            "heartbeat_v6_sources": heartbeat_schema_coverage["v6"],
-            "heartbeat_upgrade_required": (
-                heartbeat_schema_coverage["upgrade_required"]
-            ),
-            "heartbeat_v6_ratio": (
-                round(
-                    heartbeat_schema_coverage["v6"] / runtime_sources,
-                    6,
-                )
-                if runtime_sources
-                else None
-            ),
-            "packet_measurement_complete_sources": (
-                packet_measurement_complete_runtime_sources
-            ),
-            "packet_measurement_gap_sources": (
-                packet_measurement_gap_runtime_sources
-            ),
-            "packet_measurement_complete_ratio": (
-                round(
-                    packet_measurement_complete_runtime_sources
-                    / runtime_sources,
-                    6,
-                )
-                if runtime_sources
-                else None
-            ),
-        }
-
-        producer_readiness = producer_readiness_payload()
-        online_producer_readiness = online_producer_readiness_payload()
         producer_readiness_transition = producer_readiness_transition_payload(
             producer_readiness
         )
