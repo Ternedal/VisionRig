@@ -121,3 +121,8 @@ VisionRig 0.90.0 advances the generic physical qualification receipt to `visionr
 ## WorldState-qualified release evidence
 
 VisionRig 0.91.0 requires the exact-bound ModelRig admission receipt used by generic physical qualification to report `world_changed=true`. A successful transport/admission with no WorldState transition is therefore insufficient for the release gate. This aligns the generic camera/VR qualification semantics with the dedicated Kinect physical acceptance path.
+
+
+## Fresh-admission requirement
+
+VisionRig 0.92.0 requires the generic physical qualification gate to bind to a fresh `published` ModelRig admission. A `replayed` bridge result, or a receipt whose `replayed` flag is true, cannot satisfy release evidence even if it references the same event. This prevents a prior idempotent admission from being reused as proof of a new physical perception run.
