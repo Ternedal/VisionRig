@@ -959,3 +959,30 @@ The state is process-local and intentionally not persisted across restarts. It
 does not create semantic change events, attention reasons, or control actions.
 
 Bootstrap v29 embeds fleet v27 and health advances to v57.
+
+
+### Event-timed producer readiness transitions
+
+VisionRig 0.79.0 advances fleet summary to v28 and corrects
+`producer_readiness_transition.changed_utc`.
+
+In v0.78.0 the transition state was updated while constructing the fleet
+payload. That made `changed_utc` represent the first fleet/health poll after a
+readiness change rather than the runtime event that caused it.
+
+Readiness transition state is now refreshed after successful runtime mutations:
+
+- producer heartbeat;
+- encoded frame ingress;
+- SensorPacket ingress;
+- runtime-source removal during permanent forget.
+
+Fleet, health and bootstrap payload construction no longer mutates readiness
+transition state. Repeated reads are therefore side-effect free, and a delayed
+dashboard poll retains the original runtime-mutation timestamp.
+
+The transition remains process-local and is reset across service restarts. No
+semantic change event, attention reason, desired-state mutation, capture
+decision, or producer control action is introduced.
+
+Bootstrap v30 embeds fleet v28 and health advances to v58.
