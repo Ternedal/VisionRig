@@ -338,7 +338,7 @@ def _success_report(
     monotonic: Callable[[], float],
     http_json: Callable[..., Mapping[str, Any]],
     request_timeout: float,
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     current_status = http_json(
         base + "/api/v1/sensors/status",
         timeout=request_timeout,
@@ -353,9 +353,7 @@ def _success_report(
         )
     final_source = current_sources[0]
     if int(final_source["accepted_frames"]) <= baseline_accepted:
-        raise PhysicalPerceptionQualificationError(
-            "source accepted-frame counter did not advance"
-        )
+        return None
     elapsed_ms = round((monotonic() - started) * 1000.0, 3)
     return {
         "schema": SCHEMA,
@@ -505,7 +503,7 @@ def qualify_physical_perception(
                 frame_sequence=frame_sequence,
             )
             if bridge_binding is not None:
-                return _success_report(
+                report = _success_report(
                     base=base,
                     initial_health=health,
                     selected_id=selected_id,
@@ -520,6 +518,8 @@ def qualify_physical_perception(
                     http_json=http_json,
                     request_timeout=request_timeout,
                 )
+                if report is not None:
+                    return report
 
         next_cursor = batch.get("next_cursor")
         if isinstance(next_cursor, int):
@@ -536,7 +536,7 @@ def qualify_physical_perception(
                     frame_sequence=frame_sequence,
                 )
                 if bridge_binding is not None:
-                    return _success_report(
+                    report = _success_report(
                         base=base,
                         initial_health=health,
                         selected_id=selected_id,
@@ -551,6 +551,8 @@ def qualify_physical_perception(
                         http_json=http_json,
                         request_timeout=request_timeout,
                     )
+                    if report is not None:
+                        return report
 
         sleep_fn(POLL_SECONDS)
 
