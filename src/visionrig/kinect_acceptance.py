@@ -249,7 +249,15 @@ def collect_kinect_physical_acceptance(
                     "ModelRig rejected physical VisionRig evidence: "
                     + (result.reason or result.status)
                 )
+            if result.status == "replayed":
+                raise KinectPhysicalAcceptanceError(
+                    "ModelRig replayed physical VisionRig evidence instead of freshly admitting it"
+                )
             if result.receipt is not None:
+                if result.receipt.replayed:
+                    raise KinectPhysicalAcceptanceError(
+                        "ModelRig receipt was replayed instead of freshly admitted"
+                    )
                 event_refs.append(result.receipt.visionrig_event_ref)
                 evidence_refs.append(result.receipt.evidence_ref)
                 if result.receipt.world_changed:
