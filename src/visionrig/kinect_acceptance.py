@@ -150,7 +150,6 @@ def _semantic_observation_count(event: PerceptionEvent) -> int:
         + len(event.relations)
         + len(event.landmarks)
         + len(event.depth)
-        + len(event.infrared)
         + (1 if event.scene_label is not None else 0)
     )
 
