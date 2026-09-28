@@ -88,6 +88,11 @@ def create_app(
     )
     registry = sensor_registry or SensorRegistry()
     sensor_changes = sensor_change_journal or SensorChangeJournal()
+    producer_readiness_transition_state: dict[str, object] = {
+        "current": None,
+        "previous": None,
+        "changed_utc": None,
+    }
 
     def raise_state_revision_conflict(
         exc: SensorStateRevisionConflict,
@@ -765,8 +770,71 @@ def create_app(
             ),
         }
 
+        current_readiness = dict(producer_readiness)
+        stored_readiness = producer_readiness_transition_state["current"]
+        if (
+            stored_readiness is None
+            or current_readiness["runtime_sources"] == 0
+            or stored_readiness["runtime_sources"] == 0
+        ):
+            producer_readiness_transition_state["current"] = current_readiness
+            producer_readiness_transition_state["previous"] = None
+            producer_readiness_transition_state["changed_utc"] = None
+        elif current_readiness != stored_readiness:
+            producer_readiness_transition_state["previous"] = stored_readiness
+            producer_readiness_transition_state["current"] = current_readiness
+            producer_readiness_transition_state["changed_utc"] = (
+                effective_sensor_clock().isoformat()
+            )
+
+        previous_readiness = producer_readiness_transition_state["previous"]
+        producer_readiness_transition = {
+            "previous": previous_readiness,
+            "changed_utc": producer_readiness_transition_state["changed_utc"],
+            "heartbeat_v6_sources_delta": (
+                current_readiness["heartbeat_v6_sources"]
+                - previous_readiness["heartbeat_v6_sources"]
+                if previous_readiness is not None
+                else None
+            ),
+            "heartbeat_v6_ratio_delta": (
+                round(
+                    current_readiness["heartbeat_v6_ratio"]
+                    - previous_readiness["heartbeat_v6_ratio"],
+                    6,
+                )
+                if (
+                    previous_readiness is not None
+                    and current_readiness["heartbeat_v6_ratio"] is not None
+                    and previous_readiness["heartbeat_v6_ratio"] is not None
+                )
+                else None
+            ),
+            "packet_measurement_complete_sources_delta": (
+                current_readiness["packet_measurement_complete_sources"]
+                - previous_readiness["packet_measurement_complete_sources"]
+                if previous_readiness is not None
+                else None
+            ),
+            "packet_measurement_complete_ratio_delta": (
+                round(
+                    current_readiness["packet_measurement_complete_ratio"]
+                    - previous_readiness["packet_measurement_complete_ratio"],
+                    6,
+                )
+                if (
+                    previous_readiness is not None
+                    and current_readiness["packet_measurement_complete_ratio"]
+                    is not None
+                    and previous_readiness["packet_measurement_complete_ratio"]
+                    is not None
+                )
+                else None
+            ),
+        }
+
         return {
-            "schema": "visionrig/sensor-fleet-summary/v26",
+            "schema": "visionrig/sensor-fleet-summary/v27",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -799,6 +867,7 @@ def create_app(
                 > len(bounded_heartbeat_upgrade_candidates)
             ),
             "producer_readiness": producer_readiness,
+            "producer_readiness_transition": producer_readiness_transition,
             "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
             "packet_target_overshoot": {
                 "measured_sources": packet_target_overshoot_measured_sources,
@@ -848,7 +917,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v56",
+            "schema": "visionrig/health/v57",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -917,7 +986,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v28",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v29",
             },
         }
 
@@ -1109,7 +1178,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v28",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v29",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
