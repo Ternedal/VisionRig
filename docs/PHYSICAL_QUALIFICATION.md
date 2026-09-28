@@ -98,3 +98,16 @@ This gate measures a physical perception path. It grants no sensor, identity,
 memory, action or production authority. A PASS is suitable evidence for the
 cross-repository `visionrig_physical_perception` release gate; it is not
 permission to activate production by itself.
+
+
+## Stable bridge evidence window
+
+VisionRig retains a bounded in-memory history of the latest 128 successful
+`published`/`replayed` ModelRig bridge receipt bindings. Suppressed,
+unavailable, or rejected later frames do not erase an already verified
+source/frame binding before the physical qualifier can observe it.
+
+The retained entries contain only the same privacy-safe source/frame identity
+and verified receipt authority/provenance fields exposed by health. Raw frames,
+OCR text, landmarks, labels, and perception semantics are not retained by this
+history.
