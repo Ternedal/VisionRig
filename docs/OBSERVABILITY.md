@@ -1056,3 +1056,34 @@ The online projection is descriptive only and does not affect attention,
 desired state, capture authority, semantic events, or producer control.
 
 Bootstrap v32 embeds fleet v29 and health advances to v60.
+
+
+### Online producer-readiness expiry
+
+VisionRig 0.83.0 advances fleet summary to v30 and adds
+`online_producer_readiness_expiry`.
+
+Unlike total producer readiness, online readiness can change solely because
+server-clock liveness age crosses the configured stale threshold. No producer
+mutation is required. For that reason VisionRig does not fabricate an
+event-style readiness transition timestamp for this change.
+
+The expiry projection exposes:
+
+- `source_id`: the currently-online source nearest its stale boundary;
+- `next_change_utc`: that source's `last_seen_utc + stale_after_seconds`;
+- `next_change_seconds`: remaining server-clock seconds until the boundary,
+  clamped at zero and rounded to three decimals.
+
+The projection is calculated from the same sampled runtime status used for the
+fleet response. If no runtime source is currently online, all fields are
+`null`.
+
+At the exact stale boundary the existing liveness contract still classifies the
+source as online (`age_seconds <= stale_after_seconds`); it becomes stale once
+the boundary is exceeded. UI clients can therefore refresh at or immediately
+after `next_change_utc`.
+
+Bootstrap v33 embeds fleet v30 and health advances to v61. This expiry metadata
+is observational only and does not schedule work, emit semantic events, or
+change capture/control policy.
