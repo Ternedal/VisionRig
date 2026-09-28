@@ -633,3 +633,18 @@ This is an internal semantic-hardening release: public payload shapes are
 unchanged, but heartbeat upgrade stage, version distance, required schema and
 packet-measurement state can no longer drift between fleet and catalog code
 paths.
+
+
+## VisionRig 0.82.0: online producer readiness
+
+Fleet observability now separates total runtime producer readiness from the
+readiness of producers that are currently online.
+
+`producer_readiness` remains the process-local migration inventory across all
+runtime sources, including sources that have become stale or offline.
+`online_producer_readiness` applies the same readiness projection only to
+sources whose current presence is `online`.
+
+This prevents an offline fully-migrated producer from making the active fleet
+look more ready than it is, while preserving the existing migration inventory
+and transition history.
