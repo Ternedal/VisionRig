@@ -3,7 +3,7 @@
 The qualifier observes the running VisionRig service over loopback. It never
 uploads or persists raw frames. A PASS requires:
 - one online physical camera/VR source already producing frames;
-- one fresh PerceptionEvent/v3 from that exact source after probe start;
+- one fresh PerceptionEvent/v4 with meaningful perception from that exact source after probe start;
 - VisionRig's ModelRig bridge enabled and bound to loopback;
 - a verified bridge result for that exact source/frame;
 - the ModelRig receipt bound to the canonical SHA-256 event ref;
@@ -198,6 +198,16 @@ def _physical_sources(
         )
     )
     return result
+
+
+
+def _has_semantic_observation(event: Mapping[str, Any]) -> bool:
+    for field in ("entities", "relations", "landmarks", "depth", "infrared"):
+        value = event.get(field)
+        if isinstance(value, list) and len(value) > 0:
+            return True
+    scene_label = event.get("scene_label")
+    return isinstance(scene_label, str) and bool(scene_label.strip())
 
 
 def _event_batch(
@@ -425,7 +435,7 @@ def qualify_physical_perception(
         raise PhysicalPerceptionQualificationError("VisionRig health is not ok")
     if health.get("perception_schema") != "visionrig/perception-event/v4":
         raise PhysicalPerceptionQualificationError(
-            "VisionRig perception schema is not v3"
+            "VisionRig perception schema is not v4"
         )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
@@ -494,6 +504,7 @@ def qualify_physical_perception(
                 or frame_sequence <= baseline_sequence
                 or event.get("schema_id") != "visionrig/perception-event/v4"
                 or event.get("production_authority") is not False
+                or not _has_semantic_observation(event)
             ):
                 continue
             candidate_event = event
