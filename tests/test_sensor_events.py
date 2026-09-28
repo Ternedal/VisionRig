@@ -213,7 +213,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v33"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v34"
     assert body["sensor_state_revision"] == 1
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -225,7 +225,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     assert body["change_cursor"] == 2
     assert body["catalog"]["schema"] == "visionrig/sensor-catalog/v15"
     assert body["catalog"]["sources"][0]["source_id"] == "camera-bootstrap"
-    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert body["fleet"]["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert body["fleet"]["state_revision"] == 1
     assert body["fleet"]["change_consistency"]["status"] == "synced"
     assert body["fleet"]["total"] == 1
@@ -262,7 +262,7 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v33"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v34"
     assert body["sensor_state_revision"] == 0
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -277,7 +277,7 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
         "sources": [],
     }
     assert body["fleet"] == {
-        "schema": "visionrig/sensor-fleet-summary/v29",
+        "schema": "visionrig/sensor-fleet-summary/v30",
         "state_revision": 0,
         "change_consistency": {
             "schema": "visionrig/sensor-change-consistency/v1",
@@ -372,6 +372,11 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "packet_measurement_complete_sources": 0,
             "packet_measurement_gap_sources": 0,
             "packet_measurement_complete_ratio": None,
+        },
+        "online_producer_readiness_expiry": {
+            "next_change_utc": None,
+            "next_change_seconds": None,
+            "source_id": None,
         },
         "producer_readiness_transition": {
             "previous": None,
@@ -664,7 +669,7 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     )
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v61"
+    assert health["schema"] == "visionrig/health/v62"
     assert health["sensor_changes"]["durability"] == "persistent"
     assert health["sensor_changes"]["stream_id"] == "restored-stream"
 
@@ -991,7 +996,7 @@ def test_sensor_bootstrap_samples_runtime_once(monkeypatch) -> None:
     response = client.get("/api/v1/sensors/bootstrap")
     assert response.status_code == 200
     body = response.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v33"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v34"
     assert calls["count"] == 1
 
     source = body["catalog"]["sources"][0]
