@@ -153,3 +153,8 @@ pixels.
 ### V7 qualification hardening
 
 VisionRig 0.89.0 tightens generic physical qualification so a fresh camera/VR frame is not sufficient by itself: the qualifying PerceptionEvent/v4 must also contain at least one bounded semantic observation (entity, relation, landmark, depth, infrared summary, or non-empty scene label) before an exact-bound ModelRig receipt can satisfy the gate.
+
+
+### V7 service-instance binding
+
+VisionRig 0.95.0 exposes a process-unique `service_instance_id` in health v66. Generic physical qualification binds its full evidence run to that instance and fails closed if VisionRig restarts before the exact physical event is admitted and finalized. The receipt records the instance id alongside the health/perception contract identifiers.
