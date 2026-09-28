@@ -1107,3 +1107,24 @@ cannot observe a partially updated previous/current/timestamp tuple.
 This event uses the existing bounded/persistent sensor change journal and does
 not alter desired state, capture authority, attention policy, or automatic
 producer behavior.
+
+
+### Online producer-readiness expiry
+
+VisionRig 0.83.0 advances fleet summary to v30 and adds
+`online_producer_readiness_expiry`.
+
+Unlike total producer readiness, online readiness can change solely because
+server-clock liveness age crosses the configured stale threshold. No producer
+mutation is required.
+
+The projection exposes `source_id`, `next_change_utc`, and
+`next_change_seconds`. It is calculated from the same sampled runtime status
+used for the fleet response. At the exact stale boundary the source is still
+online (`age_seconds <= stale_after_seconds`), so VisionRig advertises the
+first millisecond after that boundary. This avoids a zero-delay refresh loop
+that can still observe the source as online.
+
+If no runtime source is currently online, all fields are `null`. The expiry
+metadata is observational only and does not schedule work, emit semantic
+events, or change capture/control policy.
