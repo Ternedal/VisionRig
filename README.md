@@ -735,3 +735,20 @@ The aggregate is derived from the same per-source readiness function used by
 catalog rows and heartbeat upgrade candidates, keeping row-level and fleet-level
 migration semantics aligned. This telemetry is descriptive only and does not
 change attention, capture, desired state, or producer control.
+
+
+## VisionRig 0.87.0: bounded infrared perception
+
+PerceptionEvent advances to `visionrig/perception-event/v4` and adds bounded
+infrared observations. Kinect v2 infrared frames remain frame-local raw sensor
+data; VisionRig emits only normalized summary statistics:
+
+- `mean_intensity`
+- `contrast`
+- `hotspot_fraction`
+- `sample_count`
+- fixed method provenance `kinect-v2-infrared-summary`
+
+The default service pipeline includes an `infrared_summary` stage that is a
+no-op for sources without infrared data. Raw infrared pixels are never placed in
+PerceptionEvent, WorldSnapshot, or ModelRig context.
