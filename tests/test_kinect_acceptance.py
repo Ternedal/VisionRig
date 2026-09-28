@@ -181,7 +181,7 @@ def test_physical_acceptance_refuses_empty_semantics_even_with_real_modalities()
     ):
         acceptance.collect_kinect_physical_acceptance(
             source=source,
-            pipeline=PerceptionPipeline(),
+            pipeline=PerceptionPipeline((InfraredSummaryStage(),)),
             publisher=_publisher(),
             frame_count=2,
             git_sha="3" * 40,
