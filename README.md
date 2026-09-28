@@ -665,3 +665,17 @@ The semantic change cursor is still sampled before snapshot construction, so
 changes racing with bootstrap can be replayed rather than missed. Public fleet
 and catalog payload shapes are unchanged; bootstrap advances to v33 and health
 to v61.
+
+
+## VisionRig 0.84.0: timestamped coherent bootstrap
+
+The sensor bootstrap snapshot now includes `snapshot_utc`, captured from the
+same server clock immediately after the single SensorIngress runtime sample used
+to build both catalog and fleet projections.
+
+This gives UI clients an authoritative observation timestamp for the coherent
+bootstrap state, without relying on client clocks or inferring freshness from
+individual nested fields.
+
+The timestamp is observational only and does not advance registry state, change
+the semantic event cursor, or alter sensor control behavior.
