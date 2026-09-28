@@ -2,9 +2,27 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 import visionrig.sensor_ingress as sensor_ingress
 from visionrig.api import create_app
 from visionrig.pipeline import PerceptionPipeline
+from visionrig.sensor_events import SensorChangeJournal
+
+
+class _FailOnceReadinessJournal(SensorChangeJournal):
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_readiness_once = True
+
+    def append(self, **kwargs):
+        if (
+            kwargs.get("kind") == "producer_readiness_changed"
+            and self.fail_readiness_once
+        ):
+            self.fail_readiness_once = False
+            raise RuntimeError("simulated readiness journal persistence failure")
+        return super().append(**kwargs)
 
 
 class FakeCVDecoder:
@@ -1220,6 +1238,11 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
         "packet_measurement_complete_sources_delta": None,
         "packet_measurement_complete_ratio_delta": None,
     }
+    baseline_changes = client.get("/api/v1/sensors/changes").json()
+    baseline_cursor = baseline_changes["next_cursor"]
+    assert "producer_readiness_changed" not in [
+        entry["event"]["kind"] for entry in baseline_changes["entries"]
+    ]
 
     now[0] = datetime(2026, 9, 28, 4, 5, tzinfo=timezone.utc)
     v6 = dict(v5)
@@ -1257,12 +1280,104 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
     assert transition["packet_measurement_complete_sources_delta"] == 1
     assert transition["packet_measurement_complete_ratio_delta"] == 1.0
 
+    readiness_changes = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": baseline_cursor},
+    ).json()
+    readiness_events = [
+        entry["event"]
+        for entry in readiness_changes["entries"]
+        if entry["event"]["kind"] == "producer_readiness_changed"
+    ]
+    assert len(readiness_events) == 1
+    readiness_event = readiness_events[0]
+    assert readiness_event["source_id"] == "camera-migrate"
+    assert readiness_event["occurred_utc"] == "2026-09-28T04:05:00+00:00"
+    assert readiness_event["payload"]["previous"] == transition["previous"]
+    assert readiness_event["payload"]["current"] == migrated["producer_readiness"]
+    assert readiness_event["payload"]["transition"] == transition
+
+    event_cursor = readiness_changes["next_cursor"]
     now[0] = datetime(2026, 9, 28, 4, 10, tzinfo=timezone.utc)
+    repeated_heartbeat = dict(v6)
+    repeated_heartbeat["capability_refreshed_utc"] = "2026-09-28T04:10:00+00:00"
+    assert (
+        client.post("/api/v1/sensors/heartbeat", json=repeated_heartbeat).status_code
+        == 200
+    )
+    quiet = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": event_cursor},
+    ).json()
+    assert "producer_readiness_changed" not in [
+        entry["event"]["kind"] for entry in quiet["entries"]
+    ]
+
     repeated = client.get("/api/v1/sensors/fleet").json()
     assert repeated["producer_readiness_transition"] == transition
 
     health = client.get("/health").json()
     assert health["sensor_fleet"]["producer_readiness_transition"] == transition
+
+
+def test_producer_readiness_transition_retries_after_journal_failure() -> None:
+    now = [datetime(2026, 9, 28, 4, 0, tzinfo=timezone.utc)]
+    journal = _FailOnceReadinessJournal()
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: now[0],
+            sensor_change_journal=journal,
+        )
+    )
+
+    v5 = {
+        "schema_id": "visionrig/sensor-heartbeat/v5",
+        "source_id": "camera-retry-event",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-28T04:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+    assert client.post("/api/v1/sensors/heartbeat", json=v5).status_code == 200
+
+    now[0] = datetime(2026, 9, 28, 4, 5, tzinfo=timezone.utc)
+    v6 = dict(v5)
+    v6["schema_id"] = "visionrig/sensor-heartbeat/v6"
+    v6["capability_refreshed_utc"] = "2026-09-28T04:05:00+00:00"
+    v6["observed_packet_utilization"] = 0.70
+
+    with pytest.raises(
+        RuntimeError,
+        match="simulated readiness journal persistence failure",
+    ):
+        client.post("/api/v1/sensors/heartbeat", json=v6)
+
+    after_failure = client.get("/api/v1/sensors/fleet").json()
+    assert after_failure["producer_readiness"]["heartbeat_v6_sources"] == 1
+    assert after_failure["producer_readiness_transition"] == {
+        "previous": None,
+        "changed_utc": None,
+        "heartbeat_v6_sources_delta": None,
+        "heartbeat_v6_ratio_delta": None,
+        "packet_measurement_complete_sources_delta": None,
+        "packet_measurement_complete_ratio_delta": None,
+    }
+
+    retry = client.post("/api/v1/sensors/heartbeat", json=v6)
+    assert retry.status_code == 200
+
+    events = client.get("/api/v1/sensors/changes").json()["entries"]
+    readiness = [
+        entry["event"]
+        for entry in events
+        if entry["event"]["kind"] == "producer_readiness_changed"
+    ]
+    assert len(readiness) == 1
+    assert readiness[0]["source_id"] == "camera-retry-event"
+    assert readiness[0]["occurred_utc"] == "2026-09-28T04:05:00+00:00"
 
 
 def test_fleet_upgrade_candidate_matches_catalog_producer_readiness() -> None:
