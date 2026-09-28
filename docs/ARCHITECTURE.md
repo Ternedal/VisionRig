@@ -42,7 +42,7 @@ Input adapters
 
  visual embeddings
        |
-       +--> bounded sidecar --> future .mrvision recognition
+       +--> bounded sidecar --> encrypted .mrvision recognition
 ```
 
 ## Design rules
@@ -100,9 +100,22 @@ isolated from local perception.
 
 ### V5 — sensor control and Kaliv ingress — implemented foundation
 Authenticated Windows/screen/camera and Kaliv VR/passthrough producer transport,
-persistent sensor catalog/discovery, stable source identity, desired-state control, effective-state convergence,
-and managed local webcam/Kinect control are implemented. Native Kaliv Android/
-Quest producer clients remain a separate client-delivery slice.
+persistent sensor catalog/discovery, stable source identity, desired-state control,
+effective-state convergence, and managed local webcam/Kinect control are
+implemented. Native Kaliv Android/Quest producer clients remain a separate
+client-delivery slice.
+
+### V6 — operational sensor observability — implemented
+VisionRig 0.86.0 exposes coherent sensor bootstrap snapshots, restart-detectable
+change streams, producer-readiness events, online-readiness expiry, heartbeat
+contract transitions, packet-target telemetry, and blocker-stage migration
+diagnostics. The current public operator contracts are fleet v31, bootstrap v36,
+and health v64.
+
+### V7 — physical perception qualification — implemented foundation
+Physical Kinect v2 acceptance and generic physical-perception qualification bind
+fresh physical sensor evidence to exact ModelRig bridge receipts without granting
+identity, memory-write, execution, scheduling, or production authority.
 
 
 ## Contract change: v2 -> v3
@@ -111,3 +124,14 @@ V3 adds optional `distance_m` to each depth observation and adds
 `in_front_of` / `behind` relation predicates. The metric field is populated
 only by adapters with a calibrated/measured distance source. Relative monocular
 depth remains valid but cannot manufacture metric ordering.
+
+
+## Current repository state
+
+As of VisionRig 0.86.0, `main` is the authoritative implementation branch.
+Historical feature branches may remain for provenance, but they are not a source
+of newer runtime behavior unless explicitly rebased into a new pull request.
+
+There are currently no open VisionRig issues or pull requests. The remaining
+client-delivery work called out above belongs to native Kaliv Android/Quest
+clients rather than the VisionRig core runtime.
