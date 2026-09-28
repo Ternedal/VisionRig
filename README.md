@@ -648,3 +648,20 @@ sources whose current presence is `online`.
 This prevents an offline fully-migrated producer from making the active fleet
 look more ready than it is, while preserving the existing migration inventory
 and transition history.
+
+
+## VisionRig 0.83.0: coherent bootstrap runtime snapshot
+
+The sensor bootstrap endpoint now samples SensorIngress runtime state exactly
+once and builds both the catalog and fleet projections from that same immutable
+sample.
+
+This closes a race where a heartbeat or liveness transition between separate
+catalog/fleet reads could make one bootstrap response internally inconsistent
+—for example, a catalog row could describe one heartbeat contract while fleet
+producer readiness described a newer runtime state.
+
+The semantic change cursor is still sampled before snapshot construction, so
+changes racing with bootstrap can be replayed rather than missed. Public fleet
+and catalog payload shapes are unchanged; bootstrap advances to v33 and health
+to v61.

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from visionrig.api import create_app
 from visionrig.pipeline import PerceptionPipeline
 from visionrig.sensor_events import SensorChangeJournal, SensorChangeJournalError
+from visionrig.sensor_ingress import SensorIngress
 from visionrig.sensor_registry import SensorMetadataPatch, SensorRegistry
 
 
@@ -212,7 +213,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v32"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v33"
     assert body["sensor_state_revision"] == 1
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -261,7 +262,7 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v32"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v33"
     assert body["sensor_state_revision"] == 0
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -663,7 +664,7 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     )
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v60"
+    assert health["schema"] == "visionrig/health/v61"
     assert health["sensor_changes"]["durability"] == "persistent"
     assert health["sensor_changes"]["stream_id"] == "restored-stream"
 
@@ -958,3 +959,50 @@ def test_target_utilization_change_emits_runtime_event() -> None:
         ]
         == 0.65
     )
+
+
+def test_sensor_bootstrap_samples_runtime_once(monkeypatch) -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    heartbeat = client.post(
+        "/api/v1/sensors/heartbeat",
+        json={
+            "schema_id": "visionrig/sensor-heartbeat/v6",
+            "source_id": "camera-bootstrap-runtime",
+            "source_type": "camera",
+            "negotiated_max_payload_bytes": 4194304,
+            "capability_refreshed_utc": "2026-09-28T06:00:00+00:00",
+            "capability_refresh_seconds": 30.0,
+            "negotiated_packet_compression": "auto",
+            "negotiated_packet_target_utilization": 0.72,
+            "observed_packet_utilization": 0.70,
+        },
+    )
+    assert heartbeat.status_code == 200
+
+    original_stats = SensorIngress.stats
+    calls = {"count": 0}
+
+    def counted_stats(self):
+        calls["count"] += 1
+        return original_stats(self)
+
+    monkeypatch.setattr(SensorIngress, "stats", counted_stats)
+
+    response = client.get("/api/v1/sensors/bootstrap")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v33"
+    assert calls["count"] == 1
+
+    source = body["catalog"]["sources"][0]
+    fleet = body["fleet"]
+    assert source["source_id"] == "camera-bootstrap-runtime"
+    assert source["runtime"]["heartbeat_schema_id"] == (
+        "visionrig/sensor-heartbeat/v6"
+    )
+    assert source["producer_readiness"]["heartbeat_v6"] is True
+    assert source["producer_readiness"]["packet_measurement_complete"] is True
+    assert fleet["producer_readiness"]["runtime_sources"] == 1
+    assert fleet["producer_readiness"]["heartbeat_v6_sources"] == 1
+    assert fleet["producer_readiness"]["packet_measurement_complete_sources"] == 1
+    assert fleet["online_producer_readiness"] == fleet["producer_readiness"]

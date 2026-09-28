@@ -1056,3 +1056,31 @@ The online projection is descriptive only and does not affect attention,
 desired state, capture authority, semantic events, or producer control.
 
 Bootstrap v32 embeds fleet v29 and health advances to v60.
+
+
+### Coherent bootstrap runtime snapshot
+
+VisionRig 0.83.0 advances the bootstrap contract to
+`visionrig/sensor-bootstrap-snapshot/v33`.
+
+Bootstrap now obtains one `SensorIngress.stats()` sample and passes that same
+runtime snapshot into both catalog and fleet projection. Fleet
+`producer_readiness`, `online_producer_readiness`, heartbeat coverage,
+packet measurement state, and per-source catalog runtime/readiness therefore
+describe the same sampled runtime state.
+
+Previously catalog and fleet projection could independently sample runtime
+state, allowing a heartbeat or liveness transition between the reads to make a
+single bootstrap internally inconsistent.
+
+The existing cursor-first rule remains unchanged: the sensor change cursor is
+sampled before state construction, so concurrent semantic changes may be
+replayed by the client but cannot be silently missed.
+
+Producer-readiness transition metadata is also bound to the sampled readiness.
+If a concurrent runtime mutation makes the captured transition state describe a
+different readiness projection, bootstrap suppresses that mismatched historical
+delta/timestamp rather than combining states from two instants. The subsequent
+change remains replayable from the captured change cursor.
+
+Catalog v15 and fleet v29 payload shapes are unchanged. Health advances to v61.

@@ -398,11 +398,19 @@ def create_app(
 
     def producer_readiness_transition_payload(
         current_readiness: dict[str, object],
+        transition_state: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        previous_readiness = producer_readiness_transition_state["previous"]
+        state = transition_state or producer_readiness_transition_state
+        if state.get("current") != current_readiness:
+            state = {
+                "current": current_readiness,
+                "previous": None,
+                "changed_utc": None,
+            }
+        previous_readiness = state["previous"]
         return {
             "previous": previous_readiness,
-            "changed_utc": producer_readiness_transition_state["changed_utc"],
+            "changed_utc": state["changed_utc"],
             "heartbeat_v6_sources_delta": (
                 current_readiness["heartbeat_v6_sources"]
                 - previous_readiness["heartbeat_v6_sources"]
@@ -446,8 +454,12 @@ def create_app(
             ),
         }
 
-    def sensor_fleet_summary_payload() -> dict[str, object]:
-        runtime_status = sensor_ingress.stats()
+    def sensor_fleet_summary_payload(
+        runtime_status=None,
+        transition_state: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        if runtime_status is None:
+            runtime_status = sensor_ingress.stats()
         runtime_by_id = {
             source.source_id: source
             for source in runtime_status.sources
@@ -896,49 +908,15 @@ def create_app(
         )
         heartbeat_upgrade_candidate_total = len(heartbeat_upgrade_candidates)
         bounded_heartbeat_upgrade_candidates = heartbeat_upgrade_candidates[:32]
-        runtime_sources = heartbeat_schema_coverage["runtime_sources"]
-        packet_measurement_gap_runtime_sources = (
-            packet_target_measurement_gap_total
+        producer_readiness = readiness_projection(runtime_status.sources)
+        online_producer_readiness = readiness_projection(
+            source
+            for source in runtime_status.sources
+            if source.presence == "online"
         )
-        packet_measurement_complete_runtime_sources = max(
-            0,
-            runtime_sources - packet_measurement_gap_runtime_sources,
-        )
-        producer_readiness = {
-            "runtime_sources": runtime_sources,
-            "heartbeat_v6_sources": heartbeat_schema_coverage["v6"],
-            "heartbeat_upgrade_required": (
-                heartbeat_schema_coverage["upgrade_required"]
-            ),
-            "heartbeat_v6_ratio": (
-                round(
-                    heartbeat_schema_coverage["v6"] / runtime_sources,
-                    6,
-                )
-                if runtime_sources
-                else None
-            ),
-            "packet_measurement_complete_sources": (
-                packet_measurement_complete_runtime_sources
-            ),
-            "packet_measurement_gap_sources": (
-                packet_measurement_gap_runtime_sources
-            ),
-            "packet_measurement_complete_ratio": (
-                round(
-                    packet_measurement_complete_runtime_sources
-                    / runtime_sources,
-                    6,
-                )
-                if runtime_sources
-                else None
-            ),
-        }
-
-        producer_readiness = producer_readiness_payload()
-        online_producer_readiness = online_producer_readiness_payload()
         producer_readiness_transition = producer_readiness_transition_payload(
-            producer_readiness
+            producer_readiness,
+            transition_state=transition_state,
         )
 
         return {
@@ -1026,7 +1004,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v60",
+            "schema": "visionrig/health/v61",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -1095,7 +1073,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v32",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             },
         }
 
@@ -1132,9 +1110,9 @@ def create_app(
             wait_seconds=wait_seconds,
         )
 
-    @app.get("/api/v1/sensors/catalog")
-    def sensor_catalog() -> dict[str, object]:
-        runtime_status = sensor_ingress.stats()
+    def sensor_catalog_payload(runtime_status=None) -> dict[str, object]:
+        if runtime_status is None:
+            runtime_status = sensor_ingress.stats()
         runtime_by_id = {source.source_id: source for source in runtime_status.sources}
         metadata_by_id = {entry.source_id: entry for entry in registry.list()}
         source_ids = sorted(set(runtime_by_id) | set(metadata_by_id))
@@ -1284,20 +1262,41 @@ def create_app(
             "sources": sources,
         }
 
+    @app.get("/api/v1/sensors/catalog")
+    def sensor_catalog() -> dict[str, object]:
+        return sensor_catalog_payload()
+
     @app.get("/api/v1/sensors/bootstrap")
     def sensor_bootstrap_snapshot() -> dict[str, object]:
         # Sample the change cursor before building state. Changes racing with
         # snapshot construction may be replayed, but cannot be missed.
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
+        runtime_status = sensor_ingress.stats()
+        transition_state = {
+            "current": (
+                dict(producer_readiness_transition_state["current"])
+                if producer_readiness_transition_state["current"] is not None
+                else None
+            ),
+            "previous": (
+                dict(producer_readiness_transition_state["previous"])
+                if producer_readiness_transition_state["previous"] is not None
+                else None
+            ),
+            "changed_utc": producer_readiness_transition_state["changed_utc"],
+        }
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v32",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
             "change_cursor": baseline_cursor,
-            "catalog": sensor_catalog(),
-            "fleet": sensor_fleet_summary_payload(),
+            "catalog": sensor_catalog_payload(runtime_status),
+            "fleet": sensor_fleet_summary_payload(
+                runtime_status,
+                transition_state=transition_state,
+            ),
         }
 
     @app.get(
