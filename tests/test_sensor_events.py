@@ -122,6 +122,7 @@ def test_sensor_change_feed_emits_semantic_changes_without_heartbeat_spam() -> N
     assert runtime_batch["entries"][0]["event"]["payload"] == {
         "capture_active": False,
         "applied_revision": 1,
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v2",
         "negotiated_max_payload_bytes": None,
         "negotiated_packet_compression": None,
         "negotiated_packet_target_utilization": None,
@@ -958,3 +959,60 @@ def test_target_utilization_change_emits_runtime_event() -> None:
         ]
         == 0.65
     )
+
+
+def test_heartbeat_schema_upgrade_emits_one_runtime_change_without_telemetry_spam() -> None:
+    journal = SensorChangeJournal(stream_id="heartbeat-upgrade")
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_change_journal=journal,
+        )
+    )
+
+    v5 = {
+        "schema_id": "visionrig/sensor-heartbeat/v5",
+        "source_id": "remote-kinect-upgrade",
+        "source_type": "camera",
+        "capture_active": True,
+        "applied_revision": 0,
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-28T06:30:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+    assert client.post("/api/v1/sensors/heartbeat", json=v5).status_code == 200
+    initial = client.get("/api/v1/sensors/changes").json()
+    cursor = initial["next_cursor"]
+
+    v6 = dict(v5)
+    v6["schema_id"] = "visionrig/sensor-heartbeat/v6"
+    v6["observed_packet_utilization"] = 0.70
+    assert client.post("/api/v1/sensors/heartbeat", json=v6).status_code == 200
+
+    upgraded = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert [entry["event"]["kind"] for entry in upgraded["entries"]] == [
+        "runtime_changed"
+    ]
+    payload = upgraded["entries"][0]["event"]["payload"]
+    assert payload["heartbeat_schema_id"] == "visionrig/sensor-heartbeat/v6"
+    assert payload["negotiated_packet_target_utilization"] == 0.72
+    cursor = upgraded["next_cursor"]
+
+    telemetry_only = dict(v6)
+    telemetry_only["observed_packet_utilization"] = 0.76
+    telemetry_only["capability_refreshed_utc"] = "2026-09-28T06:30:30+00:00"
+    assert (
+        client.post("/api/v1/sensors/heartbeat", json=telemetry_only).status_code
+        == 200
+    )
+    quiet = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": cursor},
+    ).json()
+    assert quiet["entries"] == []
+    assert quiet["next_cursor"] == cursor
