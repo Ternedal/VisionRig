@@ -5,6 +5,7 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 from typing import Callable, Literal
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -71,6 +72,7 @@ def create_app(
         raise ValueError("packet_target_flap_window_seconds must be > 0")
     packet_target_flap_window_seconds = float(packet_target_flap_window_seconds)
     app = FastAPI(title="VisionRig", version=__version__)
+    service_instance_id = "visionrig-instance:" + uuid4().hex
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
     runtime = VisionRuntime(
         selected_pipeline,
@@ -1123,7 +1125,8 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v65",
+            "schema": "visionrig/health/v66",
+            "service_instance_id": service_instance_id,
             "perception_schema": "visionrig/perception-event/v4",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
