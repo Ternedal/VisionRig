@@ -622,3 +622,14 @@ meaningful semantic perception, and an exact-bound ModelRig admission receipt
 that proves at least one WorldState change. The receipt contains no raw frame
 bytes and grants no identity, memory, execution, scheduling or production
 authority. See `docs/KINECT_V2.md`.
+
+
+## VisionRig 0.81.1: shared producer-readiness semantics
+
+Fleet heartbeat-upgrade candidates and per-source catalog
+`producer_readiness` now use one shared source-level readiness classifier.
+
+This is an internal semantic-hardening release: public payload shapes are
+unchanged, but heartbeat upgrade stage, version distance, required schema and
+packet-measurement state can no longer drift between fleet and catalog code
+paths.
