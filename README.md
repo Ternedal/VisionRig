@@ -597,3 +597,16 @@ observational and do not advance transition timestamps.
 
 This preserves the existing process-local/non-authoritative semantics while
 making `changed_utc` suitable for UI timelines and migration diagnostics.
+
+
+## VisionRig 0.80.0: per-source producer readiness
+
+Sensor catalog now exposes a `producer_readiness` block for every known
+source. Runtime sources report whether they are on heartbeat v6, whether a
+contract upgrade is required, the current/required heartbeat schema, version
+distance, upgrade stage, and whether packet-target measurement is complete.
+
+Catalog-only sources deliberately use `null` for runtime readiness facts
+instead of being treated as failed producers. This keeps row-level UI semantics
+aligned with fleet producer readiness, which is based only on active runtime
+sources.

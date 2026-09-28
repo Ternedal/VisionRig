@@ -966,7 +966,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v58",
+            "schema": "visionrig/health/v59",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -1035,7 +1035,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v30",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v31",
             },
         }
 
@@ -1116,6 +1116,21 @@ def create_app(
                 runtime_source,
                 packet_target_status,
             )
+            heartbeat_schema_id = (
+                runtime_source.heartbeat_schema_id
+                if runtime_source is not None
+                else None
+            )
+            heartbeat_version = (
+                heartbeat_schema_id.rsplit("/", 1)[-1]
+                if heartbeat_schema_id is not None
+                else None
+            )
+            heartbeat_versions_behind = (
+                6 - int(heartbeat_version[1:])
+                if heartbeat_version in {"v2", "v3", "v4", "v5"}
+                else None
+            )
             sources.append(
                 {
                     "source_id": source_id,
@@ -1138,6 +1153,51 @@ def create_app(
                         if discovery is not None
                         else None
                     ),
+                    "producer_readiness": {
+                        "runtime_available": runtime_source is not None,
+                        "heartbeat_v6": (
+                            heartbeat_schema_id
+                            == "visionrig/sensor-heartbeat/v6"
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "heartbeat_upgrade_required": (
+                            heartbeat_schema_id
+                            != "visionrig/sensor-heartbeat/v6"
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "heartbeat_schema_id": heartbeat_schema_id,
+                        "required_heartbeat_schema_id": (
+                            "visionrig/sensor-heartbeat/v6"
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "heartbeat_versions_behind": heartbeat_versions_behind,
+                        "heartbeat_upgrade_stage": (
+                            (
+                                "contract_upgrade"
+                                if heartbeat_versions_behind is not None
+                                else "establish_heartbeat"
+                            )
+                            if (
+                                runtime_source is not None
+                                and heartbeat_schema_id
+                                != "visionrig/sensor-heartbeat/v6"
+                            )
+                            else None
+                        ),
+                        "packet_measurement_complete": (
+                            packet_target_measurement == "complete"
+                            if runtime_source is not None
+                            else None
+                        ),
+                        "packet_measurement": (
+                            packet_target_measurement
+                            if runtime_source is not None
+                            else None
+                        ),
+                    },
                     "packet_target": {
                         "measurement": packet_target_measurement,
                         "status": packet_target_status,
@@ -1216,7 +1276,7 @@ def create_app(
                 }
             )
         return {
-            "schema": "visionrig/sensor-catalog/v14",
+            "schema": "visionrig/sensor-catalog/v15",
             "sources": sources,
         }
 
@@ -1227,7 +1287,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v30",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v31",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,

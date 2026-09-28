@@ -986,3 +986,32 @@ semantic change event, attention reason, desired-state mutation, capture
 decision, or producer control action is introduced.
 
 Bootstrap v30 embeds fleet v28 and health advances to v58.
+
+
+### Per-source producer readiness
+
+VisionRig 0.80.0 advances sensor catalog to v15 and adds a
+`producer_readiness` object to each source row.
+
+For runtime-backed sources it exposes:
+
+- `runtime_available`;
+- `heartbeat_v6`;
+- `heartbeat_upgrade_required`;
+- `heartbeat_schema_id`;
+- `required_heartbeat_schema_id`;
+- `heartbeat_versions_behind`;
+- `heartbeat_upgrade_stage`;
+- `packet_measurement_complete`;
+- `packet_measurement`.
+
+The heartbeat distance/stage semantics match the fleet upgrade candidate
+contract. Heartbeat v6 sources have no upgrade stage or version distance.
+Runtime sources with no accepted heartbeat use `establish_heartbeat`.
+
+For catalog-only sources without current runtime state,
+`runtime_available=false` and all readiness facts are `null`. They are
+therefore not misrepresented as unhealthy producers.
+
+This projection is descriptive only and adds no attention, semantic event, or
+control behavior. Bootstrap v31 embeds catalog v15 and health advances to v59.

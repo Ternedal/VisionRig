@@ -75,7 +75,7 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     catalog = client.get("/api/v1/sensors/catalog")
     assert catalog.status_code == 200
     body = catalog.json()
-    assert body["schema"] == "visionrig/sensor-catalog/v14"
+    assert body["schema"] == "visionrig/sensor-catalog/v15"
     assert len(body["sources"]) == 1
 
     source = body["sources"][0]
@@ -105,6 +105,17 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
     assert source["lifecycle"] == {
         "status": "active",
         "retired_utc": None,
+    }
+    assert source["producer_readiness"] == {
+        "runtime_available": True,
+        "heartbeat_v6": False,
+        "heartbeat_upgrade_required": True,
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v4",
+        "required_heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "heartbeat_versions_behind": 2,
+        "heartbeat_upgrade_stage": "contract_upgrade",
+        "packet_measurement_complete": False,
+        "packet_measurement": "unavailable",
     }
     assert source["packet_target"] == {
         "measurement": "unavailable",
@@ -154,6 +165,17 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
     catalog = client.get("/api/v1/sensors/catalog").json()
     assert catalog["sources"][0]["runtime"] is None
     assert catalog["sources"][0]["metadata"]["enabled"] is False
+    assert catalog["sources"][0]["producer_readiness"] == {
+        "runtime_available": False,
+        "heartbeat_v6": None,
+        "heartbeat_upgrade_required": None,
+        "heartbeat_schema_id": None,
+        "required_heartbeat_schema_id": None,
+        "heartbeat_versions_behind": None,
+        "heartbeat_upgrade_stage": None,
+        "packet_measurement_complete": None,
+        "packet_measurement": None,
+    }
     assert catalog["sources"][0]["packet_target"] == {
         "measurement": "unavailable",
         "status": "unknown",
@@ -206,7 +228,7 @@ def test_health_reports_registry_surface() -> None:
     client = TestClient(create_app(PerceptionPipeline(), sensor_registry=registry))
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v58"
+    assert health["schema"] == "visionrig/health/v59"
     assert health["sensor_registry"] == {
         "schema": "visionrig/sensor-registry/v7",
         "state_revision": 1,
@@ -697,7 +719,7 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     assert unknown_item["pending_seconds"] is None
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v58"
+    assert health["schema"] == "visionrig/health/v59"
     health_fleet = health["sensor_fleet"]
     assert health_fleet["schema"] == fleet["schema"]
     assert health_fleet["total"] == fleet["total"]

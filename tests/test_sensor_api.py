@@ -65,7 +65,7 @@ def test_sensor_status_tracks_sources_drops_and_health(monkeypatch) -> None:
     assert source["last_seen_utc"].endswith("+00:00")
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v58"
+    assert health["schema"] == "visionrig/health/v59"
     assert health["sensor_ingress"]["schema"] == "visionrig/sensor-ingress/v9"
     assert health["sensor_ingress"]["heartbeat_schemas"] == [
         "visionrig/sensor-heartbeat/v2",
@@ -698,7 +698,7 @@ def test_catalog_exposes_flapping_packet_target_stability() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
 
     catalog = client.get("/api/v1/sensors/catalog").json()
-    assert catalog["schema"] == "visionrig/sensor-catalog/v14"
+    assert catalog["schema"] == "visionrig/sensor-catalog/v15"
     packet_target = catalog["sources"][0]["packet_target"]
     assert packet_target["status"] == "above_target"
     assert packet_target["pressure"] == "sustained"
@@ -1035,6 +1035,28 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
     assert by_id["camera-measured"]["runtime"]["heartbeat_schema_id"] == (
         "visionrig/sensor-heartbeat/v6"
     )
+    assert by_id["camera-target-only"]["producer_readiness"] == {
+        "runtime_available": True,
+        "heartbeat_v6": False,
+        "heartbeat_upgrade_required": True,
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v5",
+        "required_heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "heartbeat_versions_behind": 1,
+        "heartbeat_upgrade_stage": "contract_upgrade",
+        "packet_measurement_complete": False,
+        "packet_measurement": "target_only",
+    }
+    assert by_id["camera-measured"]["producer_readiness"] == {
+        "runtime_available": True,
+        "heartbeat_v6": True,
+        "heartbeat_upgrade_required": False,
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "required_heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "heartbeat_versions_behind": None,
+        "heartbeat_upgrade_stage": None,
+        "packet_measurement_complete": True,
+        "packet_measurement": "complete",
+    }
     assert by_id["camera-target-only"]["packet_target"]["measurement"] == (
         "target_only"
     )
