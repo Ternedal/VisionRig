@@ -47,7 +47,7 @@ class _StrictModel(BaseModel):
 
 
 class KinectPhysicalAcceptanceReceipt(_StrictModel):
-    schema: Literal["visionrig/kinect-physical-acceptance/v1"]
+    schema: Literal["visionrig/kinect-physical-acceptance/v2"]
     generated_at: datetime
     visionrig_version: str
     visionrig_git_sha: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
@@ -63,6 +63,9 @@ class KinectPhysicalAcceptanceReceipt(_StrictModel):
     raw_depth_frames: Annotated[int, Field(ge=1)]
     aligned_depth_frames: Annotated[int, Field(ge=1)]
     infrared_frames: Annotated[int, Field(ge=1)]
+    infrared_semantic_frames: Annotated[int, Field(ge=1)]
+    infrared_observations: Annotated[int, Field(ge=1)]
+    perception_schema: Literal["visionrig/perception-event/v4"]
     semantic_events: Annotated[int, Field(ge=1)]
     semantic_observations: Annotated[int, Field(ge=1)]
     modelrig_receipts: Annotated[int, Field(ge=1)]
@@ -147,6 +150,7 @@ def _semantic_observation_count(event: PerceptionEvent) -> int:
         + len(event.relations)
         + len(event.landmarks)
         + len(event.depth)
+        + len(event.infrared)
         + (1 if event.scene_label is not None else 0)
     )
 
@@ -178,6 +182,7 @@ def collect_kinect_physical_acceptance(
     semantic_events = 0
     semantic_observations = 0
     rgb_frames = raw_depth_frames = aligned_depth_frames = infrared_frames = 0
+    infrared_semantic_frames = infrared_observations = 0
     event_refs: list[str] = []
     evidence_refs: list[str] = []
     world_changed = 0
@@ -223,6 +228,16 @@ def collect_kinect_physical_acceptance(
                 )
 
             event = runtime.process_direct(frame)
+            if event.schema_id != "visionrig/perception-event/v4":
+                raise KinectPhysicalAcceptanceError(
+                    f"physical acceptance requires PerceptionEvent/v4, got {event.schema_id}"
+                )
+            if not event.infrared:
+                raise KinectPhysicalAcceptanceError(
+                    "Kinect infrared signal did not produce a bounded PerceptionEvent/v4 infrared summary"
+                )
+            infrared_semantic_frames += 1
+            infrared_observations += len(event.infrared)
             count = _semantic_observation_count(event)
             if count <= 0:
                 continue
@@ -246,6 +261,10 @@ def collect_kinect_physical_acceptance(
 
     if len(sequences) != frame_count:
         raise KinectPhysicalAcceptanceError("physical evidence window is incomplete")
+    if infrared_semantic_frames != frame_count or infrared_observations < frame_count:
+        raise KinectPhysicalAcceptanceError(
+            "physical evidence window did not preserve infrared perception on every frame"
+        )
     if semantic_events <= 0 or semantic_observations <= 0:
         raise KinectPhysicalAcceptanceError(
             "no meaningful semantic perception was observed; place a detectable subject "
@@ -261,7 +280,7 @@ def collect_kinect_physical_acceptance(
         )
 
     return KinectPhysicalAcceptanceReceipt(
-        schema="visionrig/kinect-physical-acceptance/v1",
+        schema="visionrig/kinect-physical-acceptance/v2",
         generated_at=datetime.now(timezone.utc),
         visionrig_version=version,
         visionrig_git_sha=git_sha,
@@ -277,6 +296,9 @@ def collect_kinect_physical_acceptance(
         raw_depth_frames=raw_depth_frames,
         aligned_depth_frames=aligned_depth_frames,
         infrared_frames=infrared_frames,
+        infrared_semantic_frames=infrared_semantic_frames,
+        infrared_observations=infrared_observations,
+        perception_schema="visionrig/perception-event/v4",
         semantic_events=semantic_events,
         semantic_observations=semantic_observations,
         modelrig_receipts=len(event_refs),
