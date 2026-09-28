@@ -313,6 +313,10 @@ def _validate_bridge_binding(
         raise PhysicalPerceptionQualificationError(
             "ModelRig receipt frame sequence mismatch"
         )
+    if receipt.get("world_changed") is not True:
+        raise PhysicalPerceptionQualificationError(
+            "ModelRig receipt did not prove a WorldState change"
+        )
     if receipt.get("epistemic_status") != "inferred":
         raise PhysicalPerceptionQualificationError(
             "ModelRig receipt epistemic status is not inferred"
