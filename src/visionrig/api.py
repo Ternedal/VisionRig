@@ -1041,6 +1041,10 @@ def create_app(
                         if modelrig_publisher.last_result is not None
                         else None
                     ),
+                    "last_result": modelrig_publisher.last_result_snapshot(),
+                    "successful_results": (
+                        modelrig_publisher.successful_result_snapshots()
+                    ),
                 }
                 if modelrig_publisher is not None
                 else {"enabled": False}
