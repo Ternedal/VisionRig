@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 import visionrig.sensor_ingress as sensor_ingress
 from visionrig.api import create_app
 from visionrig.pipeline import PerceptionPipeline
