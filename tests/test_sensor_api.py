@@ -1366,8 +1366,33 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
         "packet_measurement_gap_sources": 1,
         "packet_measurement_complete_ratio": 0.0,
     }
+    assert fleet["online_producer_readiness_expiry"] == {
+        "next_change_utc": "2026-09-28T06:02:15+00:00",
+        "next_change_seconds": 15.0,
+        "source_id": "camera-current-v5",
+    }
+
+    now[0] = datetime(2026, 9, 28, 6, 2, 10, tzinfo=timezone.utc)
+    aging = client.get("/api/v1/sensors/fleet").json()
+    assert aging["online_producer_readiness_expiry"] == {
+        "next_change_utc": "2026-09-28T06:02:15+00:00",
+        "next_change_seconds": 5.0,
+        "source_id": "camera-current-v5",
+    }
+
+    now[0] = datetime(2026, 9, 28, 6, 2, 16, tzinfo=timezone.utc)
+    stale = client.get("/api/v1/sensors/fleet").json()
+    assert stale["online_producer_readiness"]["runtime_sources"] == 0
+    assert stale["online_producer_readiness_expiry"] == {
+        "next_change_utc": None,
+        "next_change_seconds": None,
+        "source_id": None,
+    }
 
     health = client.get("/health").json()
     assert health["sensor_fleet"]["online_producer_readiness"] == (
-        fleet["online_producer_readiness"]
+        stale["online_producer_readiness"]
+    )
+    assert health["sensor_fleet"]["online_producer_readiness_expiry"] == (
+        stale["online_producer_readiness_expiry"]
     )
