@@ -441,21 +441,34 @@ def create_app(
                 producer_readiness_transition_state["changed_utc"] = None
             elif current_readiness != stored_readiness:
                 changed_utc = effective_sensor_clock().isoformat()
+                prior_state = producer_readiness_transition_snapshot()
                 producer_readiness_transition_state["previous"] = stored_readiness
                 producer_readiness_transition_state["current"] = current_readiness
                 producer_readiness_transition_state["changed_utc"] = changed_utc
-                append_sensor_change(
-                    kind="producer_readiness_changed",
-                    source_id=source_id,
-                    occurred_utc=changed_utc,
-                    payload={
-                        "previous": stored_readiness,
-                        "current": current_readiness,
-                        "transition": producer_readiness_transition_payload(
-                            current_readiness
-                        ),
-                    },
-                )
+                try:
+                    append_sensor_change(
+                        kind="producer_readiness_changed",
+                        source_id=source_id,
+                        occurred_utc=changed_utc,
+                        payload={
+                            "previous": stored_readiness,
+                            "current": current_readiness,
+                            "transition": producer_readiness_transition_payload(
+                                current_readiness
+                            ),
+                        },
+                    )
+                except Exception:
+                    producer_readiness_transition_state["current"] = prior_state[
+                        "current"
+                    ]
+                    producer_readiness_transition_state["previous"] = prior_state[
+                        "previous"
+                    ]
+                    producer_readiness_transition_state["changed_utc"] = prior_state[
+                        "changed_utc"
+                    ]
+                    raise
 
     def producer_readiness_transition_snapshot() -> dict[str, object]:
         with producer_readiness_transition_lock:
