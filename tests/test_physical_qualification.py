@@ -1,0 +1,283 @@
+from __future__ import annotations
+
+import hashlib
+import json
+
+import pytest
+
+from visionrig.physical_qualification import (
+    PhysicalPerceptionQualificationError,
+    qualify_physical_perception,
+)
+
+
+def _event(*, sequence: int = 11) -> dict:
+    return {
+        "schema_id": "visionrig/perception-event/v3",
+        "event_id": "evt-physical-11",
+        "observed_at": "2026-09-28T05:00:00Z",
+        "source": {
+            "source_id": "kinect-v2-0",
+            "source_type": "camera",
+            "device": "kinect-v2",
+        },
+        "frame_sequence": sequence,
+        "entities": [
+            {
+                "entity_id": "person-1",
+                "kind": "person",
+                "label": "person",
+                "confidence": 0.95,
+                "bbox": None,
+                "track_id": None,
+                "identity_hint": None,
+            }
+        ],
+        "relations": [],
+        "landmarks": [],
+        "depth": [],
+        "scene_label": None,
+        "scene_confidence": None,
+        "dropped_frames": 0,
+        "production_authority": False,
+    }
+
+
+def _event_ref(event: dict) -> str:
+    payload = json.dumps(
+        event,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return "visionrig-event:" + hashlib.sha256(payload).hexdigest()
+
+
+def _source(*, accepted: int, sequence: int) -> dict:
+    return {
+        "source_id": "kinect-v2-0",
+        "source_type": "camera",
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "device": "kinect-v2",
+        "capabilities": ["rgb", "depth"],
+        "capture_active": True,
+        "applied_revision": 1,
+        "negotiated_max_payload_bytes": None,
+        "negotiated_packet_compression": None,
+        "negotiated_packet_target_utilization": None,
+        "observed_packet_utilization": None,
+        "packet_target_above_streak": 0,
+        "packet_target_above_since_utc": None,
+        "packet_target_above_seconds": None,
+        "packet_target_last_above_utc": None,
+        "packet_target_sustained_episode_count": 0,
+        "packet_target_last_recovered_utc": None,
+        "packet_target_recurrence_count": 0,
+        "packet_target_last_recurrence_seconds": None,
+        "capability_refreshed_utc": None,
+        "capability_refresh_observed_utc": None,
+        "capability_refresh_age_seconds": None,
+        "capability_refresh_status": "unknown",
+        "presence": "online",
+        "age_seconds": 0.05,
+        "last_sequence": sequence,
+        "accepted_frames": accepted,
+        "heartbeat_count": 5,
+        "dropped_frames_total": 0,
+        "packet_transport": None,
+        "last_seen_utc": "2026-09-28T05:00:00Z",
+    }
+
+
+def _receipt(event: dict, *, activation: bool = False) -> dict:
+    return {
+        "schema": "kaliv-consciousness-core/visionrig-admission/v1",
+        "visionrig_event_ref": _event_ref(event),
+        "evidence_ref": "world-evidence:" + "a" * 64,
+        "cognition_event_id": "cevt-" + "b" * 32,
+        "world_changed": True,
+        "replayed": False,
+        "cognition_event_queued": True,
+        "epistemic_status": "inferred",
+        "confidence": 0.9,
+        "attention_salience": 0.7,
+        "observed_sequence": event["frame_sequence"],
+        "model_calls": 0,
+        "self_state_store_write_applied": False,
+        "durable_memory_write_authority": False,
+        "execution_authority": False,
+        "scheduling_authority": False,
+        "production_activation": activation,
+    }
+
+
+def _health(*, event: dict | None = None, activation: bool = False) -> dict:
+    result = None
+    if event is not None:
+        result = {
+            "status": "published",
+            "source_id": event["source"]["source_id"],
+            "frame_sequence": event["frame_sequence"],
+            "reason": None,
+            "receipt": _receipt(event, activation=activation),
+        }
+    return {
+        "status": "ok",
+        "service": "visionrig",
+        "schema": "visionrig/health/v59",
+        "perception_schema": "visionrig/perception-event/v3",
+        "modelrig_bridge": {
+            "enabled": True,
+            "endpoint": "http://127.0.0.1:8099/experimental/consciousness/visionrig-event",
+            "stats": {
+                "published": 1 if event is not None else 0,
+                "replayed": 0,
+                "suppressed": 0,
+                "unavailable": 0,
+                "rejected": 0,
+            },
+            "last_status": "published" if event is not None else None,
+            "last_result": result,
+        },
+    }
+
+
+def test_physical_qualification_binds_fresh_camera_event_to_modelrig_receipt() -> None:
+    event = _event()
+    health_calls = 0
+    status_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls, status_calls
+        assert timeout == 5.0
+        if url.endswith("/health"):
+            health_calls += 1
+            return _health(event=event if health_calls > 1 else None)
+        if url.endswith("/api/v1/sensors/status"):
+            status_calls += 1
+            return {
+                "schema": "visionrig/sensor-ingress/v9",
+                "sources": [
+                    _source(
+                        accepted=11 if status_calls > 1 else 10,
+                        sequence=11 if status_calls > 1 else 10,
+                    )
+                ],
+            }
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        if "after_cursor=4" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [{"cursor": 5, "event": event}],
+                "next_cursor": 5,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 5,
+                "gap": False,
+            }
+        raise AssertionError(url)
+
+    tick = [0.0]
+
+    def monotonic() -> float:
+        tick[0] += 0.01
+        return tick[0]
+
+    report = qualify_physical_perception(
+        "http://127.0.0.1:8110",
+        source_id="kinect-v2-0",
+        timeout_seconds=2.0,
+        http_json=http_json,
+        monotonic=monotonic,
+        sleep_fn=lambda _seconds: None,
+    )
+
+    assert report["gate"]["passed"] is True
+    assert report["gate"]["physical_perception_qualified"] is True
+    assert report["gate"]["production_activation"] is False
+    assert report["physical_source"]["source_type"] == "camera"
+    assert report["event"]["frame_sequence"] == 11
+    assert report["event"]["visionrig_event_ref"] == _event_ref(event)
+    assert report["modelrig_admission"]["model_calls"] == 0
+    assert report["privacy"] == {
+        "raw_frame_included": False,
+        "ocr_text_included": False,
+        "landmarks_included": False,
+        "semantic_payload_included": False,
+    }
+    encoded = json.dumps(report)
+    assert "person-1" not in encoded
+    assert '"label"' not in encoded
+
+
+def test_physical_qualification_rejects_modelrig_authority_overclaim() -> None:
+    event = _event()
+
+    def http_json(url: str, *, timeout: float):
+        if url.endswith("/health"):
+            return _health(event=event, activation=True)
+        if url.endswith("/api/v1/sensors/status"):
+            return {"sources": [_source(accepted=10, sequence=10)]}
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        return {
+            "schema_id": "visionrig/event-batch/v1",
+            "entries": [{"cursor": 5, "event": event}],
+            "next_cursor": 5,
+            "oldest_available_cursor": 1,
+            "newest_available_cursor": 5,
+            "gap": False,
+        }
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="overclaimed production_activation",
+    ):
+        qualify_physical_perception(
+            "http://127.0.0.1:8110",
+            source_id="kinect-v2-0",
+            timeout_seconds=1.0,
+            http_json=http_json,
+            monotonic=lambda: 0.1,
+            sleep_fn=lambda _seconds: None,
+        )
+
+
+def test_physical_qualification_rejects_nonphysical_or_remote_inputs() -> None:
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="must be loopback",
+    ):
+        qualify_physical_perception("http://192.168.1.10:8110")
+
+    def http_json(url: str, *, timeout: float):
+        if url.endswith("/health"):
+            return _health()
+        if url.endswith("/api/v1/sensors/status"):
+            source = _source(accepted=10, sequence=10)
+            source["source_type"] = "image"
+            return {"sources": [source]}
+        raise AssertionError(url)
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="no online physical camera/VR source",
+    ):
+        qualify_physical_perception(
+            "http://127.0.0.1:8110",
+            http_json=http_json,
+        )
