@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
+from threading import RLock
 from typing import Callable, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -93,6 +94,7 @@ def create_app(
         "previous": None,
         "changed_utc": None,
     }
+    producer_readiness_transition_lock = RLock()
 
     def raise_state_revision_conflict(
         exc: SensorStateRevisionConflict,
@@ -111,11 +113,13 @@ def create_app(
         kind,
         source_id: str,
         payload: dict[str, object] | None = None,
+        occurred_utc: str | None = None,
     ):
         return sensor_changes.append(
             kind=kind,
             source_id=source_id,
             payload=payload,
+            occurred_utc=occurred_utc,
             state_revision=registry.state_revision,
         )
 
@@ -378,23 +382,35 @@ def create_app(
             if source.presence == "online"
         )
 
-    def refresh_producer_readiness_transition() -> None:
-        current_readiness = producer_readiness_payload()
-        stored_readiness = producer_readiness_transition_state["current"]
-        if (
-            stored_readiness is None
-            or current_readiness["runtime_sources"] == 0
-            or stored_readiness["runtime_sources"] == 0
-        ):
-            producer_readiness_transition_state["current"] = current_readiness
-            producer_readiness_transition_state["previous"] = None
-            producer_readiness_transition_state["changed_utc"] = None
-        elif current_readiness != stored_readiness:
-            producer_readiness_transition_state["previous"] = stored_readiness
-            producer_readiness_transition_state["current"] = current_readiness
-            producer_readiness_transition_state["changed_utc"] = (
-                effective_sensor_clock().isoformat()
-            )
+    def refresh_producer_readiness_transition(source_id: str) -> None:
+        with producer_readiness_transition_lock:
+            current_readiness = producer_readiness_payload()
+            stored_readiness = producer_readiness_transition_state["current"]
+            if (
+                stored_readiness is None
+                or current_readiness["runtime_sources"] == 0
+                or stored_readiness["runtime_sources"] == 0
+            ):
+                producer_readiness_transition_state["current"] = current_readiness
+                producer_readiness_transition_state["previous"] = None
+                producer_readiness_transition_state["changed_utc"] = None
+            elif current_readiness != stored_readiness:
+                changed_utc = effective_sensor_clock().isoformat()
+                producer_readiness_transition_state["previous"] = stored_readiness
+                producer_readiness_transition_state["current"] = current_readiness
+                producer_readiness_transition_state["changed_utc"] = changed_utc
+                append_sensor_change(
+                    kind="producer_readiness_changed",
+                    source_id=source_id,
+                    occurred_utc=changed_utc,
+                    payload={
+                        "previous": stored_readiness,
+                        "current": current_readiness,
+                        "transition": producer_readiness_transition_payload(
+                            current_readiness
+                        ),
+                    },
+                )
 
     def producer_readiness_transition_payload(
         current_readiness: dict[str, object],
@@ -1420,7 +1436,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         sensor_ingress.forget_source(source_id)
-        refresh_producer_readiness_transition()
+        refresh_producer_readiness_transition(source_id)
         append_sensor_change(
             kind="forgotten",
             source_id=source_id,
@@ -1514,7 +1530,7 @@ def create_app(
                 previous_discovery=previous_discovery,
             )
             emit_runtime_change(body.source_id, previous_runtime)
-            refresh_producer_readiness_transition()
+            refresh_producer_readiness_transition(source_id)
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1569,7 +1585,7 @@ def create_app(
                 was_registered=was_registered,
                 previous_discovery=previous_discovery,
             )
-            refresh_producer_readiness_transition()
+            refresh_producer_readiness_transition(source_id)
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1635,7 +1651,7 @@ def create_app(
                 was_registered=was_registered,
                 previous_discovery=previous_discovery,
             )
-            refresh_producer_readiness_transition()
+            refresh_producer_readiness_transition(source_id)
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
