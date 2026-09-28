@@ -1295,3 +1295,79 @@ def test_fleet_upgrade_candidate_matches_catalog_producer_readiness() -> None:
     assert candidate["measurement"] == readiness["packet_measurement"]
     assert readiness["heartbeat_upgrade_required"] is True
     assert readiness["packet_measurement_complete"] is False
+
+
+def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
+    now = [datetime(2026, 9, 28, 6, 0, tzinfo=timezone.utc)]
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: now[0],
+            sensor_stale_after_seconds=15.0,
+            sensor_offline_after_seconds=60.0,
+        )
+    )
+
+    offline_v6 = {
+        "schema_id": "visionrig/sensor-heartbeat/v6",
+        "source_id": "camera-old-v6",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-28T06:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+        "observed_packet_utilization": 0.70,
+    }
+    assert (
+        client.post("/api/v1/sensors/heartbeat", json=offline_v6).status_code
+        == 200
+    )
+
+    now[0] = datetime(2026, 9, 28, 6, 2, tzinfo=timezone.utc)
+    online_v5 = {
+        "schema_id": "visionrig/sensor-heartbeat/v5",
+        "source_id": "camera-current-v5",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-28T06:02:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+    assert (
+        client.post("/api/v1/sensors/heartbeat", json=online_v5).status_code
+        == 200
+    )
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["presence"] == {
+        "online": 1,
+        "stale": 0,
+        "offline": 1,
+        "unknown": 0,
+    }
+    assert fleet["producer_readiness"] == {
+        "runtime_sources": 2,
+        "heartbeat_v6_sources": 1,
+        "heartbeat_upgrade_required": 1,
+        "heartbeat_v6_ratio": 0.5,
+        "packet_measurement_complete_sources": 1,
+        "packet_measurement_gap_sources": 1,
+        "packet_measurement_complete_ratio": 0.5,
+    }
+    assert fleet["online_producer_readiness"] == {
+        "runtime_sources": 1,
+        "heartbeat_v6_sources": 0,
+        "heartbeat_upgrade_required": 1,
+        "heartbeat_v6_ratio": 0.0,
+        "packet_measurement_complete_sources": 0,
+        "packet_measurement_gap_sources": 1,
+        "packet_measurement_complete_ratio": 0.0,
+    }
+
+    health = client.get("/health").json()
+    assert health["sensor_fleet"]["online_producer_readiness"] == (
+        fleet["online_producer_readiness"]
+    )
