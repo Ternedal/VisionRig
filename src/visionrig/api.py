@@ -174,6 +174,10 @@ def create_app(
             or previous_runtime.capture_active != current_runtime.capture_active
             or previous_runtime.applied_revision != current_runtime.applied_revision
             or (
+                previous_runtime.heartbeat_schema_id
+                != current_runtime.heartbeat_schema_id
+            )
+            or (
                 previous_runtime.negotiated_max_payload_bytes
                 != current_runtime.negotiated_max_payload_bytes
             )
@@ -192,6 +196,7 @@ def create_app(
                 payload={
                     "capture_active": current_runtime.capture_active,
                     "applied_revision": current_runtime.applied_revision,
+                    "heartbeat_schema_id": current_runtime.heartbeat_schema_id,
                     "negotiated_max_payload_bytes": (
                         current_runtime.negotiated_max_payload_bytes
                     ),
