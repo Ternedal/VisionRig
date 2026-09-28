@@ -219,6 +219,72 @@ def test_physical_qualification_binds_fresh_camera_event_to_modelrig_receipt() -
     assert '"label"' not in encoded
 
 
+
+def test_physical_qualification_ignores_empty_v4_events_until_semantics_arrive() -> None:
+    empty_event = _event(sequence=11)
+    empty_event["entities"] = []
+    semantic_event = _event(sequence=12)
+    health_calls = 0
+    status_calls = 0
+    event_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls, status_calls, event_calls
+        if url.endswith("/health"):
+            health_calls += 1
+            return _health(event=semantic_event if health_calls > 1 else None)
+        if url.endswith("/api/v1/sensors/status"):
+            status_calls += 1
+            return {
+                "sources": [
+                    _source(
+                        accepted=12 if status_calls > 1 else 10,
+                        sequence=12 if status_calls > 1 else 10,
+                    )
+                ]
+            }
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        event_calls += 1
+        entries = (
+            [{"cursor": 5, "event": empty_event}, {"cursor": 6, "event": semantic_event}]
+            if event_calls == 1
+            else []
+        )
+        return {
+            "schema_id": "visionrig/event-batch/v1",
+            "entries": entries,
+            "next_cursor": 6,
+            "oldest_available_cursor": 1,
+            "newest_available_cursor": 6,
+            "gap": False,
+        }
+
+    tick = [0.0]
+
+    def monotonic() -> float:
+        tick[0] += 0.01
+        return tick[0]
+
+    report = qualify_physical_perception(
+        "http://127.0.0.1:8110",
+        source_id="kinect-v2-0",
+        timeout_seconds=2.0,
+        http_json=http_json,
+        monotonic=monotonic,
+        sleep_fn=lambda _seconds: None,
+    )
+
+    assert report["event"]["frame_sequence"] == 12
+    assert report["event"]["visionrig_event_ref"] == _event_ref(semantic_event)
+
 def test_physical_qualification_rejects_modelrig_authority_overclaim() -> None:
     event = _event()
 
