@@ -361,6 +361,10 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "runtime_sources": 0,
             "heartbeat_v6_sources": 0,
             "heartbeat_upgrade_required": 0,
+            "heartbeat_upgrade_stage_counts": {
+                "contract_upgrade": 0,
+                "establish_heartbeat": 0,
+            },
             "heartbeat_v6_ratio": None,
             "packet_measurement_complete_sources": 0,
             "packet_measurement_gap_sources": 0,
@@ -370,6 +374,10 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "runtime_sources": 0,
             "heartbeat_v6_sources": 0,
             "heartbeat_upgrade_required": 0,
+            "heartbeat_upgrade_stage_counts": {
+                "contract_upgrade": 0,
+                "establish_heartbeat": 0,
+            },
             "heartbeat_v6_ratio": None,
             "packet_measurement_complete_sources": 0,
             "packet_measurement_gap_sources": 0,
