@@ -1077,4 +1077,10 @@ The existing cursor-first rule remains unchanged: the sensor change cursor is
 sampled before state construction, so concurrent semantic changes may be
 replayed by the client but cannot be silently missed.
 
+Producer-readiness transition metadata is also bound to the sampled readiness.
+If a concurrent runtime mutation makes the captured transition state describe a
+different readiness projection, bootstrap suppresses that mismatched historical
+delta/timestamp rather than combining states from two instants. The subsequent
+change remains replayable from the captured change cursor.
+
 Catalog v15 and fleet v29 payload shapes are unchanged. Health advances to v61.
