@@ -243,6 +243,52 @@ def create_app(
             return "target_only"
         return "complete"
 
+    def producer_source_readiness_payload(runtime_source) -> dict[str, object]:
+        if runtime_source is None:
+            return {
+                "runtime_available": False,
+                "heartbeat_v6": None,
+                "heartbeat_upgrade_required": None,
+                "heartbeat_schema_id": None,
+                "required_heartbeat_schema_id": None,
+                "heartbeat_versions_behind": None,
+                "heartbeat_upgrade_stage": None,
+                "packet_measurement_complete": None,
+                "packet_measurement": None,
+            }
+        heartbeat_schema_id = runtime_source.heartbeat_schema_id
+        heartbeat_version = (
+            heartbeat_schema_id.rsplit("/", 1)[-1]
+            if heartbeat_schema_id is not None
+            else None
+        )
+        heartbeat_versions_behind = (
+            6 - int(heartbeat_version[1:])
+            if heartbeat_version in {"v2", "v3", "v4", "v5"}
+            else None
+        )
+        heartbeat_v6 = heartbeat_schema_id == "visionrig/sensor-heartbeat/v6"
+        packet_measurement = packet_target_measurement_status(runtime_source)
+        return {
+            "runtime_available": True,
+            "heartbeat_v6": heartbeat_v6,
+            "heartbeat_upgrade_required": not heartbeat_v6,
+            "heartbeat_schema_id": heartbeat_schema_id,
+            "required_heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+            "heartbeat_versions_behind": heartbeat_versions_behind,
+            "heartbeat_upgrade_stage": (
+                None
+                if heartbeat_v6
+                else (
+                    "contract_upgrade"
+                    if heartbeat_versions_behind is not None
+                    else "establish_heartbeat"
+                )
+            ),
+            "packet_measurement_complete": packet_measurement == "complete",
+            "packet_measurement": packet_measurement,
+        }
+
     def packet_target_compliance_status(runtime_source) -> str:
         if runtime_source is None:
             return "unknown"
@@ -573,13 +619,20 @@ def create_app(
                 if runtime_source is not None
                 else None
             )
-            packet_target_measurement = packet_target_measurement_status(
+            producer_source_readiness = producer_source_readiness_payload(
                 runtime_source
             )
+            packet_target_measurement = producer_source_readiness[
+                "packet_measurement"
+            ]
+            if packet_target_measurement is None:
+                packet_target_measurement = "unavailable"
             packet_target_measurement_coverage[packet_target_measurement] += 1
             if runtime_source is not None:
                 heartbeat_schema_coverage["runtime_sources"] += 1
-                heartbeat_schema_id = runtime_source.heartbeat_schema_id
+                heartbeat_schema_id = producer_source_readiness[
+                    "heartbeat_schema_id"
+                ]
                 heartbeat_version = (
                     heartbeat_schema_id.rsplit("/", 1)[-1]
                     if heartbeat_schema_id is not None
@@ -589,28 +642,23 @@ def create_app(
                     heartbeat_schema_coverage[heartbeat_version] += 1
                 else:
                     heartbeat_schema_coverage["no_heartbeat"] += 1
-                if heartbeat_schema_id != "visionrig/sensor-heartbeat/v6":
+                if producer_source_readiness["heartbeat_upgrade_required"]:
                     heartbeat_schema_coverage["upgrade_required"] += 1
-                    versions_behind = (
-                        6 - int(heartbeat_version[1:])
-                        if heartbeat_version in {"v2", "v3", "v4", "v5"}
-                        else None
-                    )
                     heartbeat_upgrade_candidates.append(
                         {
                             "source_id": source_id,
                             "presence": runtime_source.presence,
                             "current_schema_id": heartbeat_schema_id,
-                            "required_schema_id": (
-                                "visionrig/sensor-heartbeat/v6"
-                            ),
+                            "required_schema_id": producer_source_readiness[
+                                "required_heartbeat_schema_id"
+                            ],
                             "measurement": packet_target_measurement,
-                            "upgrade_stage": (
-                                "contract_upgrade"
-                                if versions_behind is not None
-                                else "establish_heartbeat"
-                            ),
-                            "versions_behind": versions_behind,
+                            "upgrade_stage": producer_source_readiness[
+                                "heartbeat_upgrade_stage"
+                            ],
+                            "versions_behind": producer_source_readiness[
+                                "heartbeat_versions_behind"
+                            ],
                         }
                     )
             if (
@@ -1116,20 +1164,8 @@ def create_app(
                 runtime_source,
                 packet_target_status,
             )
-            heartbeat_schema_id = (
-                runtime_source.heartbeat_schema_id
-                if runtime_source is not None
-                else None
-            )
-            heartbeat_version = (
-                heartbeat_schema_id.rsplit("/", 1)[-1]
-                if heartbeat_schema_id is not None
-                else None
-            )
-            heartbeat_versions_behind = (
-                6 - int(heartbeat_version[1:])
-                if heartbeat_version in {"v2", "v3", "v4", "v5"}
-                else None
+            producer_source_readiness = producer_source_readiness_payload(
+                runtime_source
             )
             sources.append(
                 {
@@ -1153,51 +1189,7 @@ def create_app(
                         if discovery is not None
                         else None
                     ),
-                    "producer_readiness": {
-                        "runtime_available": runtime_source is not None,
-                        "heartbeat_v6": (
-                            heartbeat_schema_id
-                            == "visionrig/sensor-heartbeat/v6"
-                            if runtime_source is not None
-                            else None
-                        ),
-                        "heartbeat_upgrade_required": (
-                            heartbeat_schema_id
-                            != "visionrig/sensor-heartbeat/v6"
-                            if runtime_source is not None
-                            else None
-                        ),
-                        "heartbeat_schema_id": heartbeat_schema_id,
-                        "required_heartbeat_schema_id": (
-                            "visionrig/sensor-heartbeat/v6"
-                            if runtime_source is not None
-                            else None
-                        ),
-                        "heartbeat_versions_behind": heartbeat_versions_behind,
-                        "heartbeat_upgrade_stage": (
-                            (
-                                "contract_upgrade"
-                                if heartbeat_versions_behind is not None
-                                else "establish_heartbeat"
-                            )
-                            if (
-                                runtime_source is not None
-                                and heartbeat_schema_id
-                                != "visionrig/sensor-heartbeat/v6"
-                            )
-                            else None
-                        ),
-                        "packet_measurement_complete": (
-                            packet_target_measurement == "complete"
-                            if runtime_source is not None
-                            else None
-                        ),
-                        "packet_measurement": (
-                            packet_target_measurement
-                            if runtime_source is not None
-                            else None
-                        ),
-                    },
+                    "producer_readiness": producer_source_readiness,
                     "packet_target": {
                         "measurement": packet_target_measurement,
                         "status": packet_target_status,
