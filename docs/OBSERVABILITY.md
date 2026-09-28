@@ -1132,3 +1132,19 @@ events, or change capture/control policy.
 
 Because fleet v30 is embedded by both enclosing surfaces, the outer contracts
 advance as well. Health advances to v62 and bootstrap advances to v34.
+
+
+### Bootstrap snapshot timestamp
+
+VisionRig 0.84.0 advances sensor bootstrap to
+`visionrig/sensor-bootstrap-snapshot/v35` and health to
+`visionrig/health/v63`.
+
+Bootstrap adds `snapshot_utc`, sampled from the effective server clock
+immediately after the one SensorIngress runtime snapshot used to construct both
+catalog and fleet sections. It identifies the observation time of the coherent
+runtime snapshot rather than client receipt time.
+
+The timestamp is operational metadata only. It does not advance
+`sensor_state_revision`, change the semantic change cursor, create an event, or
+alter capture/control authority.
