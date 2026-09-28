@@ -283,6 +283,113 @@ def create_app(
             return "flapping"
         return "recurring"
 
+    def producer_readiness_payload() -> dict[str, object]:
+        runtime_sources = sensor_ingress.stats().sources
+        runtime_source_count = len(runtime_sources)
+        heartbeat_v6_sources = sum(
+            source.heartbeat_schema_id == "visionrig/sensor-heartbeat/v6"
+            for source in runtime_sources
+        )
+        packet_measurement_gap_sources = sum(
+            packet_target_measurement_status(source) != "complete"
+            for source in runtime_sources
+        )
+        packet_measurement_complete_sources = (
+            runtime_source_count - packet_measurement_gap_sources
+        )
+        return {
+            "runtime_sources": runtime_source_count,
+            "heartbeat_v6_sources": heartbeat_v6_sources,
+            "heartbeat_upgrade_required": (
+                runtime_source_count - heartbeat_v6_sources
+            ),
+            "heartbeat_v6_ratio": (
+                round(heartbeat_v6_sources / runtime_source_count, 6)
+                if runtime_source_count
+                else None
+            ),
+            "packet_measurement_complete_sources": (
+                packet_measurement_complete_sources
+            ),
+            "packet_measurement_gap_sources": packet_measurement_gap_sources,
+            "packet_measurement_complete_ratio": (
+                round(
+                    packet_measurement_complete_sources / runtime_source_count,
+                    6,
+                )
+                if runtime_source_count
+                else None
+            ),
+        }
+
+    def refresh_producer_readiness_transition() -> None:
+        current_readiness = producer_readiness_payload()
+        stored_readiness = producer_readiness_transition_state["current"]
+        if (
+            stored_readiness is None
+            or current_readiness["runtime_sources"] == 0
+            or stored_readiness["runtime_sources"] == 0
+        ):
+            producer_readiness_transition_state["current"] = current_readiness
+            producer_readiness_transition_state["previous"] = None
+            producer_readiness_transition_state["changed_utc"] = None
+        elif current_readiness != stored_readiness:
+            producer_readiness_transition_state["previous"] = stored_readiness
+            producer_readiness_transition_state["current"] = current_readiness
+            producer_readiness_transition_state["changed_utc"] = (
+                effective_sensor_clock().isoformat()
+            )
+
+    def producer_readiness_transition_payload(
+        current_readiness: dict[str, object],
+    ) -> dict[str, object]:
+        previous_readiness = producer_readiness_transition_state["previous"]
+        return {
+            "previous": previous_readiness,
+            "changed_utc": producer_readiness_transition_state["changed_utc"],
+            "heartbeat_v6_sources_delta": (
+                current_readiness["heartbeat_v6_sources"]
+                - previous_readiness["heartbeat_v6_sources"]
+                if previous_readiness is not None
+                else None
+            ),
+            "heartbeat_v6_ratio_delta": (
+                round(
+                    current_readiness["heartbeat_v6_ratio"]
+                    - previous_readiness["heartbeat_v6_ratio"],
+                    6,
+                )
+                if (
+                    previous_readiness is not None
+                    and current_readiness["heartbeat_v6_ratio"] is not None
+                    and previous_readiness["heartbeat_v6_ratio"] is not None
+                )
+                else None
+            ),
+            "packet_measurement_complete_sources_delta": (
+                current_readiness["packet_measurement_complete_sources"]
+                - previous_readiness["packet_measurement_complete_sources"]
+                if previous_readiness is not None
+                else None
+            ),
+            "packet_measurement_complete_ratio_delta": (
+                round(
+                    current_readiness["packet_measurement_complete_ratio"]
+                    - previous_readiness["packet_measurement_complete_ratio"],
+                    6,
+                )
+                if (
+                    previous_readiness is not None
+                    and current_readiness["packet_measurement_complete_ratio"]
+                    is not None
+                    and previous_readiness[
+                        "packet_measurement_complete_ratio"
+                    ] is not None
+                )
+                else None
+            ),
+        }
+
     def sensor_fleet_summary_payload() -> dict[str, object]:
         runtime_status = sensor_ingress.stats()
         runtime_by_id = {
@@ -770,71 +877,13 @@ def create_app(
             ),
         }
 
-        current_readiness = dict(producer_readiness)
-        stored_readiness = producer_readiness_transition_state["current"]
-        if (
-            stored_readiness is None
-            or current_readiness["runtime_sources"] == 0
-            or stored_readiness["runtime_sources"] == 0
-        ):
-            producer_readiness_transition_state["current"] = current_readiness
-            producer_readiness_transition_state["previous"] = None
-            producer_readiness_transition_state["changed_utc"] = None
-        elif current_readiness != stored_readiness:
-            producer_readiness_transition_state["previous"] = stored_readiness
-            producer_readiness_transition_state["current"] = current_readiness
-            producer_readiness_transition_state["changed_utc"] = (
-                effective_sensor_clock().isoformat()
-            )
-
-        previous_readiness = producer_readiness_transition_state["previous"]
-        producer_readiness_transition = {
-            "previous": previous_readiness,
-            "changed_utc": producer_readiness_transition_state["changed_utc"],
-            "heartbeat_v6_sources_delta": (
-                current_readiness["heartbeat_v6_sources"]
-                - previous_readiness["heartbeat_v6_sources"]
-                if previous_readiness is not None
-                else None
-            ),
-            "heartbeat_v6_ratio_delta": (
-                round(
-                    current_readiness["heartbeat_v6_ratio"]
-                    - previous_readiness["heartbeat_v6_ratio"],
-                    6,
-                )
-                if (
-                    previous_readiness is not None
-                    and current_readiness["heartbeat_v6_ratio"] is not None
-                    and previous_readiness["heartbeat_v6_ratio"] is not None
-                )
-                else None
-            ),
-            "packet_measurement_complete_sources_delta": (
-                current_readiness["packet_measurement_complete_sources"]
-                - previous_readiness["packet_measurement_complete_sources"]
-                if previous_readiness is not None
-                else None
-            ),
-            "packet_measurement_complete_ratio_delta": (
-                round(
-                    current_readiness["packet_measurement_complete_ratio"]
-                    - previous_readiness["packet_measurement_complete_ratio"],
-                    6,
-                )
-                if (
-                    previous_readiness is not None
-                    and current_readiness["packet_measurement_complete_ratio"]
-                    is not None
-                    and previous_readiness["packet_measurement_complete_ratio"]
-                    is not None
-                )
-                else None
-            ),
-        }
+        producer_readiness = producer_readiness_payload()
+        producer_readiness_transition = producer_readiness_transition_payload(
+            producer_readiness
+        )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v27",
+            "schema": "visionrig/sensor-fleet-summary/v28",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -917,7 +966,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v57",
+            "schema": "visionrig/health/v58",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -986,7 +1035,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v29",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v30",
             },
         }
 
@@ -1178,7 +1227,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v29",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v30",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
@@ -1308,6 +1357,7 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         sensor_ingress.forget_source(source_id)
+        refresh_producer_readiness_transition()
         append_sensor_change(
             kind="forgotten",
             source_id=source_id,
@@ -1401,6 +1451,7 @@ def create_app(
                 previous_discovery=previous_discovery,
             )
             emit_runtime_change(body.source_id, previous_runtime)
+            refresh_producer_readiness_transition()
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1455,6 +1506,7 @@ def create_app(
                 was_registered=was_registered,
                 previous_discovery=previous_discovery,
             )
+            refresh_producer_readiness_transition()
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -1520,6 +1572,7 @@ def create_app(
                 was_registered=was_registered,
                 previous_discovery=previous_discovery,
             )
+            refresh_producer_readiness_transition()
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc

@@ -583,3 +583,17 @@ transition when readiness is unchanged.
 An empty runtime fleet establishes no transition baseline, so startup with zero
 producers does not create a misleading readiness regression or improvement.
 This remains observational telemetry only.
+
+
+## VisionRig 0.79.0: event-timed producer readiness transitions
+
+Producer-readiness transition timestamps now belong to the runtime mutation
+that changed readiness rather than the first fleet/health poll that observed it.
+
+Heartbeat, encoded-frame ingress, SensorPacket ingress and runtime-source forget
+refresh the process-local readiness transition state immediately after the
+runtime mutation succeeds. Fleet, health and bootstrap reads are now
+observational and do not advance transition timestamps.
+
+This preserves the existing process-local/non-authoritative semantics while
+making `changed_utc` suitable for UI timelines and migration diagnostics.
