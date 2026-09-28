@@ -135,3 +135,14 @@ of newer runtime behavior unless explicitly rebased into a new pull request.
 There are currently no open VisionRig issues or pull requests. The remaining
 client-delivery work called out above belongs to native Kaliv Android/Quest
 clients rather than the VisionRig core runtime.
+
+
+## Contract change: v3 -> v4
+
+V4 adds frame-level `InfraredObservation` summaries to PerceptionEvent while
+keeping raw infrared planes inside `Frame.sensor_data`.
+
+WorldSnapshot remains v3 because infrared summaries are transient sensor
+observations rather than durable visual-world state. ModelRig admission remains
+non-authoritative and receives only the bounded normalized summary, never raw IR
+pixels.
