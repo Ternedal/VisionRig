@@ -1071,18 +1071,21 @@ event-style readiness transition timestamp for this change.
 The expiry projection exposes:
 
 - `source_id`: the currently-online source nearest its stale boundary;
-- `next_change_utc`: that source's `last_seen_utc + stale_after_seconds`;
-- `next_change_seconds`: remaining server-clock seconds until the boundary,
-  clamped at zero and rounded to three decimals.
+- `next_change_utc`: the first millisecond after that source's inclusive
+  `last_seen_utc + stale_after_seconds` boundary;
+- `next_change_seconds`: remaining server-clock seconds until that refresh
+  point, clamped at zero and rounded to three decimals.
 
 The projection is calculated from the same sampled runtime status used for the
 fleet response. If no runtime source is currently online, all fields are
 `null`.
 
 At the exact stale boundary the existing liveness contract still classifies the
-source as online (`age_seconds <= stale_after_seconds`); it becomes stale once
-the boundary is exceeded. UI clients can therefore refresh at or immediately
-after `next_change_utc`.
+source as online (`age_seconds <= stale_after_seconds`). To avoid advertising a
+refresh instant that can still return `online`, VisionRig reports the first
+millisecond after that inclusive boundary. A refresh at `next_change_utc` can
+therefore observe the stale transition without entering a zero-delay refresh
+loop.
 
 Bootstrap v33 embeds fleet v30 and health advances to v61. This expiry metadata
 is observational only and does not schedule work, emit semantic events, or
