@@ -11,6 +11,7 @@ from .embeddings import (
     EntityEmbeddingStage,
     OnnxImageEmbeddingEncoder,
 )
+from .infrared import InfraredSummaryStage
 from .landmarks_mediapipe import MediaPipeLandmarkStage
 from .kinect_v2 import KinectV2DepthStage
 from .model_manifest import (
@@ -73,6 +74,7 @@ def build_pipeline(
     landmarks: bool = False,
     kinect_depth: bool = False,
     spatial_relations: bool = True,
+    infrared_summary: bool = True,
     prefer_cuda: bool = True,
 ) -> PipelineBundle:
     stages: list[Stage] = []
@@ -161,6 +163,8 @@ def build_pipeline(
 
     if spatial_relations:
         stages.append(SpatialRelationStage())
+    if infrared_summary:
+        stages.append(InfraredSummaryStage())
 
     return PipelineBundle(
         pipeline=PerceptionPipeline(tuple(stages)),
