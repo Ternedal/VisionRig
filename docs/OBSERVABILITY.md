@@ -1056,3 +1056,29 @@ The online projection is descriptive only and does not affect attention,
 desired state, capture authority, semantic events, or producer control.
 
 Bootstrap v32 embeds fleet v29 and health advances to v60.
+
+
+### Producer readiness change events
+
+VisionRig 0.83.0 extends the existing sensor change feed with the additive
+`producer_readiness_changed` event kind.
+
+The readiness tracker establishes a baseline when the first runtime producer
+appears. It emits no readiness event for that baseline. When the aggregate
+producer readiness projection later changes, VisionRig appends exactly one
+semantic change event with the source that triggered the transition.
+
+The event payload contains:
+
+- `previous`: the prior aggregate producer-readiness projection;
+- `current`: the new aggregate projection;
+- `transition`: the same previous snapshot, timestamp, and readiness deltas
+  exposed by `producer_readiness_transition` in the fleet payload.
+
+A heartbeat or frame that leaves readiness unchanged does not create a
+`producer_readiness_changed` entry. In particular, refresh-timestamp-only
+heartbeats remain quiet.
+
+This event uses the existing bounded/persistent sensor change journal and does
+not alter desired state, capture authority, attention policy, or automatic
+producer behavior.
