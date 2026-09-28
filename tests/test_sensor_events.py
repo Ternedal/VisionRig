@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import threading
 import time
 
@@ -213,7 +214,7 @@ def test_sensor_bootstrap_snapshot_returns_state_and_change_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v34"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v35"
     assert body["sensor_state_revision"] == 1
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -262,7 +263,7 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
     snapshot = client.get("/api/v1/sensors/bootstrap")
     assert snapshot.status_code == 200
     body = snapshot.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v34"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v35"
     assert body["sensor_state_revision"] == 0
     assert body["change_consistency"] == {
         "schema": "visionrig/sensor-change-consistency/v1",
@@ -669,7 +670,7 @@ def test_api_uses_restored_persistent_change_stream(tmp_path) -> None:
     )
 
     health = client.get("/health").json()
-    assert health["schema"] == "visionrig/health/v62"
+    assert health["schema"] == "visionrig/health/v63"
     assert health["sensor_changes"]["durability"] == "persistent"
     assert health["sensor_changes"]["stream_id"] == "restored-stream"
 
@@ -967,7 +968,13 @@ def test_target_utilization_change_emits_runtime_event() -> None:
 
 
 def test_sensor_bootstrap_samples_runtime_once(monkeypatch) -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
+    snapshot_time = datetime(2026, 9, 28, 6, 30, tzinfo=timezone.utc)
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: snapshot_time,
+        )
+    )
     heartbeat = client.post(
         "/api/v1/sensors/heartbeat",
         json={
@@ -996,7 +1003,8 @@ def test_sensor_bootstrap_samples_runtime_once(monkeypatch) -> None:
     response = client.get("/api/v1/sensors/bootstrap")
     assert response.status_code == 200
     body = response.json()
-    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v34"
+    assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v35"
+    assert body["snapshot_utc"] == "2026-09-28T06:30:00+00:00"
     assert calls["count"] == 1
 
     source = body["catalog"]["sources"][0]
