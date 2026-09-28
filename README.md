@@ -648,3 +648,15 @@ sources whose current presence is `online`.
 This prevents an offline fully-migrated producer from making the active fleet
 look more ready than it is, while preserving the existing migration inventory
 and transition history.
+
+
+## VisionRig 0.83.0: heartbeat contract changes wake incremental UI
+
+A producer changing heartbeat contract now emits one semantic
+`runtime_changed` sensor event. The event payload includes
+`heartbeat_schema_id`, allowing long-poll/change-feed clients to refresh
+producer readiness immediately after upgrades such as v5 -> v6.
+
+Ordinary heartbeat refreshes and packet-target measurements remain quiet:
+changes to `observed_packet_utilization`, heartbeat counters, timestamps, or
+pressure telemetry alone do not emit semantic runtime events.
