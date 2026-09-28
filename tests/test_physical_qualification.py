@@ -574,3 +574,32 @@ def test_physical_qualification_rejects_receipt_without_world_change() -> None:
     health["modelrig_bridge"]["last_result"]["receipt"]["world_changed"] = False
     with pytest.raises(PhysicalPerceptionQualificationError, match="did not prove a WorldState change"):
         _validate_bridge_binding(health, event=event, source_id="kinect-v2-0", frame_sequence=event["frame_sequence"])
+
+
+def test_physical_qualification_rejects_replayed_bridge_result() -> None:
+    event = _event()
+    health = _health(event=event)
+    health["modelrig_bridge"]["last_result"]["status"] = "replayed"
+    health["modelrig_bridge"]["last_result"]["receipt"]["replayed"] = True
+    assert _validate_bridge_binding(
+        health,
+        event=event,
+        source_id="kinect-v2-0",
+        frame_sequence=event["frame_sequence"],
+    ) is None
+
+
+def test_physical_qualification_rejects_replayed_receipt_on_published_result() -> None:
+    event = _event()
+    health = _health(event=event)
+    health["modelrig_bridge"]["last_result"]["receipt"]["replayed"] = True
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="replayed rather than freshly admitted",
+    ):
+        _validate_bridge_binding(
+            health,
+            event=event,
+            source_id="kinect-v2-0",
+            frame_sequence=event["frame_sequence"],
+        )
