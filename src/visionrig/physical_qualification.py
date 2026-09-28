@@ -238,14 +238,27 @@ def _validate_bridge_binding(
         raise PhysicalPerceptionQualificationError(
             "VisionRig ModelRig bridge is not loopback-bound"
         )
-    result = bridge.get("last_result")
-    if not isinstance(result, Mapping):
-        return None
-    if result.get("source_id") != source_id:
-        return None
-    if result.get("frame_sequence") != frame_sequence:
-        return None
-    if result.get("status") not in {"published", "replayed"}:
+    successful_results = bridge.get("successful_results")
+    candidates: list[Mapping[str, Any]] = []
+    if isinstance(successful_results, list):
+        candidates.extend(
+            item for item in successful_results if isinstance(item, Mapping)
+        )
+    last_result = bridge.get("last_result")
+    if isinstance(last_result, Mapping):
+        candidates.append(last_result)
+
+    result = next(
+        (
+            item
+            for item in reversed(candidates)
+            if item.get("source_id") == source_id
+            and item.get("frame_sequence") == frame_sequence
+            and item.get("status") in {"published", "replayed"}
+        ),
+        None,
+    )
+    if result is None:
         return None
 
     receipt = result.get("receipt")
