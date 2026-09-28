@@ -283,7 +283,7 @@ def _validate_bridge_binding(
             for item in reversed(candidates)
             if item.get("source_id") == source_id
             and item.get("frame_sequence") == frame_sequence
-            and item.get("status") in {"published", "replayed"}
+            and item.get("status") == "published"
             and isinstance(item.get("receipt"), Mapping)
             and item["receipt"].get("visionrig_event_ref") == expected_ref
         ),
@@ -312,6 +312,10 @@ def _validate_bridge_binding(
     if receipt.get("observed_sequence") != frame_sequence:
         raise PhysicalPerceptionQualificationError(
             "ModelRig receipt frame sequence mismatch"
+        )
+    if receipt.get("replayed") is not False:
+        raise PhysicalPerceptionQualificationError(
+            "ModelRig receipt was replayed rather than freshly admitted"
         )
     if receipt.get("world_changed") is not True:
         raise PhysicalPerceptionQualificationError(
