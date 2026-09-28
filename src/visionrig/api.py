@@ -412,11 +412,31 @@ def create_app(
                     },
                 )
 
+    def producer_readiness_transition_snapshot() -> dict[str, object]:
+        with producer_readiness_transition_lock:
+            return {
+                "current": (
+                    dict(producer_readiness_transition_state["current"])
+                    if producer_readiness_transition_state["current"] is not None
+                    else None
+                ),
+                "previous": (
+                    dict(producer_readiness_transition_state["previous"])
+                    if producer_readiness_transition_state["previous"] is not None
+                    else None
+                ),
+                "changed_utc": producer_readiness_transition_state["changed_utc"],
+            }
+
     def producer_readiness_transition_payload(
         current_readiness: dict[str, object],
         transition_state: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        state = transition_state or producer_readiness_transition_state
+        state = (
+            transition_state
+            if transition_state is not None
+            else producer_readiness_transition_snapshot()
+        )
         if state.get("current") != current_readiness:
             state = {
                 "current": current_readiness,
@@ -1289,19 +1309,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         runtime_status = sensor_ingress.stats()
-        transition_state = {
-            "current": (
-                dict(producer_readiness_transition_state["current"])
-                if producer_readiness_transition_state["current"] is not None
-                else None
-            ),
-            "previous": (
-                dict(producer_readiness_transition_state["previous"])
-                if producer_readiness_transition_state["previous"] is not None
-                else None
-            ),
-            "changed_utc": producer_readiness_transition_state["changed_utc"],
-        }
+        transition_state = producer_readiness_transition_snapshot()
         return {
             "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             "sensor_state_revision": registry.state_revision,
@@ -1530,7 +1538,7 @@ def create_app(
                 previous_discovery=previous_discovery,
             )
             emit_runtime_change(body.source_id, previous_runtime)
-            refresh_producer_readiness_transition(source_id)
+            refresh_producer_readiness_transition(body.source_id)
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
