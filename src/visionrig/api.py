@@ -386,10 +386,12 @@ def create_app(
         )
 
     def online_producer_readiness_expiry_payload(
-        runtime_sources,
+        runtime_status,
     ) -> dict[str, object]:
         online_sources = [
-            source for source in runtime_sources if source.presence == "online"
+            source
+            for source in runtime_status.sources
+            if source.presence == "online"
         ]
         if not online_sources:
             return {
@@ -401,7 +403,7 @@ def create_app(
         next_source = min(
             online_sources,
             key=lambda source: (
-                source.age_seconds,
+                -source.age_seconds,
                 source.source_id,
             ),
         )
@@ -981,7 +983,7 @@ def create_app(
             runtime_status.sources
         )
         online_producer_readiness_expiry = (
-            online_producer_readiness_expiry_payload(runtime_status.sources)
+            online_producer_readiness_expiry_payload(runtime_status)
         )
         producer_readiness_transition = producer_readiness_transition_payload(
             producer_readiness
