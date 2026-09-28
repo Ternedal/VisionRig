@@ -446,8 +446,9 @@ def create_app(
             ),
         }
 
-    def sensor_fleet_summary_payload() -> dict[str, object]:
-        runtime_status = sensor_ingress.stats()
+    def sensor_fleet_summary_payload(runtime_status=None) -> dict[str, object]:
+        if runtime_status is None:
+            runtime_status = sensor_ingress.stats()
         runtime_by_id = {
             source.source_id: source
             for source in runtime_status.sources
@@ -1026,7 +1027,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v60",
+            "schema": "visionrig/health/v61",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -1095,7 +1096,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v32",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             },
         }
 
@@ -1132,9 +1133,9 @@ def create_app(
             wait_seconds=wait_seconds,
         )
 
-    @app.get("/api/v1/sensors/catalog")
-    def sensor_catalog() -> dict[str, object]:
-        runtime_status = sensor_ingress.stats()
+    def sensor_catalog_payload(runtime_status=None) -> dict[str, object]:
+        if runtime_status is None:
+            runtime_status = sensor_ingress.stats()
         runtime_by_id = {source.source_id: source for source in runtime_status.sources}
         metadata_by_id = {entry.source_id: entry for entry in registry.list()}
         source_ids = sorted(set(runtime_by_id) | set(metadata_by_id))
@@ -1284,20 +1285,25 @@ def create_app(
             "sources": sources,
         }
 
+    @app.get("/api/v1/sensors/catalog")
+    def sensor_catalog() -> dict[str, object]:
+        return sensor_catalog_payload()
+
     @app.get("/api/v1/sensors/bootstrap")
     def sensor_bootstrap_snapshot() -> dict[str, object]:
         # Sample the change cursor before building state. Changes racing with
         # snapshot construction may be replayed, but cannot be missed.
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
+        runtime_status = sensor_ingress.stats()
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v32",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
             "change_cursor": baseline_cursor,
-            "catalog": sensor_catalog(),
-            "fleet": sensor_fleet_summary_payload(),
+            "catalog": sensor_catalog_payload(runtime_status),
+            "fleet": sensor_fleet_summary_payload(runtime_status),
         }
 
     @app.get(
