@@ -329,8 +329,8 @@ def create_app(
             return "flapping"
         return "recurring"
 
-    def producer_readiness_payload() -> dict[str, object]:
-        runtime_sources = sensor_ingress.stats().sources
+    def readiness_projection(runtime_sources) -> dict[str, object]:
+        runtime_sources = tuple(runtime_sources)
         runtime_source_count = len(runtime_sources)
         heartbeat_v6_sources = sum(
             source.heartbeat_schema_id == "visionrig/sensor-heartbeat/v6"
@@ -367,6 +367,16 @@ def create_app(
                 else None
             ),
         }
+
+    def producer_readiness_payload() -> dict[str, object]:
+        return readiness_projection(sensor_ingress.stats().sources)
+
+    def online_producer_readiness_payload() -> dict[str, object]:
+        return readiness_projection(
+            source
+            for source in sensor_ingress.stats().sources
+            if source.presence == "online"
+        )
 
     def refresh_producer_readiness_transition() -> None:
         current_readiness = producer_readiness_payload()
@@ -926,12 +936,13 @@ def create_app(
         }
 
         producer_readiness = producer_readiness_payload()
+        online_producer_readiness = online_producer_readiness_payload()
         producer_readiness_transition = producer_readiness_transition_payload(
             producer_readiness
         )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v28",
+            "schema": "visionrig/sensor-fleet-summary/v29",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -964,6 +975,7 @@ def create_app(
                 > len(bounded_heartbeat_upgrade_candidates)
             ),
             "producer_readiness": producer_readiness,
+            "online_producer_readiness": online_producer_readiness,
             "producer_readiness_transition": producer_readiness_transition,
             "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
             "packet_target_overshoot": {
@@ -1014,7 +1026,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v59",
+            "schema": "visionrig/health/v60",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -1083,7 +1095,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v31",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v32",
             },
         }
 
@@ -1279,7 +1291,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v31",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v32",
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
