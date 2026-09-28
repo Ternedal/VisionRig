@@ -36,6 +36,7 @@ visionrig-gateway = "visionrig.gateway_main:main"
 visionrig-gateway-token = "visionrig.gateway_token:main"
 visionrig-producer = "visionrig.producer_cli:main"
 visionrig-profile = "visionrig.profile_cli:main"
+visionrig-qualify-physical = "visionrig.physical_qualification:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
