@@ -398,11 +398,19 @@ def create_app(
 
     def producer_readiness_transition_payload(
         current_readiness: dict[str, object],
+        transition_state: dict[str, object] | None = None,
     ) -> dict[str, object]:
-        previous_readiness = producer_readiness_transition_state["previous"]
+        state = transition_state or producer_readiness_transition_state
+        if state.get("current") != current_readiness:
+            state = {
+                "current": current_readiness,
+                "previous": None,
+                "changed_utc": None,
+            }
+        previous_readiness = state["previous"]
         return {
             "previous": previous_readiness,
-            "changed_utc": producer_readiness_transition_state["changed_utc"],
+            "changed_utc": state["changed_utc"],
             "heartbeat_v6_sources_delta": (
                 current_readiness["heartbeat_v6_sources"]
                 - previous_readiness["heartbeat_v6_sources"]
@@ -446,7 +454,10 @@ def create_app(
             ),
         }
 
-    def sensor_fleet_summary_payload(runtime_status=None) -> dict[str, object]:
+    def sensor_fleet_summary_payload(
+        runtime_status=None,
+        transition_state: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         if runtime_status is None:
             runtime_status = sensor_ingress.stats()
         runtime_by_id = {
@@ -904,7 +915,8 @@ def create_app(
             if source.presence == "online"
         )
         producer_readiness_transition = producer_readiness_transition_payload(
-            producer_readiness
+            producer_readiness,
+            transition_state=transition_state,
         )
 
         return {
@@ -1261,6 +1273,19 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         runtime_status = sensor_ingress.stats()
+        transition_state = {
+            "current": (
+                dict(producer_readiness_transition_state["current"])
+                if producer_readiness_transition_state["current"] is not None
+                else None
+            ),
+            "previous": (
+                dict(producer_readiness_transition_state["previous"])
+                if producer_readiness_transition_state["previous"] is not None
+                else None
+            ),
+            "changed_utc": producer_readiness_transition_state["changed_utc"],
+        }
         return {
             "schema": "visionrig/sensor-bootstrap-snapshot/v33",
             "sensor_state_revision": registry.state_revision,
@@ -1268,7 +1293,10 @@ def create_app(
             "change_stream_id": sensor_changes.stream_id,
             "change_cursor": baseline_cursor,
             "catalog": sensor_catalog_payload(runtime_status),
-            "fleet": sensor_fleet_summary_payload(runtime_status),
+            "fleet": sensor_fleet_summary_payload(
+                runtime_status,
+                transition_state=transition_state,
+            ),
         }
 
     @app.get(
