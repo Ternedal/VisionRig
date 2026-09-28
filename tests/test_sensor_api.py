@@ -442,7 +442,7 @@ def test_fleet_marks_sustained_packet_target_exceedance_as_attention() -> None:
     assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["packet_target_attention_streak_threshold"] == 3
     assert fleet["packet_target"] == {
         "within_target": 0,
@@ -777,7 +777,7 @@ def test_packet_target_overshoot_identifies_worst_source() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["packet_target_overshoot"] == {
         "measured_sources": 3,
         "max_delta": 0.19,
@@ -820,7 +820,7 @@ def test_fleet_reports_longest_sustained_packet_pressure() -> None:
 
     now[0] = datetime(2026, 9, 27, 17, 1, 0, tzinfo=timezone.utc)
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["packet_target_sustained_pressure"] == {
         "sources": 2,
         "longest_seconds": 60.0,
@@ -865,7 +865,7 @@ def test_fleet_identifies_most_recurrent_packet_target_source() -> None:
     sustained("camera-two-repeats")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["packet_target_recurrence_total"] == 3
     assert fleet["packet_target_recurring_sources"] == 2
     assert fleet["packet_target_recurrence_hotspot"]["max_recurrence_count"] == 2
@@ -917,7 +917,7 @@ def test_fleet_reports_latest_packet_target_recovery() -> None:
     recover("camera-latest-recovery")
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["packet_target_recovered_sources"] == 2
     assert fleet["packet_target_latest_recovery"] == {
         "source_id": "camera-latest-recovery",
@@ -968,7 +968,7 @@ def test_packet_target_stability_requires_complete_measurement() -> None:
     assert measured.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["packet_target_stability"] == {
         "stable": 1,
         "recurring": 0,
@@ -1085,7 +1085,7 @@ def test_packet_target_measurement_gaps_are_bounded_and_deterministic() -> None:
         assert response.status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["packet_target_measurement_gap_total"] == 40
     assert fleet["heartbeat_schema_coverage"] == {
         "runtime_sources": 40,
@@ -1171,7 +1171,7 @@ def test_heartbeat_upgrade_candidates_prioritize_versions_behind() -> None:
         assert client.post("/api/v1/sensors/heartbeat", json=payload).status_code == 200
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     candidates = fleet["heartbeat_upgrade_candidates"]
     assert [item["source_id"] for item in candidates] == [
         "camera-z-v2",
@@ -1210,7 +1210,7 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
     assert client.post("/api/v1/sensors/heartbeat", json=v5).status_code == 200
 
     baseline = client.get("/api/v1/sensors/fleet").json()
-    assert baseline["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert baseline["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert baseline["producer_readiness"]["heartbeat_v6_ratio"] == 0.0
     assert baseline["producer_readiness_transition"] == {
         "previous": None,
@@ -1378,7 +1378,7 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
     )
 
     fleet = client.get("/api/v1/sensors/fleet").json()
-    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v29"
+    assert fleet["schema"] == "visionrig/sensor-fleet-summary/v30"
     assert fleet["presence"] == {
         "online": 1,
         "stale": 0,
@@ -1403,8 +1403,42 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
         "packet_measurement_gap_sources": 1,
         "packet_measurement_complete_ratio": 0.0,
     }
+    assert fleet["online_producer_readiness_expiry"] == {
+        "next_change_utc": "2026-09-28T06:02:15.001000+00:00",
+        "next_change_seconds": 15.001,
+        "source_id": "camera-current-v5",
+    }
+
+    now[0] = datetime(2026, 9, 28, 6, 2, 10, tzinfo=timezone.utc)
+    aging = client.get("/api/v1/sensors/fleet").json()
+    assert aging["online_producer_readiness_expiry"] == {
+        "next_change_utc": "2026-09-28T06:02:15.001000+00:00",
+        "next_change_seconds": 5.001,
+        "source_id": "camera-current-v5",
+    }
+
+    now[0] = datetime(2026, 9, 28, 6, 2, 15, tzinfo=timezone.utc)
+    boundary = client.get("/api/v1/sensors/fleet").json()
+    assert boundary["online_producer_readiness"]["runtime_sources"] == 1
+    assert boundary["online_producer_readiness_expiry"] == {
+        "next_change_utc": "2026-09-28T06:02:15.001000+00:00",
+        "next_change_seconds": 0.001,
+        "source_id": "camera-current-v5",
+    }
+
+    now[0] = datetime(2026, 9, 28, 6, 2, 16, tzinfo=timezone.utc)
+    stale = client.get("/api/v1/sensors/fleet").json()
+    assert stale["online_producer_readiness"]["runtime_sources"] == 0
+    assert stale["online_producer_readiness_expiry"] == {
+        "next_change_utc": None,
+        "next_change_seconds": None,
+        "source_id": None,
+    }
 
     health = client.get("/health").json()
     assert health["sensor_fleet"]["online_producer_readiness"] == (
-        fleet["online_producer_readiness"]
+        stale["online_producer_readiness"]
+    )
+    assert health["sensor_fleet"]["online_producer_readiness_expiry"] == (
+        stale["online_producer_readiness_expiry"]
     )
