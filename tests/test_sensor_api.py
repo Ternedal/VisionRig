@@ -1263,3 +1263,35 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
 
     health = client.get("/health").json()
     assert health["sensor_fleet"]["producer_readiness_transition"] == transition
+
+
+def test_fleet_upgrade_candidate_matches_catalog_producer_readiness() -> None:
+    client = TestClient(create_app(PerceptionPipeline()))
+    heartbeat = {
+        "schema_id": "visionrig/sensor-heartbeat/v5",
+        "source_id": "camera-shared-readiness",
+        "source_type": "camera",
+        "negotiated_max_payload_bytes": 4194304,
+        "capability_refreshed_utc": "2026-09-28T05:00:00+00:00",
+        "capability_refresh_seconds": 30.0,
+        "negotiated_packet_compression": "auto",
+        "negotiated_packet_target_utilization": 0.72,
+    }
+    assert client.post("/api/v1/sensors/heartbeat", json=heartbeat).status_code == 200
+
+    fleet = client.get("/api/v1/sensors/fleet").json()
+    catalog = client.get("/api/v1/sensors/catalog").json()
+    candidate = fleet["heartbeat_upgrade_candidates"][0]
+    readiness = catalog["sources"][0]["producer_readiness"]
+
+    assert candidate["source_id"] == "camera-shared-readiness"
+    assert candidate["current_schema_id"] == readiness["heartbeat_schema_id"]
+    assert (
+        candidate["required_schema_id"]
+        == readiness["required_heartbeat_schema_id"]
+    )
+    assert candidate["versions_behind"] == readiness["heartbeat_versions_behind"]
+    assert candidate["upgrade_stage"] == readiness["heartbeat_upgrade_stage"]
+    assert candidate["measurement"] == readiness["packet_measurement"]
+    assert readiness["heartbeat_upgrade_required"] is True
+    assert readiness["packet_measurement_complete"] is False
