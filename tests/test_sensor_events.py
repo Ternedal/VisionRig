@@ -372,6 +372,11 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "packet_measurement_gap_sources": 0,
             "packet_measurement_complete_ratio": None,
         },
+        "online_producer_readiness_expiry": {
+            "next_change_utc": None,
+            "next_change_seconds": None,
+            "source_id": None,
+        },
         "producer_readiness_transition": {
             "previous": None,
             "changed_utc": None,
