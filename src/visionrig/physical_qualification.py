@@ -310,6 +310,85 @@ def _validate_bridge_binding(
     }
 
 
+def _success_report(
+    *,
+    base: str,
+    initial_health: Mapping[str, Any],
+    selected_id: str,
+    selected_type: str,
+    baseline_sequence: int,
+    baseline_accepted: int,
+    candidate_cursor: int | None,
+    frame_sequence: int,
+    bridge_binding: Mapping[str, Any],
+    started: float,
+    monotonic: Callable[[], float],
+    http_json: Callable[..., Mapping[str, Any]],
+    request_timeout: float,
+) -> dict[str, Any]:
+    current_status = http_json(
+        base + "/api/v1/sensors/status",
+        timeout=request_timeout,
+    )
+    current_sources = _physical_sources(
+        current_status,
+        requested_source_id=selected_id,
+    )
+    if not current_sources:
+        raise PhysicalPerceptionQualificationError(
+            "physical source stopped being online during qualification"
+        )
+    final_source = current_sources[0]
+    if int(final_source["accepted_frames"]) <= baseline_accepted:
+        raise PhysicalPerceptionQualificationError(
+            "source accepted-frame counter did not advance"
+        )
+    elapsed_ms = round((monotonic() - started) * 1000.0, 3)
+    return {
+        "schema": SCHEMA,
+        "generated_at": datetime.now(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "visionrig": {
+            "origin": base,
+            "health_schema": initial_health.get("schema"),
+            "perception_schema": initial_health.get("perception_schema"),
+        },
+        "physical_source": {
+            "source_id": selected_id,
+            "source_type": selected_type,
+            "device": final_source.get("device"),
+            "presence": final_source.get("presence"),
+            "baseline_sequence": baseline_sequence,
+            "accepted_frames_before": baseline_accepted,
+            "accepted_frames_after": final_source.get("accepted_frames"),
+        },
+        "event": {
+            "journal_cursor": candidate_cursor,
+            "frame_sequence": frame_sequence,
+            "visionrig_event_ref": bridge_binding["visionrig_event_ref"],
+        },
+        "modelrig_admission": dict(bridge_binding),
+        "timing": {
+            "qualification_elapsed_ms": elapsed_ms,
+            "poll_interval_ms": round(POLL_SECONDS * 1000.0, 3),
+        },
+        "privacy": {
+            "raw_frame_included": False,
+            "ocr_text_included": False,
+            "landmarks_included": False,
+            "semantic_payload_included": False,
+        },
+        "gate": {
+            "passed": True,
+            "physical_perception_qualified": True,
+            "raw_sensor_authority_granted": False,
+            "identity_authority_granted": False,
+            "production_activation": False,
+        },
+    }
+
+
 def qualify_physical_perception(
     visionrig_url: str,
     *,
@@ -413,69 +492,21 @@ def qualify_physical_perception(
                 frame_sequence=frame_sequence,
             )
             if bridge_binding is not None:
-                elapsed_ms = round((monotonic() - started) * 1000.0, 3)
-                current_status = http_json(
-                    base + "/api/v1/sensors/status",
-                    timeout=request_timeout,
+                return _success_report(
+                    base=base,
+                    initial_health=health,
+                    selected_id=selected_id,
+                    selected_type=selected_type,
+                    baseline_sequence=baseline_sequence,
+                    baseline_accepted=baseline_accepted,
+                    candidate_cursor=candidate_cursor,
+                    frame_sequence=frame_sequence,
+                    bridge_binding=bridge_binding,
+                    started=started,
+                    monotonic=monotonic,
+                    http_json=http_json,
+                    request_timeout=request_timeout,
                 )
-                current_sources = _physical_sources(
-                    current_status,
-                    requested_source_id=selected_id,
-                )
-                if not current_sources:
-                    raise PhysicalPerceptionQualificationError(
-                        "physical source stopped being online during qualification"
-                    )
-                final_source = current_sources[0]
-                if int(final_source["accepted_frames"]) <= baseline_accepted:
-                    raise PhysicalPerceptionQualificationError(
-                        "source accepted-frame counter did not advance"
-                    )
-                return {
-                    "schema": SCHEMA,
-                    "generated_at": datetime.now(timezone.utc)
-                    .isoformat()
-                    .replace("+00:00", "Z"),
-                    "visionrig": {
-                        "origin": base,
-                        "health_schema": health.get("schema"),
-                        "perception_schema": health.get("perception_schema"),
-                    },
-                    "physical_source": {
-                        "source_id": selected_id,
-                        "source_type": selected_type,
-                        "device": final_source.get("device"),
-                        "presence": final_source.get("presence"),
-                        "baseline_sequence": baseline_sequence,
-                        "accepted_frames_before": baseline_accepted,
-                        "accepted_frames_after": final_source.get("accepted_frames"),
-                    },
-                    "event": {
-                        "journal_cursor": candidate_cursor,
-                        "frame_sequence": frame_sequence,
-                        "visionrig_event_ref": bridge_binding[
-                            "visionrig_event_ref"
-                        ],
-                    },
-                    "modelrig_admission": bridge_binding,
-                    "timing": {
-                        "qualification_elapsed_ms": elapsed_ms,
-                        "poll_interval_ms": round(POLL_SECONDS * 1000.0, 3),
-                    },
-                    "privacy": {
-                        "raw_frame_included": False,
-                        "ocr_text_included": False,
-                        "landmarks_included": False,
-                        "semantic_payload_included": False,
-                    },
-                    "gate": {
-                        "passed": True,
-                        "physical_perception_qualified": True,
-                        "raw_sensor_authority_granted": False,
-                        "identity_authority_granted": False,
-                        "production_activation": False,
-                    },
-                }
 
         next_cursor = batch.get("next_cursor")
         if isinstance(next_cursor, int):
@@ -492,7 +523,21 @@ def qualify_physical_perception(
                     frame_sequence=frame_sequence,
                 )
                 if bridge_binding is not None:
-                    continue
+                    return _success_report(
+                        base=base,
+                        initial_health=health,
+                        selected_id=selected_id,
+                        selected_type=selected_type,
+                        baseline_sequence=baseline_sequence,
+                        baseline_accepted=baseline_accepted,
+                        candidate_cursor=candidate_cursor,
+                        frame_sequence=frame_sequence,
+                        bridge_binding=bridge_binding,
+                        started=started,
+                        monotonic=monotonic,
+                        http_json=http_json,
+                        request_timeout=request_timeout,
+                    )
 
         sleep_fn(POLL_SECONDS)
 
