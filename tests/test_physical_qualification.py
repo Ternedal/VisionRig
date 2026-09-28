@@ -283,6 +283,66 @@ def test_physical_qualification_rejects_nonphysical_or_remote_inputs() -> None:
         )
 
 
+def test_physical_qualification_retries_until_ingress_counter_advances() -> None:
+    event = _event()
+    health_calls = 0
+    status_calls = 0
+    event_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls, status_calls, event_calls
+        if url.endswith("/health"):
+            health_calls += 1
+            return _health(event=event if health_calls > 1 else None)
+        if url.endswith("/api/v1/sensors/status"):
+            status_calls += 1
+            accepted = 10 if status_calls < 3 else 11
+            sequence = 10 if status_calls == 1 else 11
+            return {"sources": [_source(accepted=accepted, sequence=sequence)]}
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        event_calls += 1
+        return {
+            "schema_id": "visionrig/event-batch/v1",
+            "entries": (
+                [{"cursor": 5, "event": event}]
+                if event_calls == 1
+                else []
+            ),
+            "next_cursor": 5,
+            "oldest_available_cursor": 1,
+            "newest_available_cursor": 5,
+            "gap": False,
+        }
+
+    tick = [0.0]
+
+    def monotonic() -> float:
+        tick[0] += 0.01
+        return tick[0]
+
+    report = qualify_physical_perception(
+        "http://127.0.0.1:8110",
+        source_id="kinect-v2-0",
+        timeout_seconds=2.0,
+        http_json=http_json,
+        monotonic=monotonic,
+        sleep_fn=lambda _seconds: None,
+    )
+
+    assert report["gate"]["physical_perception_qualified"] is True
+    assert report["physical_source"]["accepted_frames_before"] == 10
+    assert report["physical_source"]["accepted_frames_after"] == 11
+    assert status_calls >= 3
+
+
 def test_physical_qualification_accepts_bridge_receipt_one_poll_later() -> None:
     event = _event()
     health_calls = 0
