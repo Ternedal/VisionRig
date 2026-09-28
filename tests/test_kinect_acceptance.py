@@ -55,7 +55,7 @@ def _frame(*, infrared=True):
     )
 
 
-def _publisher():
+def _publisher(*, replayed: bool = False):
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         canonical = json.dumps(
@@ -73,7 +73,7 @@ def _publisher():
                 "evidence_ref": "world-evidence-event:" + "a" * 64,
                 "cognition_event_id": "cevt-" + "b" * 32,
                 "world_changed": True,
-                "replayed": False,
+                "replayed": replayed,
                 "cognition_event_queued": True,
                 "epistemic_status": "inferred",
                 "confidence": 0.9,
@@ -237,3 +237,22 @@ def test_exact_checkout_requires_expected_sha_and_clean_tree(monkeypatch):
     monkeypatch.setattr(acceptance, "_git", lambda *args, root=None: next(replies))
     with pytest.raises(acceptance.KinectPhysicalAcceptanceError, match="clean checkout"):
         acceptance.require_exact_clean_checkout("5" * 40)
+
+
+def test_physical_acceptance_rejects_replayed_modelrig_admission():
+    backend = _Backend([_frame()])
+    source = KinectV2Source(source_id="kinect-lab", backend=backend)
+
+    with pytest.raises(
+        acceptance.KinectPhysicalAcceptanceError,
+        match="replayed physical VisionRig evidence instead of freshly admitting it",
+    ):
+        acceptance.collect_kinect_physical_acceptance(
+            source=source,
+            pipeline=PerceptionPipeline((_EntityStage(), InfraredSummaryStage())),
+            publisher=_publisher(replayed=True),
+            frame_count=1,
+            git_sha="8" * 40,
+        )
+
+    assert backend.closed is True
