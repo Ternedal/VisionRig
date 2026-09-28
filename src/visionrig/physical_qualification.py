@@ -30,7 +30,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-SCHEMA = "visionrig/physical-perception-qualification/v1"
+SCHEMA = "visionrig/physical-perception-qualification/v2"
 DEFAULT_VISIONRIG_URL = "http://127.0.0.1:8110"
 DEFAULT_REPORT = Path("validation/visionrig-physical-perception-latest.json")
 MAX_RESPONSE_BYTES = 1024 * 1024
@@ -201,6 +201,22 @@ def _physical_sources(
 
 
 
+
+def _semantic_summary(event: Mapping[str, Any]) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    for field in ("entities", "relations", "landmarks", "depth", "infrared"):
+        value = event.get(field)
+        counts[field] = len(value) if isinstance(value, list) else 0
+    scene_label = event.get("scene_label")
+    counts["scene"] = 1 if isinstance(scene_label, str) and bool(scene_label.strip()) else 0
+    kinds = tuple(name for name, count in counts.items() if count > 0)
+    return {
+        "observation_count": sum(counts.values()),
+        "observation_kinds": kinds,
+        "counts": counts,
+    }
+
+
 def _has_semantic_observation(event: Mapping[str, Any]) -> bool:
     for field in ("entities", "relations", "landmarks", "depth", "infrared"):
         value = event.get(field)
@@ -347,6 +363,7 @@ def _success_report(
     baseline_accepted: int,
     candidate_cursor: int | None,
     frame_sequence: int,
+    event: Mapping[str, Any],
     bridge_binding: Mapping[str, Any],
     started: float,
     monotonic: Callable[[], float],
@@ -369,6 +386,7 @@ def _success_report(
     if int(final_source["accepted_frames"]) <= baseline_accepted:
         return None
     elapsed_ms = round((monotonic() - started) * 1000.0, 3)
+    semantic_summary = _semantic_summary(event)
     return {
         "schema": SCHEMA,
         "generated_at": datetime.now(timezone.utc)
@@ -392,6 +410,9 @@ def _success_report(
             "journal_cursor": candidate_cursor,
             "frame_sequence": frame_sequence,
             "visionrig_event_ref": bridge_binding["visionrig_event_ref"],
+            "semantic_observation_count": semantic_summary["observation_count"],
+            "semantic_observation_kinds": semantic_summary["observation_kinds"],
+            "semantic_observation_counts": semantic_summary["counts"],
         },
         "modelrig_admission": dict(bridge_binding),
         "timing": {
@@ -527,6 +548,7 @@ def qualify_physical_perception(
                     baseline_accepted=baseline_accepted,
                     candidate_cursor=candidate_cursor,
                     frame_sequence=frame_sequence,
+                    event=event,
                     bridge_binding=bridge_binding,
                     started=started,
                     monotonic=monotonic,
@@ -560,6 +582,7 @@ def qualify_physical_perception(
                         baseline_accepted=baseline_accepted,
                         candidate_cursor=candidate_cursor,
                         frame_sequence=frame_sequence,
+                        event=candidate_event,
                         bridge_binding=bridge_binding,
                         started=started,
                         monotonic=monotonic,

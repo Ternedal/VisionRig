@@ -207,6 +207,16 @@ def test_physical_qualification_binds_fresh_camera_event_to_modelrig_receipt() -
     assert report["physical_source"]["source_type"] == "camera"
     assert report["event"]["frame_sequence"] == 11
     assert report["event"]["visionrig_event_ref"] == _event_ref(event)
+    assert report["event"]["semantic_observation_count"] == 1
+    assert report["event"]["semantic_observation_kinds"] == ("entities",)
+    assert report["event"]["semantic_observation_counts"] == {
+        "entities": 1,
+        "relations": 0,
+        "landmarks": 0,
+        "depth": 0,
+        "infrared": 0,
+        "scene": 0,
+    }
     assert report["modelrig_admission"]["model_calls"] == 0
     assert report["privacy"] == {
         "raw_frame_included": False,
@@ -535,3 +545,24 @@ def test_bridge_binding_ignores_stale_same_sequence_receipt() -> None:
     )
     assert binding is not None
     assert binding["visionrig_event_ref"] == _event_ref(current)
+
+
+def test_physical_qualification_semantic_summary_is_privacy_safe() -> None:
+    event = _event()
+    event["entities"][0]["label"] = "sensitive-label"
+    event["scene_label"] = "private-scene"
+    event["infrared"] = [{
+        "mean_intensity": 0.1,
+        "contrast": 0.2,
+        "hotspot_fraction": 0.3,
+        "sample_count": 42,
+        "method": "kinect-v2-infrared-summary",
+    }]
+    from visionrig.physical_qualification import _semantic_summary
+    summary = _semantic_summary(event)
+    encoded = json.dumps(summary)
+    assert summary["observation_count"] == 3
+    assert summary["observation_kinds"] == ("entities", "infrared", "scene")
+    assert "sensitive-label" not in encoded
+    assert "private-scene" not in encoded
+    assert "mean_intensity" not in encoded
