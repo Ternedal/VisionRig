@@ -648,3 +648,18 @@ sources whose current presence is `online`.
 This prevents an offline fully-migrated producer from making the active fleet
 look more ready than it is, while preserving the existing migration inventory
 and transition history.
+
+
+## VisionRig 0.83.0: producer readiness blocker stages
+
+Producer readiness now separates heartbeat migration blockers into two explicit
+counts: `contract_upgrade` for runtime producers on heartbeat v2-v5 and
+`establish_heartbeat` for runtime sources that have not published a heartbeat.
+
+The blocker distribution is exposed in both total runtime
+`producer_readiness` and `online_producer_readiness`, using the same shared
+source-level readiness semantics as catalog rows and heartbeat upgrade
+candidates.
+
+This remains descriptive migration telemetry only and does not affect
+attention, capture, desired state, or producer control.
