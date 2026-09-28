@@ -739,6 +739,10 @@ def test_sensor_fleet_summary_counts_runtime_lifecycle_and_control() -> None:
     )
     assert health_fleet["producer_readiness"] == fleet["producer_readiness"]
     assert (
+        health_fleet["producer_readiness_transition"]
+        == fleet["producer_readiness_transition"]
+    )
+    assert (
         health_fleet["packet_target_flap_window_seconds"]
         == fleet["packet_target_flap_window_seconds"]
     )
