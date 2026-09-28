@@ -116,3 +116,8 @@ history.
 ## Qualification receipt v2
 
 VisionRig 0.90.0 advances the generic physical qualification receipt to `visionrig/physical-perception-qualification/v2`. The receipt now records only privacy-safe semantic evidence metadata for the exact qualifying event: total observation count, bounded observation categories (`entities`, `relations`, `landmarks`, `depth`, `infrared`, `scene`), and per-category counts. It never records entity labels, OCR text, scene text, landmark coordinates, depth values, or infrared measurements. The existing exact event hash remains the authoritative binding to the full event.
+
+
+## WorldState-qualified release evidence
+
+VisionRig 0.91.0 requires the exact-bound ModelRig admission receipt used by generic physical qualification to report `world_changed=true`. A successful transport/admission with no WorldState transition is therefore insufficient for the release gate. This aligns the generic camera/VR qualification semantics with the dedicated Kinect physical acceptance path.
