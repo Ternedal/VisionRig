@@ -1220,6 +1220,11 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
         "packet_measurement_complete_sources_delta": None,
         "packet_measurement_complete_ratio_delta": None,
     }
+    baseline_changes = client.get("/api/v1/sensors/changes").json()
+    baseline_cursor = baseline_changes["next_cursor"]
+    assert "producer_readiness_changed" not in [
+        entry["event"]["kind"] for entry in baseline_changes["entries"]
+    ]
 
     now[0] = datetime(2026, 9, 28, 4, 5, tzinfo=timezone.utc)
     v6 = dict(v5)
@@ -1257,7 +1262,39 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
     assert transition["packet_measurement_complete_sources_delta"] == 1
     assert transition["packet_measurement_complete_ratio_delta"] == 1.0
 
+    readiness_changes = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": baseline_cursor},
+    ).json()
+    readiness_events = [
+        entry["event"]
+        for entry in readiness_changes["entries"]
+        if entry["event"]["kind"] == "producer_readiness_changed"
+    ]
+    assert len(readiness_events) == 1
+    readiness_event = readiness_events[0]
+    assert readiness_event["source_id"] == "camera-migrate"
+    assert readiness_event["occurred_utc"] == "2026-09-28T04:05:00+00:00"
+    assert readiness_event["payload"]["previous"] == transition["previous"]
+    assert readiness_event["payload"]["current"] == migrated["producer_readiness"]
+    assert readiness_event["payload"]["transition"] == transition
+
+    event_cursor = readiness_changes["next_cursor"]
     now[0] = datetime(2026, 9, 28, 4, 10, tzinfo=timezone.utc)
+    repeated_heartbeat = dict(v6)
+    repeated_heartbeat["capability_refreshed_utc"] = "2026-09-28T04:10:00+00:00"
+    assert (
+        client.post("/api/v1/sensors/heartbeat", json=repeated_heartbeat).status_code
+        == 200
+    )
+    quiet = client.get(
+        "/api/v1/sensors/changes",
+        params={"after_cursor": event_cursor},
+    ).json()
+    assert "producer_readiness_changed" not in [
+        entry["event"]["kind"] for entry in quiet["entries"]
+    ]
+
     repeated = client.get("/api/v1/sensors/fleet").json()
     assert repeated["producer_readiness_transition"] == transition
 
