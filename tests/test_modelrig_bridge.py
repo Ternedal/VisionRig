@@ -7,6 +7,7 @@ import pytest
 from visionrig.contracts import (
     BoundingBox,
     DepthObservation,
+    InfraredObservation,
     PerceptionEvent,
     SourceDescriptor,
     VisualEntity,
@@ -26,6 +27,7 @@ def event(
     distance_m: float = 1.25,
     confidence: float = 0.95,
     scene_label: str | None = None,
+    infrared_mean: float | None = None,
 ) -> PerceptionEvent:
     source = SourceDescriptor(
         source_id="kinect-v2-0",
@@ -52,6 +54,18 @@ def event(
         ),
         scene_label=scene_label,
         scene_confidence=(0.9 if scene_label is not None else None),
+        infrared=(
+            (
+                InfraredObservation(
+                    mean_intensity=infrared_mean,
+                    contrast=0.2,
+                    hotspot_fraction=0.1,
+                    sample_count=217088,
+                ),
+            )
+            if infrared_mean is not None
+            else ()
+        ),
         depth=(
             DepthObservation(
                 subject_entity_id=f"person-{sequence}",
@@ -327,3 +341,55 @@ def test_last_result_snapshot_is_receipt_bound_and_semantic_free() -> None:
     assert "PRIVATE-ROOM-LABEL" not in encoded
     assert "entities" not in encoded
     assert "landmarks" not in encoded
+
+
+def test_infrared_jitter_inside_same_bucket_is_suppressed() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return receipt_for_request(request)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert publisher.publish(event(infrared_mean=0.41)).status == "published"
+    assert (
+        publisher.publish(
+            event(
+                event_id="evt-ir-jitter",
+                sequence=2,
+                infrared_mean=0.43,
+            )
+        ).status
+        == "suppressed"
+    )
+    assert calls == 1
+
+
+def test_meaningful_infrared_bucket_change_is_published() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return receipt_for_request(request)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    assert publisher.publish(event(infrared_mean=0.40)).status == "published"
+    assert (
+        publisher.publish(
+            event(
+                event_id="evt-ir-change",
+                sequence=2,
+                infrared_mean=0.72,
+            )
+        ).status
+        == "published"
+    )
+    assert calls == 2
