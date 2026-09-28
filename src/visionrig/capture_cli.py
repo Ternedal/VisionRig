@@ -112,7 +112,7 @@ def _run_capture(
                 print(
                     f"frame={event.frame_sequence} entities={len(event.entities)} "
                     f"landmarks={len(event.landmarks)} depth={len(event.depth)} "
-                    f"dropped={event.dropped_frames}"
+                    f"infrared={len(event.infrared)} dropped={event.dropped_frames}"
                 )
     finally:
         if source is not None:

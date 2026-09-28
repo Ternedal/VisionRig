@@ -423,7 +423,7 @@ def qualify_physical_perception(
     health = http_json(base + "/health", timeout=request_timeout)
     if health.get("status") != "ok" or health.get("service") != "visionrig":
         raise PhysicalPerceptionQualificationError("VisionRig health is not ok")
-    if health.get("perception_schema") != "visionrig/perception-event/v3":
+    if health.get("perception_schema") != "visionrig/perception-event/v4":
         raise PhysicalPerceptionQualificationError(
             "VisionRig perception schema is not v3"
         )
@@ -492,7 +492,7 @@ def qualify_physical_perception(
                 or source.get("source_type") != selected_type
                 or not isinstance(frame_sequence, int)
                 or frame_sequence <= baseline_sequence
-                or event.get("schema_id") != "visionrig/perception-event/v3"
+                or event.get("schema_id") != "visionrig/perception-event/v4"
                 or event.get("production_authority") is not False
             ):
                 continue

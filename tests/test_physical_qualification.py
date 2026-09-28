@@ -15,7 +15,7 @@ from visionrig.physical_qualification import (
 
 def _event(*, sequence: int = 11) -> dict:
     return {
-        "schema_id": "visionrig/perception-event/v3",
+        "schema_id": "visionrig/perception-event/v4",
         "event_id": "evt-physical-11",
         "observed_at": "2026-09-28T05:00:00Z",
         "source": {
@@ -127,7 +127,7 @@ def _health(*, event: dict | None = None, activation: bool = False) -> dict:
         "status": "ok",
         "service": "visionrig",
         "schema": "visionrig/health/v59",
-        "perception_schema": "visionrig/perception-event/v3",
+        "perception_schema": "visionrig/perception-event/v4",
         "modelrig_bridge": {
             "enabled": True,
             "endpoint": "http://127.0.0.1:8099/experimental/consciousness/visionrig-event",

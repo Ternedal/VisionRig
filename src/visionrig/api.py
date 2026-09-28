@@ -1123,8 +1123,8 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v64",
-            "perception_schema": "visionrig/perception-event/v3",
+            "schema": "visionrig/health/v65",
+            "perception_schema": "visionrig/perception-event/v4",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
             "event_sinks": asdict(runtime.sink_stats()),

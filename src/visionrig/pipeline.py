@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from .contracts import (
     DepthObservation,
+    InfraredObservation,
     LandmarkObservation,
     PerceptionEvent,
     SourceDescriptor,
@@ -34,6 +35,7 @@ class StageResult:
     relations: tuple[VisualRelation, ...] = ()
     landmarks: tuple[LandmarkObservation, ...] = ()
     depth: tuple[DepthObservation, ...] = ()
+    infrared: tuple[InfraredObservation, ...] = ()
     scene_label: str | None = None
     scene_confidence: float | None = None
 
@@ -68,6 +70,7 @@ class PerceptionPipeline:
             relations=result.relations,
             landmarks=result.landmarks,
             depth=result.depth,
+            infrared=result.infrared,
             scene_label=result.scene_label,
             scene_confidence=result.scene_confidence,
             dropped_frames=frame.dropped_frames,
@@ -99,11 +102,18 @@ class PassthroughStage:
             item if isinstance(item, DepthObservation) else DepthObservation.model_validate(item)
             for item in frame.payload.get("depth", ())
         )
+        infrared = tuple(
+            item
+            if isinstance(item, InfraredObservation)
+            else InfraredObservation.model_validate(item)
+            for item in frame.payload.get("infrared", ())
+        )
         return StageResult(
             entities=current.entities + entities,
             relations=current.relations + relations,
             landmarks=current.landmarks + landmarks,
             depth=current.depth + depth,
+            infrared=current.infrared + infrared,
             scene_label=frame.payload.get("scene_label", current.scene_label),
             scene_confidence=frame.payload.get("scene_confidence", current.scene_confidence),
         )

@@ -1,4 +1,4 @@
-"""Best-effort VisionRig PerceptionEvent/v3 publisher for ModelRig.
+"""Best-effort VisionRig PerceptionEvent/v4 publisher for ModelRig.
 
 The publisher is intentionally loopback-only. It sends no raw frames and applies
 semantic change suppression before crossing the VisionRig -> ModelRig boundary.
@@ -98,6 +98,14 @@ class SemanticChangeGate:
             if metric
             else None
         )
+        infrared_buckets = [
+            (
+                round(float(item.mean_intensity) * 10.0) / 10.0,
+                round(float(item.contrast) * 10.0) / 10.0,
+                round(float(item.hotspot_fraction) * 20.0) / 20.0,
+            )
+            for item in event.infrared
+        ]
         semantic = {
             "entity_kinds": sorted(kinds.items()),
             "labels": labels,
@@ -105,6 +113,7 @@ class SemanticChangeGate:
             "relations": sorted(predicates.items()),
             "nearest_metric_depth_bucket_m": nearest_bucket,
             "metric_depth_count": len(metric),
+            "infrared_buckets": infrared_buckets,
             "ocr_items": sum(1 for item in event.entities if item.kind == "text"),
             "landmark_groups": sorted(item.group for item in event.landmarks),
         }

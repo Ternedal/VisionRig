@@ -313,6 +313,7 @@ class KinectV2DepthStage:
             relations=current.relations,
             landmarks=current.landmarks,
             depth=current.depth + tuple(observations),
+            infrared=current.infrared,
             scene_label=current.scene_label,
             scene_confidence=current.scene_confidence,
         )

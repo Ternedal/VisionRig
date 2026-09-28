@@ -3,7 +3,13 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from visionrig.contracts import DepthObservation, SourceDescriptor, VisualEntity, PerceptionEvent
+from visionrig.contracts import (
+    DepthObservation,
+    InfraredObservation,
+    PerceptionEvent,
+    SourceDescriptor,
+    VisualEntity,
+)
 
 
 def test_confidence_is_bounded() -> None:
@@ -37,4 +43,33 @@ def test_metric_depth_must_be_positive_and_finite() -> None:
             relative_depth=0.5,
             distance_m=0.0,
             method="hardware-depth",
+        )
+
+
+def test_infrared_observation_is_bounded_and_summary_only() -> None:
+    observation = InfraredObservation(
+        mean_intensity=0.4,
+        contrast=0.2,
+        hotspot_fraction=0.1,
+        sample_count=217088,
+    )
+    assert observation.method == "kinect-v2-infrared-summary"
+
+    with pytest.raises(ValidationError):
+        InfraredObservation(
+            mean_intensity=1.1,
+            contrast=0.2,
+            hotspot_fraction=0.1,
+            sample_count=217088,
+        )
+
+    with pytest.raises(ValidationError):
+        InfraredObservation.model_validate(
+            {
+                "mean_intensity": 0.4,
+                "contrast": 0.2,
+                "hotspot_fraction": 0.1,
+                "sample_count": 217088,
+                "raw": [1, 2, 3],
+            }
         )

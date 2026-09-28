@@ -7,7 +7,8 @@ first-class camera sensor, not as a special perception pipeline.
 
 - RGB: primary image payload used by the existing detector/OCR/landmark/embedding stages.
 - Hardware depth: metric depth from Kinect's depth sensor, coordinate-mapped into color space and emitted as both `distance_m` and normalized `relative_depth`.
-- Infrared: frame-local auxiliary sensor channel for future IR-aware stages.
+- Infrared: frame-local auxiliary sensor channel summarized by the bounded
+  `infrared_summary` perception stage; raw IR pixels never leave VisionRig.
 
 This keeps model stages camera-agnostic while allowing hardware depth to replace
 monocular depth guesses when a Kinect is present.
@@ -151,3 +152,15 @@ WorldState does not change, the checkout is dirty, or HEAD differs from
 
 This receipt is evidence for the cross-repository release gate only. It does not
 grant identity, durable-memory, execution, scheduling or production authority.
+
+
+## Infrared perception summary
+
+VisionRig 0.87.0 activates Kinect infrared as a bounded perception signal.
+`InfraredSummaryStage` consumes the frame-local uint16 infrared plane and emits
+one `InfraredObservation` with normalized mean intensity, contrast, hotspot
+fraction and sample count.
+
+The stage does not retain or serialize the raw plane. Small frame-to-frame IR
+jitter is bucketed by the ModelRig semantic change gate so normal sensor noise
+does not create cognition traffic.

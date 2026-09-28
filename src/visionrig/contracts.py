@@ -73,6 +73,15 @@ class DepthObservation(BaseModel):
     method: str = Field(min_length=1, max_length=128)
 
 
+class InfraredObservation(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    mean_intensity: UnitInterval
+    contrast: UnitInterval
+    hotspot_fraction: UnitInterval
+    sample_count: int = Field(ge=1, le=4_194_304)
+    method: Literal["kinect-v2-infrared-summary"] = "kinect-v2-infrared-summary"
+
+
 class SourceDescriptor(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     source_id: str = Field(min_length=1, max_length=128)
@@ -82,7 +91,7 @@ class SourceDescriptor(BaseModel):
 
 class PerceptionEvent(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    schema_id: Literal["visionrig/perception-event/v3"] = "visionrig/perception-event/v3"
+    schema_id: Literal["visionrig/perception-event/v4"] = "visionrig/perception-event/v4"
     event_id: str = Field(min_length=1, max_length=128)
     observed_at: datetime
     source: SourceDescriptor
@@ -91,6 +100,7 @@ class PerceptionEvent(BaseModel):
     relations: tuple[VisualRelation, ...] = ()
     landmarks: tuple[LandmarkObservation, ...] = ()
     depth: tuple[DepthObservation, ...] = ()
+    infrared: tuple[InfraredObservation, ...] = ()
     scene_label: str | None = Field(default=None, max_length=256)
     scene_confidence: UnitInterval | None = None
     dropped_frames: int = Field(default=0, ge=0)
@@ -107,6 +117,7 @@ class PerceptionEvent(BaseModel):
         relations: tuple[VisualRelation, ...] = (),
         landmarks: tuple[LandmarkObservation, ...] = (),
         depth: tuple[DepthObservation, ...] = (),
+        infrared: tuple[InfraredObservation, ...] = (),
         scene_label: str | None = None,
         scene_confidence: float | None = None,
         dropped_frames: int = 0,
@@ -120,6 +131,7 @@ class PerceptionEvent(BaseModel):
             relations=relations,
             landmarks=landmarks,
             depth=depth,
+            infrared=infrared,
             scene_label=scene_label,
             scene_confidence=scene_confidence,
             dropped_frames=dropped_frames,

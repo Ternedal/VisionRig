@@ -182,6 +182,7 @@ class YoloOnnxStage:
             relations=current.relations,
             landmarks=current.landmarks,
             depth=current.depth,
+            infrared=current.infrared,
             scene_label=current.scene_label,
             scene_confidence=current.scene_confidence,
         )

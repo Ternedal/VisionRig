@@ -2,6 +2,7 @@
 
 from .contracts import (
     DepthObservation,
+    InfraredObservation,
     LandmarkObservation,
     PerceptionEvent,
     VisualEntity,
@@ -12,6 +13,7 @@ from .pipeline import PerceptionPipeline
 
 __all__ = [
     "DepthObservation",
+    "InfraredObservation",
     "LandmarkObservation",
     "PerceptionEvent",
     "VisualEntity",
@@ -20,4 +22,4 @@ __all__ = [
     "PerceptionPipeline",
 ]
 
-__version__ = "0.86.0"
+__version__ = "0.87.0"
