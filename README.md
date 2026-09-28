@@ -10,7 +10,7 @@ world-state authority.
 
 VisionRig includes:
 
-- typed PerceptionEvent/v3 observations
+- typed PerceptionEvent/v4 observations
 - local webcam/image/video capture
 - Kinect v2 RGB + hardware depth + infrared capture
 - **managed local webcam/Kinect capture through the shared desired/effective-state contract**
@@ -61,7 +61,7 @@ VisionRig includes:
 - encrypted, revisioned .mrvision profiles + image enrollment/revocation CLI
 - **service-loaded face/body/object/place recognition hints**
 - bounded cursor event journal for ModelRig
-- opt-in semantic PerceptionEvent/v3 -> Consciousness Core bridge with change suppression
+- opt-in semantic PerceptionEvent/v4 -> Consciousness Core bridge with change suppression
 - verified model manifests with checksum/provenance/license metadata
 
 ## Operational status and control
@@ -753,3 +753,8 @@ data; VisionRig emits only normalized summary statistics:
 The default service pipeline includes an `infrared_summary` stage that is a
 no-op for sources without infrared data. Raw infrared pixels are never placed in
 PerceptionEvent, WorldSnapshot, or ModelRig context.
+
+
+## VisionRig 0.88.0: IR-qualified physical release evidence
+
+The physical Kinect acceptance gate now proves both sides of the infrared path: every accepted hardware frame must contain a real IR plane and must produce at least one bounded `InfraredObservation` in `PerceptionEvent/v4`. The receipt schema advances to `visionrig/kinect-physical-acceptance/v2` and records the number of frames carrying semantic IR, total bounded IR observations, and the exact perception schema. The gate still independently requires non-IR semantic perception plus an exact-bound ModelRig WorldState-changing receipt, so IR alone cannot make a release candidate pass.

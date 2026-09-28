@@ -25,7 +25,7 @@ Input adapters
        | visual embeddings        |
        +------------+-------------+
                     |
-          PerceptionEvent v3
+          PerceptionEvent v4
    entities/landmarks/depth(m)
                     |
           semantic change gate
@@ -93,7 +93,7 @@ front/behind ordering only from metric depth and keeps monocular estimates
 explicitly relative.
 
 ### V4 — ModelRig bridge — implemented
-Publish only semantic PerceptionEvent v3 changes to a strict loopback ModelRig
+Publish only semantic PerceptionEvent v4 changes to a strict loopback ModelRig
 C20 adapter. Exact event refs are receipt-bound; OCR text, identity hints and
 raw frame modalities remain outside cognitive context. Delivery failure is
 isolated from local perception.
@@ -115,7 +115,9 @@ and health v64.
 ### V7 — physical perception qualification — implemented foundation
 Physical Kinect v2 acceptance and generic physical-perception qualification bind
 fresh physical sensor evidence to exact ModelRig bridge receipts without granting
-identity, memory-write, execution, scheduling, or production authority.
+identity, memory-write, execution, scheduling, or production authority. The Kinect
+gate also requires each physical infrared frame to yield a bounded
+`InfraredObservation` in PerceptionEvent/v4.
 
 
 ## Contract change: v2 -> v3
@@ -128,7 +130,7 @@ depth remains valid but cannot manufacture metric ordering.
 
 ## Current repository state
 
-As of VisionRig 0.86.0, `main` is the authoritative implementation branch.
+As of VisionRig 0.88.0, `main` is the authoritative implementation branch.
 Historical feature branches may remain for provenance, but they are not a source
 of newer runtime behavior unless explicitly rebased into a new pull request.
 

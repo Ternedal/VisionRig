@@ -7,6 +7,7 @@ import pytest
 
 from visionrig import kinect_acceptance as acceptance
 from visionrig.contracts import BoundingBox, VisualEntity
+from visionrig.infrared import InfraredSummaryStage
 from visionrig.kinect_v2 import KinectV2FrameSet, KinectV2Source
 from visionrig.modelrig_bridge import ModelRigPerceptionPublisher
 from visionrig.pipeline import PerceptionPipeline, StageResult
@@ -99,7 +100,7 @@ def test_physical_acceptance_requires_all_modalities_semantics_and_world_receipt
 
     receipt = acceptance.collect_kinect_physical_acceptance(
         source=source,
-        pipeline=PerceptionPipeline((_EntityStage(),)),
+        pipeline=PerceptionPipeline((_EntityStage(), InfraredSummaryStage())),
         publisher=_publisher(),
         frame_count=3,
         git_sha="1" * 40,
@@ -114,6 +115,9 @@ def test_physical_acceptance_requires_all_modalities_semantics_and_world_receipt
     assert receipt.raw_depth_frames == 3
     assert receipt.aligned_depth_frames == 3
     assert receipt.infrared_frames == 3
+    assert receipt.infrared_semantic_frames == 3
+    assert receipt.infrared_observations == 3
+    assert receipt.perception_schema == "visionrig/perception-event/v4"
     assert receipt.semantic_events == 3
     assert receipt.semantic_observations == 3
     # First semantic state publishes; later identical semantic state may suppress.
@@ -139,10 +143,29 @@ def test_physical_acceptance_fails_closed_when_infrared_is_missing():
     ):
         acceptance.collect_kinect_physical_acceptance(
             source=source,
-            pipeline=PerceptionPipeline((_EntityStage(),)),
+            pipeline=PerceptionPipeline((_EntityStage(), InfraredSummaryStage())),
             publisher=_publisher(),
             frame_count=1,
             git_sha="2" * 40,
+        )
+
+    assert backend.closed is True
+
+
+def test_physical_acceptance_fails_when_raw_ir_is_not_semantically_summarized():
+    backend = _Backend([_frame()])
+    source = KinectV2Source(backend=backend)
+
+    with pytest.raises(
+        acceptance.KinectPhysicalAcceptanceError,
+        match="did not produce a bounded PerceptionEvent/v4 infrared summary",
+    ):
+        acceptance.collect_kinect_physical_acceptance(
+            source=source,
+            pipeline=PerceptionPipeline((_EntityStage(),)),
+            publisher=_publisher(),
+            frame_count=1,
+            git_sha="7" * 40,
         )
 
     assert backend.closed is True
@@ -158,7 +181,7 @@ def test_physical_acceptance_refuses_empty_semantics_even_with_real_modalities()
     ):
         acceptance.collect_kinect_physical_acceptance(
             source=source,
-            pipeline=PerceptionPipeline(),
+            pipeline=PerceptionPipeline((InfraredSummaryStage(),)),
             publisher=_publisher(),
             frame_count=2,
             git_sha="3" * 40,
@@ -194,7 +217,7 @@ def test_physical_acceptance_requires_contiguous_sensor_sequence():
     ):
         acceptance.collect_kinect_physical_acceptance(
             source=_BadSource(),  # type: ignore[arg-type]
-            pipeline=PerceptionPipeline((_EntityStage(),)),
+            pipeline=PerceptionPipeline((_EntityStage(), InfraredSummaryStage())),
             publisher=_publisher(),
             frame_count=2,
             git_sha="4" * 40,
