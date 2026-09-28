@@ -126,3 +126,8 @@ VisionRig 0.91.0 requires the exact-bound ModelRig admission receipt used by gen
 ## Fresh-admission requirement
 
 VisionRig 0.92.0 requires the generic physical qualification gate to bind to a fresh `published` ModelRig admission. A `replayed` bridge result, or a receipt whose `replayed` flag is true, cannot satisfy release evidence even if it references the same event. This prevents a prior idempotent admission from being reused as proof of a new physical perception run.
+
+
+## Stable physical source identity
+
+VisionRig 0.94.0 binds generic physical qualification to the same physical source identity across preflight, the qualifying `PerceptionEvent/v4`, and the final sensor-status sample. A matching `source_id` is no longer enough: `source_type` and device identity must remain stable for the full run. Device/source replacement during qualification therefore fails closed.
