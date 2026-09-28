@@ -1367,16 +1367,25 @@ def test_online_producer_readiness_excludes_offline_runtime_sources() -> None:
         "packet_measurement_complete_ratio": 0.0,
     }
     assert fleet["online_producer_readiness_expiry"] == {
-        "next_change_utc": "2026-09-28T06:02:15+00:00",
-        "next_change_seconds": 15.0,
+        "next_change_utc": "2026-09-28T06:02:15.001000+00:00",
+        "next_change_seconds": 15.001,
         "source_id": "camera-current-v5",
     }
 
     now[0] = datetime(2026, 9, 28, 6, 2, 10, tzinfo=timezone.utc)
     aging = client.get("/api/v1/sensors/fleet").json()
     assert aging["online_producer_readiness_expiry"] == {
-        "next_change_utc": "2026-09-28T06:02:15+00:00",
-        "next_change_seconds": 5.0,
+        "next_change_utc": "2026-09-28T06:02:15.001000+00:00",
+        "next_change_seconds": 5.001,
+        "source_id": "camera-current-v5",
+    }
+
+    now[0] = datetime(2026, 9, 28, 6, 2, 15, tzinfo=timezone.utc)
+    boundary = client.get("/api/v1/sensors/fleet").json()
+    assert boundary["online_producer_readiness"]["runtime_sources"] == 1
+    assert boundary["online_producer_readiness_expiry"] == {
+        "next_change_utc": "2026-09-28T06:02:15.001000+00:00",
+        "next_change_seconds": 0.001,
         "source_id": "camera-current-v5",
     }
 
