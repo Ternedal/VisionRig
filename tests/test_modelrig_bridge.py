@@ -112,6 +112,33 @@ def test_bridge_requires_loopback_worker_url() -> None:
     assert publisher.endpoint.endswith("/experimental/consciousness/visionrig-event")
 
 
+def test_successful_bridge_receipt_survives_later_suppressed_frame() -> None:
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(receipt_for_request)),
+    )
+
+    first = publisher.publish(event(sequence=1))
+    second = publisher.publish(
+        event(
+            event_id="evt-suppressed-after-success",
+            sequence=2,
+            confidence=0.70,
+        )
+    )
+
+    assert first.status == "published"
+    assert second.status == "suppressed"
+    assert publisher.last_result_snapshot()["status"] == "suppressed"
+    successful = publisher.successful_result_snapshots()
+    assert len(successful) == 1
+    assert successful[0]["status"] == "published"
+    assert successful[0]["source_id"] == "kinect-v2-0"
+    assert successful[0]["frame_sequence"] == 1
+    assert successful[0]["receipt"]["visionrig_event_ref"] == (
+        first.receipt.visionrig_event_ref
+    )
+
+
 def test_semantically_unchanged_frames_are_suppressed() -> None:
     calls = 0
 
