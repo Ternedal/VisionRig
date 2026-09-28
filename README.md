@@ -610,3 +610,15 @@ Catalog-only sources deliberately use `null` for runtime readiness facts
 instead of being treated as failed producers. This keeps row-level UI semantics
 aligned with fleet producer readiness, which is based only on active runtime
 sources.
+
+
+## VisionRig 0.81.0: physical Kinect acceptance
+
+`visionrig-kinect-acceptance` now produces a fail-closed, exact-checkout
+physical evidence receipt for the cross-repository
+`visionrig_physical_perception` release gate. A PASS requires real Kinect v2
+RGB, raw depth, RGB-aligned depth and infrared across a bounded frame window,
+meaningful semantic perception, and an exact-bound ModelRig admission receipt
+that proves at least one WorldState change. The receipt contains no raw frame
+bytes and grants no identity, memory, execution, scheduling or production
+authority. See `docs/KINECT_V2.md`.

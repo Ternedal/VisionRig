@@ -9,3 +9,5 @@ build/
 .env
 *.mrvision
 *.mrvision.key
+
+validation/visionrig-kinect-physical-acceptance.json
