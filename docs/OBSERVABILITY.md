@@ -45,9 +45,10 @@ producer's declared refresh interval, `stale` after that, and `unknown` when
 the producer does not publish negotiation telemetry.
 
 This is transient producer telemetry. It does not advance registry
-`state_revision`, change desired state, or grant authority. The semantic
-change feed emits `runtime_changed` when the negotiated byte ceiling or
-compression strategy changes, but not when only the refresh timestamp advances.
+`state_revision`, change desired state, or grant authority. The semantic change feed emits `runtime_changed` when the producer heartbeat
+contract, negotiated byte ceiling, compression strategy, or negotiated packet
+target changes, but not when only refresh timestamps or observed packet
+utilization advance.
 
 ## Operator sensor catalog
 
@@ -1056,3 +1057,23 @@ The online projection is descriptive only and does not affect attention,
 desired state, capture authority, semantic events, or producer control.
 
 Bootstrap v32 embeds fleet v29 and health advances to v60.
+
+
+### Heartbeat contract change events
+
+VisionRig 0.83.0 treats a change in a runtime source's accepted
+`heartbeat_schema_id` as a semantic producer-contract transition.
+
+A transition such as heartbeat v5 -> v6 emits one `runtime_changed` event and
+the event payload includes the new `heartbeat_schema_id`. This gives
+incremental UI clients a wake-up signal for readiness and migration changes
+without polling fleet state continuously.
+
+Repeated heartbeats using the same schema remain quiet unless another existing
+semantic runtime field changes. In particular,
+`observed_packet_utilization`, packet-pressure counters/durations, and
+capability-refresh timestamp updates do not independently emit
+`runtime_changed` events.
+
+No sensor registry revision is created solely by this runtime transition, and
+the change grants no producer authority or control behavior.
