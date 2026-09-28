@@ -106,6 +106,17 @@ def test_sensor_catalog_joins_runtime_and_operator_metadata() -> None:
         "status": "active",
         "retired_utc": None,
     }
+    assert source["producer_readiness"] == {
+        "runtime_available": True,
+        "heartbeat_v6": False,
+        "heartbeat_upgrade_required": True,
+        "heartbeat_schema_id": "visionrig/sensor-heartbeat/v4",
+        "required_heartbeat_schema_id": "visionrig/sensor-heartbeat/v6",
+        "heartbeat_versions_behind": 2,
+        "heartbeat_upgrade_stage": "contract_upgrade",
+        "packet_measurement_complete": False,
+        "packet_measurement": "unavailable",
+    }
     assert source["packet_target"] == {
         "measurement": "unavailable",
         "status": "unknown",
@@ -154,6 +165,17 @@ def test_catalog_can_preconfigure_sensor_before_it_is_online() -> None:
     catalog = client.get("/api/v1/sensors/catalog").json()
     assert catalog["sources"][0]["runtime"] is None
     assert catalog["sources"][0]["metadata"]["enabled"] is False
+    assert catalog["sources"][0]["producer_readiness"] == {
+        "runtime_available": False,
+        "heartbeat_v6": None,
+        "heartbeat_upgrade_required": None,
+        "heartbeat_schema_id": None,
+        "required_heartbeat_schema_id": None,
+        "heartbeat_versions_behind": None,
+        "heartbeat_upgrade_stage": None,
+        "packet_measurement_complete": None,
+        "packet_measurement": None,
+    }
     assert catalog["sources"][0]["packet_target"] == {
         "measurement": "unavailable",
         "status": "unknown",
