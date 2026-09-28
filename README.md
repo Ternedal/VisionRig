@@ -723,3 +723,15 @@ Heartbeat transition detection is serialized across the before-snapshot,
 ingress mutation, runtime event emission, and readiness transition. Concurrent
 identical upgrades therefore produce one contract-transition event rather than
 duplicate change-feed entries. Telemetry-only refreshes remain quiet.
+
+
+## VisionRig 0.86.0: producer readiness blocker stages
+
+Producer readiness now separates heartbeat migration blockers into explicit
+`contract_upgrade` and `establish_heartbeat` counts. The distribution is
+reported for both total runtime readiness and the online-only projection.
+
+The aggregate is derived from the same per-source readiness function used by
+catalog rows and heartbeat upgrade candidates, keeping row-level and fleet-level
+migration semantics aligned. This telemetry is descriptive only and does not
+change attention, capture, desired state, or producer control.
