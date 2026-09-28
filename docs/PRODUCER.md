@@ -333,3 +333,15 @@ The producer continues to report
 `observed_packet_utilization` as measurement. This makes it possible to see
 whether JPEG adaptation is actually operating near the requested budget without
 turning normal packet-size variation into semantic control events.
+
+
+## Heartbeat contract transition events
+
+VisionRig 0.85.0 emits one semantic `runtime_changed` event when a runtime
+producer changes accepted heartbeat schema version. The event includes the new
+`heartbeat_schema_id`.
+
+The transition is detected atomically around the heartbeat mutation, so
+concurrent duplicate upgrade heartbeats cannot create duplicate contract-change
+events. Repeated heartbeats on the same schema and telemetry-only refreshes stay
+silent.

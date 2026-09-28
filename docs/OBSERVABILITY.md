@@ -1148,3 +1148,19 @@ runtime snapshot rather than client receipt time.
 The timestamp is operational metadata only. It does not advance
 `sensor_state_revision`, change the semantic change cursor, create an event, or
 alter capture/control authority.
+
+
+### Heartbeat contract change events
+
+VisionRig 0.85.0 treats a change in a runtime source's accepted
+`heartbeat_schema_id` as a semantic producer-contract transition.
+
+The heartbeat transition path is serialized from the pre-mutation runtime
+snapshot through ingress mutation and event emission. Two concurrent heartbeats
+that both attempt the same contract upgrade therefore cannot both compare
+against the same stale prior schema and emit duplicate `runtime_changed`
+entries.
+
+Repeated heartbeats using the same schema remain quiet unless another existing
+semantic runtime field changes. Observed packet utilization, pressure counters,
+and refresh timestamps do not independently emit runtime changes.

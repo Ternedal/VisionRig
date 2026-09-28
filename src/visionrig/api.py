@@ -95,6 +95,7 @@ def create_app(
         "changed_utc": None,
     }
     producer_readiness_transition_lock = RLock()
+    heartbeat_transition_lock = RLock()
 
     def raise_state_revision_conflict(
         exc: SensorStateRevisionConflict,
@@ -178,6 +179,10 @@ def create_app(
             or previous_runtime.capture_active != current_runtime.capture_active
             or previous_runtime.applied_revision != current_runtime.applied_revision
             or (
+                previous_runtime.heartbeat_schema_id
+                != current_runtime.heartbeat_schema_id
+            )
+            or (
                 previous_runtime.negotiated_max_payload_bytes
                 != current_runtime.negotiated_max_payload_bytes
             )
@@ -196,6 +201,7 @@ def create_app(
                 payload={
                     "capture_active": current_runtime.capture_active,
                     "applied_revision": current_runtime.applied_revision,
+                    "heartbeat_schema_id": current_runtime.heartbeat_schema_id,
                     "negotiated_max_payload_bytes": (
                         current_runtime.negotiated_max_payload_bytes
                     ),
@@ -1589,29 +1595,30 @@ def create_app(
 
     @app.post("/api/v1/sensors/heartbeat", response_model=SensorHeartbeatReceipt)
     def sensor_heartbeat(body: SensorHeartbeat) -> SensorHeartbeatReceipt:
-        was_registered = registry.contains(body.source_id)
-        previous_discovery = registry.get_discovery(body.source_id)
-        previous_runtime = runtime_source_for(body.source_id)
-        try:
-            registry.observe(
-                body.source_id,
-                source_type=body.source_type,
-                device=body.device,
-                capabilities=body.capabilities,
-            )
-            receipt = sensor_ingress.heartbeat(body)
-            emit_registration_changes(
-                body.source_id,
-                was_registered=was_registered,
-                previous_discovery=previous_discovery,
-            )
-            emit_runtime_change(body.source_id, previous_runtime)
-            refresh_producer_readiness_transition(body.source_id)
-            return receipt
-        except SensorIdentityConflict as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        with heartbeat_transition_lock:
+            was_registered = registry.contains(body.source_id)
+            previous_discovery = registry.get_discovery(body.source_id)
+            previous_runtime = runtime_source_for(body.source_id)
+            try:
+                registry.observe(
+                    body.source_id,
+                    source_type=body.source_type,
+                    device=body.device,
+                    capabilities=body.capabilities,
+                )
+                receipt = sensor_ingress.heartbeat(body)
+                emit_registration_changes(
+                    body.source_id,
+                    was_registered=was_registered,
+                    previous_discovery=previous_discovery,
+                )
+                emit_runtime_change(body.source_id, previous_runtime)
+                refresh_producer_readiness_transition(body.source_id)
+                return receipt
+            except SensorIdentityConflict as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/api/v1/perception/ingest", response_model=PerceptionEvent)
     def ingest(body: IngestBody) -> PerceptionEvent:
