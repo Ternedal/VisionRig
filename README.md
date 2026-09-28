@@ -238,6 +238,7 @@ See:
 - docs/PRODUCER.md
 - docs/KINECT_V2.md
 - docs/PERCEPTION_V3.md
+- docs/PERCEPTION_V4.md
 - docs/MODELRIG_BRIDGE.md
 - docs/OBSERVABILITY.md
 
