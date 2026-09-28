@@ -8,7 +8,7 @@ def test_health_capabilities_ingest_and_event_journal() -> None:
     health = client.get("/health")
     assert health.status_code == 200
     assert health.json()["capture_queue"]["capacity"] == 4
-    assert health.json()["perception_schema"] == "visionrig/perception-event/v3"
+    assert health.json()["perception_schema"] == "visionrig/perception-event/v4"
     assert health.json()["event_sinks"]["configured"] == 0
     assert health.json()["modelrig_bridge"]["enabled"] is False
 
@@ -43,7 +43,7 @@ def test_health_capabilities_ingest_and_event_journal() -> None:
         },
     )
     assert response.status_code == 200
-    assert response.json()["schema_id"] == "visionrig/perception-event/v3"
+    assert response.json()["schema_id"] == "visionrig/perception-event/v4"
 
     batch = client.get("/api/v1/perception/events?after_cursor=0")
     assert batch.status_code == 200
