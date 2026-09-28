@@ -710,3 +710,16 @@ This gives UI clients an authoritative observation timestamp for the coherent
 bootstrap state without relying on client clocks or inferring freshness from
 nested fields. The timestamp is observational only and does not advance registry
 state, alter the semantic event cursor, or change capture/control behavior.
+
+
+## VisionRig 0.85.0: heartbeat contract change events
+
+A producer changing accepted heartbeat schema now emits one semantic
+`runtime_changed` sensor event. The payload includes `heartbeat_schema_id`,
+allowing incremental clients to react immediately to contract upgrades such as
+v5 -> v6.
+
+Heartbeat transition detection is serialized across the before-snapshot,
+ingress mutation, runtime event emission, and readiness transition. Concurrent
+identical upgrades therefore produce one contract-transition event rather than
+duplicate change-feed entries. Telemetry-only refreshes remain quiet.
