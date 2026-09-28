@@ -962,7 +962,13 @@ def test_target_utilization_change_emits_runtime_event() -> None:
 
 
 def test_sensor_bootstrap_samples_runtime_once(monkeypatch) -> None:
-    client = TestClient(create_app(PerceptionPipeline()))
+    snapshot_time = datetime(2026, 9, 28, 6, 30, tzinfo=timezone.utc)
+    client = TestClient(
+        create_app(
+            PerceptionPipeline(),
+            sensor_clock=lambda: snapshot_time,
+        )
+    )
     heartbeat = client.post(
         "/api/v1/sensors/heartbeat",
         json={
@@ -992,6 +998,7 @@ def test_sensor_bootstrap_samples_runtime_once(monkeypatch) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["schema"] == "visionrig/sensor-bootstrap-snapshot/v34"
+    assert body["snapshot_utc"] == "2026-09-28T06:30:00+00:00"
     assert calls["count"] == 1
 
     source = body["catalog"]["sources"][0]
