@@ -363,6 +363,15 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "packet_measurement_gap_sources": 0,
             "packet_measurement_complete_ratio": None,
         },
+        "online_producer_readiness": {
+            "runtime_sources": 0,
+            "heartbeat_v6_sources": 0,
+            "heartbeat_upgrade_required": 0,
+            "heartbeat_v6_ratio": None,
+            "packet_measurement_complete_sources": 0,
+            "packet_measurement_gap_sources": 0,
+            "packet_measurement_complete_ratio": None,
+        },
         "producer_readiness_transition": {
             "previous": None,
             "changed_utc": None,
