@@ -648,3 +648,19 @@ sources whose current presence is `online`.
 This prevents an offline fully-migrated producer from making the active fleet
 look more ready than it is, while preserving the existing migration inventory
 and transition history.
+
+
+## VisionRig 0.83.0: producer readiness change events
+
+Producer readiness transitions now surface on the existing bounded sensor change
+feed as `producer_readiness_changed`.
+
+The first observed producer only establishes a readiness baseline. A later
+material readiness transition, such as a producer moving from heartbeat v5 to
+v6 with complete packet-target measurement, emits one event containing the
+previous readiness projection, the current projection, and the same transition
+deltas exposed by fleet telemetry.
+
+Repeated heartbeats that do not change readiness remain silent. This lets
+ModelRig/Kaliv control surfaces react incrementally instead of polling the fleet
+summary for migration progress.
