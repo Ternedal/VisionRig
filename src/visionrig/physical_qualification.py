@@ -367,6 +367,7 @@ def _success_report(
     initial_health: Mapping[str, Any],
     selected_id: str,
     selected_type: str,
+    selected_device: str | None,
     baseline_sequence: int,
     baseline_accepted: int,
     candidate_cursor: int | None,
@@ -391,6 +392,14 @@ def _success_report(
             "physical source stopped being online during qualification"
         )
     final_source = current_sources[0]
+    if final_source.get("source_type") != selected_type:
+        raise PhysicalPerceptionQualificationError(
+            "physical source type changed during qualification"
+        )
+    if final_source.get("device") != selected_device:
+        raise PhysicalPerceptionQualificationError(
+            "physical source device changed during qualification"
+        )
     if int(final_source["accepted_frames"]) <= baseline_accepted:
         return None
     elapsed_ms = round((monotonic() - started) * 1000.0, 3)
@@ -488,6 +497,7 @@ def qualify_physical_perception(
     selected = sources[0]
     selected_id = str(selected["source_id"])
     selected_type = str(selected["source_type"])
+    selected_device = selected.get("device") if isinstance(selected.get("device"), str) else None
     baseline_sequence = int(selected["last_sequence"])
     baseline_accepted = int(selected["accepted_frames"])
 
@@ -529,6 +539,7 @@ def qualify_physical_perception(
             if (
                 source.get("source_id") != selected_id
                 or source.get("source_type") != selected_type
+                or source.get("device") != selected_device
                 or not isinstance(frame_sequence, int)
                 or frame_sequence <= baseline_sequence
                 or event.get("schema_id") != "visionrig/perception-event/v4"
@@ -552,6 +563,7 @@ def qualify_physical_perception(
                     initial_health=health,
                     selected_id=selected_id,
                     selected_type=selected_type,
+                    selected_device=selected_device,
                     baseline_sequence=baseline_sequence,
                     baseline_accepted=baseline_accepted,
                     candidate_cursor=candidate_cursor,
@@ -586,6 +598,7 @@ def qualify_physical_perception(
                         initial_health=health,
                         selected_id=selected_id,
                         selected_type=selected_type,
+                        selected_device=selected_device,
                         baseline_sequence=baseline_sequence,
                         baseline_accepted=baseline_accepted,
                         candidate_cursor=candidate_cursor,
