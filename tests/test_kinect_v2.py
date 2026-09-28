@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from visionrig.contracts import BoundingBox, SourceDescriptor, VisualEntity
+from visionrig.infrared import InfraredSummaryStage
 from visionrig.kinect_v2 import (
     KinectV2DepthStage,
     KinectV2FrameSet,
@@ -152,3 +153,54 @@ def test_align_depth_mm_to_color_rejects_wrong_mapping_shape() -> None:
             color_width=3,
             color_height=2,
         )
+
+
+def test_infrared_summary_stage_emits_normalized_statistics() -> None:
+    infrared = np.array(
+        [[0, 16384], [32768, 65535]],
+        dtype=np.uint16,
+    )
+    frame = Frame(
+        source=SourceDescriptor(source_id="k", source_type="camera"),
+        sequence=2,
+        payload=None,
+        sensor_data={"infrared": infrared},
+    )
+
+    result = InfraredSummaryStage().process(frame, StageResult())
+
+    assert len(result.infrared) == 1
+    observation = result.infrared[0]
+    assert observation.mean_intensity == pytest.approx(
+        np.mean(infrared.astype(np.float64) / 65535.0)
+    )
+    assert observation.contrast == pytest.approx(
+        np.std(infrared.astype(np.float64) / 65535.0)
+    )
+    assert observation.hotspot_fraction == pytest.approx(0.25)
+    assert observation.sample_count == 4
+    assert observation.method == "kinect-v2-infrared-summary"
+
+
+def test_infrared_summary_stage_is_noop_without_valid_plane() -> None:
+    stage = InfraredSummaryStage()
+    frame = Frame(
+        source=SourceDescriptor(source_id="cam", source_type="camera"),
+        sequence=1,
+        payload=None,
+    )
+    current = StageResult()
+    assert stage.process(frame, current) is current
+
+    invalid = Frame(
+        source=frame.source,
+        sequence=2,
+        payload=None,
+        sensor_data={"infrared": []},
+    )
+    assert stage.process(invalid, current) is current
+
+
+def test_pipeline_enables_infrared_summary_by_default() -> None:
+    bundle = build_pipeline(spatial_relations=False)
+    assert "infrared_summary" in bundle.pipeline.stages
