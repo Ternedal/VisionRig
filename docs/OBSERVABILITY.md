@@ -1015,3 +1015,18 @@ therefore not misrepresented as unhealthy producers.
 
 This projection is descriptive only and adds no attention, semantic event, or
 control behavior. Bootstrap v31 embeds catalog v15 and health advances to v59.
+
+
+### Shared source readiness semantics
+
+VisionRig 0.81.1 centralizes the source-level producer readiness calculation
+used by both fleet remediation candidates and catalog rows.
+
+The shared projection owns runtime availability, heartbeat-v6 status,
+upgrade-required state, required heartbeat schema, versions-behind,
+upgrade-stage, and packet-measurement completeness. Fleet candidates now
+derive their corresponding fields from that same projection rather than
+recomputing them independently.
+
+No API schema versions or payload shapes change in 0.81.1; this is a
+semantic-drift prevention change only.
