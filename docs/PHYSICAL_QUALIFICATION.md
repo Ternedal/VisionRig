@@ -130,4 +130,4 @@ VisionRig 0.92.0 requires the generic physical qualification gate to bind to a f
 
 ## Stable physical source identity
 
-VisionRig 0.94.0 binds generic physical qualification to the same physical source identity across preflight, the qualifying `PerceptionEvent/v4`, and the final sensor-status sample. A matching `source_id` is no longer enough: `source_type` and device identity must remain stable for the full run. Device/source replacement during qualification therefore fails closed.
+VisionRig 0.94.0 binds generic physical qualification to the same physical source identity across preflight, the qualifying `PerceptionEvent/v4`, and the final sensor-status sample. A matching `source_id` is no longer enough: `source_type` and device identity must remain stable for the full run. Device/source replacement during qualification therefore fails closed. The final sensor snapshot must also report `last_sequence` at or beyond the exact qualifying event sequence, so the status evidence cannot lag behind the event that made the gate pass.
