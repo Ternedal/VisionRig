@@ -1056,3 +1056,28 @@ The online projection is descriptive only and does not affect attention,
 desired state, capture authority, semantic events, or producer control.
 
 Bootstrap v32 embeds fleet v29 and health advances to v60.
+
+
+### Producer readiness blocker stages
+
+VisionRig 0.83.0 advances fleet summary to v30 and extends both
+`producer_readiness` and `online_producer_readiness` with
+`heartbeat_upgrade_stage_counts`:
+
+- `contract_upgrade`: runtime producers whose accepted heartbeat contract is
+  v2-v5;
+- `establish_heartbeat`: runtime sources created through frame/packet ingress
+  that have not yet published an accepted heartbeat.
+
+The two counts sum to `heartbeat_upgrade_required`. Sources already on
+heartbeat v6 contribute to neither blocker count.
+
+The aggregate is derived from the same shared
+`producer_source_readiness_payload` used by catalog rows and upgrade
+candidates, so row-level and fleet-level migration semantics stay aligned.
+
+The blocker distribution is descriptive only. It creates no attention reason,
+semantic event, desired-state mutation, capture decision, or producer-control
+action.
+
+Bootstrap v33 embeds fleet v30 and health advances to v61.
