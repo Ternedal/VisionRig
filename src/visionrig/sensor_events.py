@@ -22,6 +22,7 @@ SensorChangeKind = Literal[
     "restored",
     "forgotten",
     "runtime_changed",
+    "producer_readiness_changed",
 ]
 
 
