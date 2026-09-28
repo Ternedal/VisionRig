@@ -182,6 +182,8 @@ def _physical_sources(
             continue
         if raw.get("presence") != "online":
             continue
+        if raw.get("capture_active") is not True:
+            continue
         accepted = raw.get("accepted_frames")
         sequence = raw.get("last_sequence")
         if not isinstance(accepted, int) or accepted < 1:
@@ -248,6 +250,7 @@ def _validate_bridge_binding(
     if isinstance(last_result, Mapping):
         candidates.append(last_result)
 
+    expected_ref = _event_ref(event)
     result = next(
         (
             item
@@ -255,6 +258,8 @@ def _validate_bridge_binding(
             if item.get("source_id") == source_id
             and item.get("frame_sequence") == frame_sequence
             and item.get("status") in {"published", "replayed"}
+            and isinstance(item.get("receipt"), Mapping)
+            and item["receipt"].get("visionrig_event_ref") == expected_ref
         ),
         None,
     )
@@ -266,7 +271,6 @@ def _validate_bridge_binding(
         raise PhysicalPerceptionQualificationError(
             "matching bridge result lacks ModelRig receipt"
         )
-    expected_ref = _event_ref(event)
     if receipt.get("schema") != "kaliv-consciousness-core/visionrig-admission/v1":
         raise PhysicalPerceptionQualificationError(
             "ModelRig VisionRig receipt schema mismatch"
