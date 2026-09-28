@@ -1030,3 +1030,29 @@ recomputing them independently.
 
 No API schema versions or payload shapes change in 0.81.1; this is a
 semantic-drift prevention change only.
+
+
+### Online producer readiness
+
+VisionRig 0.82.0 advances fleet summary to v29 and adds
+`online_producer_readiness`.
+
+The payload uses the same readiness fields and calculation as
+`producer_readiness`, but its source set is restricted to runtime sources with
+`presence == online`.
+
+This creates two intentionally different views:
+
+- `producer_readiness`: all process-local runtime sources, including stale and
+  offline sources, suitable for migration inventory;
+- `online_producer_readiness`: currently online producers only, suitable for
+  describing the active producer fleet.
+
+The existing `producer_readiness_transition` remains attached to the total
+runtime inventory and is not affected by passive online/stale/offline aging.
+This avoids turning wall-clock liveness changes into migration-history events.
+
+The online projection is descriptive only and does not affect attention,
+desired state, capture authority, semantic events, or producer control.
+
+Bootstrap v32 embeds fleet v29 and health advances to v60.
