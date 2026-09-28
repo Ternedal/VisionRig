@@ -7,6 +7,8 @@ import pytest
 
 from visionrig.physical_qualification import (
     PhysicalPerceptionQualificationError,
+    _physical_sources,
+    _validate_bridge_binding,
     qualify_physical_perception,
 )
 
@@ -405,3 +407,65 @@ def test_physical_qualification_accepts_bridge_receipt_one_poll_later() -> None:
     )
     assert report["gate"]["physical_perception_qualified"] is True
     assert health_calls >= 3
+
+
+def test_physical_source_selection_excludes_inactive_online_source() -> None:
+    inactive = _source(accepted=20, sequence=20)
+    inactive["capture_active"] = False
+    inactive["age_seconds"] = 0.01
+
+    active = _source(accepted=10, sequence=10)
+    active["source_id"] = "camera-active"
+    active["age_seconds"] = 0.5
+
+    selected = _physical_sources(
+        {"sources": [inactive, active]},
+        requested_source_id=None,
+    )
+
+    assert [item["source_id"] for item in selected] == ["camera-active"]
+
+
+def test_bridge_binding_ignores_stale_same_sequence_receipt() -> None:
+    current = _event(sequence=11)
+    stale = _event(sequence=11)
+    stale["event_id"] = "evt-previous-registration"
+
+    stale_result = {
+        "status": "published",
+        "source_id": "kinect-v2-0",
+        "frame_sequence": 11,
+        "reason": None,
+        "receipt": _receipt(stale),
+    }
+    health = _health()
+    health["modelrig_bridge"]["successful_results"] = [stale_result]
+    health["modelrig_bridge"]["last_result"] = None
+
+    assert (
+        _validate_bridge_binding(
+            health,
+            event=current,
+            source_id="kinect-v2-0",
+            frame_sequence=11,
+        )
+        is None
+    )
+
+    current_result = {
+        "status": "published",
+        "source_id": "kinect-v2-0",
+        "frame_sequence": 11,
+        "reason": None,
+        "receipt": _receipt(current),
+    }
+    health["modelrig_bridge"]["successful_results"].append(current_result)
+
+    binding = _validate_bridge_binding(
+        health,
+        event=current,
+        source_id="kinect-v2-0",
+        frame_sequence=11,
+    )
+    assert binding is not None
+    assert binding["visionrig_event_ref"] == _event_ref(current)
