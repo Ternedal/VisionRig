@@ -1206,6 +1206,9 @@ def test_producer_readiness_transition_changes_only_on_readiness_change() -> Non
     v6["observed_packet_utilization"] = 0.70
     assert client.post("/api/v1/sensors/heartbeat", json=v6).status_code == 200
 
+    # The transition timestamp belongs to the runtime mutation, not the first
+    # dashboard poll that observes it.
+    now[0] = datetime(2026, 9, 28, 4, 7, tzinfo=timezone.utc)
     migrated = client.get("/api/v1/sensors/fleet").json()
     assert migrated["producer_readiness"] == {
         "runtime_sources": 1,
