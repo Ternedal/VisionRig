@@ -61,6 +61,11 @@ class InfraredSummaryStage:
 
         import numpy as np  # type: ignore[import-not-found]
 
+        max_samples = 4_194_304
+        if normalized.size > max_samples:
+            stride = int(np.ceil(normalized.size / max_samples))
+            normalized = normalized[::stride][:max_samples]
+
         mean_intensity = float(np.mean(normalized))
         contrast = float(np.std(normalized))
         hotspot_fraction = float(np.mean(normalized >= self._hotspot_threshold))
