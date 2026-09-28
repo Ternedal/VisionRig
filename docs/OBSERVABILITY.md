@@ -1084,3 +1084,26 @@ delta/timestamp rather than combining states from two instants. The subsequent
 change remains replayable from the captured change cursor.
 
 Catalog v15 and fleet v29 payload shapes are unchanged. Health advances to v61.
+
+
+### Producer readiness change events
+
+VisionRig 0.83.0 extends the existing sensor change feed with the additive
+`producer_readiness_changed` event kind.
+
+The readiness tracker establishes a baseline when the first runtime producer
+appears. It emits no readiness event for that baseline. When the aggregate
+producer readiness projection later changes, VisionRig appends exactly one
+semantic change event with the source that triggered the transition.
+
+The event payload contains `previous`, `current`, and `transition`; the
+transition projection uses the same timestamp and readiness deltas as fleet
+telemetry. Refresh-only heartbeats remain silent.
+
+The readiness compare/update/event append path is serialized. Bootstrap and
+fleet readers snapshot transition state under the same re-entrant lock, so they
+cannot observe a partially updated previous/current/timestamp tuple.
+
+This event uses the existing bounded/persistent sensor change journal and does
+not alter desired state, capture authority, attention policy, or automatic
+producer behavior.
