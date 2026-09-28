@@ -1084,3 +1084,25 @@ delta/timestamp rather than combining states from two instants. The subsequent
 change remains replayable from the captured change cursor.
 
 Catalog v15 and fleet v29 payload shapes are unchanged. Health advances to v61.
+
+
+### Bootstrap snapshot timestamp
+
+VisionRig 0.84.0 advances the sensor bootstrap contract to
+`visionrig/sensor-bootstrap-snapshot/v34` and adds `snapshot_utc`.
+
+The timestamp is sampled from VisionRig's effective server clock immediately
+after the one SensorIngress runtime snapshot used to construct both the catalog
+and fleet sections. It therefore identifies the observation time of the
+coherent runtime snapshot rather than a client receipt time or a later nested
+poll.
+
+Clients can use `snapshot_utc` to display bootstrap age, reject unexpectedly
+old cached bootstrap responses, or correlate the snapshot with subsequent
+change-feed activity without depending on client clock assumptions.
+
+The timestamp is operational metadata only. It does not advance
+`sensor_state_revision`, change the semantic change cursor, create an event,
+or alter capture/control authority.
+
+Health advances to v62 and advertises bootstrap v34.
