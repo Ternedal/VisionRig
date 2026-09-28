@@ -363,6 +363,14 @@ def test_empty_sensor_bootstrap_uses_zero_cursor() -> None:
             "packet_measurement_gap_sources": 0,
             "packet_measurement_complete_ratio": None,
         },
+        "producer_readiness_transition": {
+            "previous": None,
+            "changed_utc": None,
+            "heartbeat_v6_sources_delta": None,
+            "heartbeat_v6_ratio_delta": None,
+            "packet_measurement_complete_sources_delta": None,
+            "packet_measurement_complete_ratio_delta": None,
+        },
         "packet_target_flap_window_seconds": 120.0,
         "packet_target_overshoot": {
             "measured_sources": 0,
