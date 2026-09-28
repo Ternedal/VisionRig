@@ -91,13 +91,13 @@ def _source(*, accepted: int, sequence: int) -> dict:
     }
 
 
-def _receipt(event: dict, *, activation: bool = False) -> dict:
+def _receipt(event: dict, *, activation: bool = False, world_changed: bool = True) -> dict:
     return {
         "schema": "kaliv-consciousness-core/visionrig-admission/v1",
         "visionrig_event_ref": _event_ref(event),
         "evidence_ref": "world-evidence:" + "a" * 64,
         "cognition_event_id": "cevt-" + "b" * 32,
-        "world_changed": True,
+        "world_changed": world_changed,
         "replayed": False,
         "cognition_event_queued": True,
         "epistemic_status": "inferred",
@@ -566,3 +566,11 @@ def test_physical_qualification_semantic_summary_is_privacy_safe() -> None:
     assert "sensitive-label" not in encoded
     assert "private-scene" not in encoded
     assert "mean_intensity" not in encoded
+
+
+def test_physical_qualification_rejects_receipt_without_world_change() -> None:
+    event = _event()
+    health = _health(event=event)
+    health["modelrig_bridge"]["last_result"]["receipt"]["world_changed"] = False
+    with pytest.raises(PhysicalPerceptionQualificationError, match="did not prove a WorldState change"):
+        _validate_bridge_binding(health, event=event, source_id="kinect-v2-0", frame_sequence=event["frame_sequence"])
