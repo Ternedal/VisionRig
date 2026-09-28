@@ -5,7 +5,7 @@ semantic change suppression before crossing the VisionRig -> ModelRig boundary.
 """
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, deque
 from dataclasses import dataclass
 import hashlib
 import ipaddress
@@ -168,6 +168,7 @@ class ModelRigPerceptionPublisher:
         self._unavailable = 0
         self._rejected = 0
         self._last_result: BridgePublishResult | None = None
+        self._successful_results: deque[BridgePublishResult] = deque(maxlen=128)
 
     @property
     def endpoint(self) -> str:
@@ -188,16 +189,8 @@ class ModelRigPerceptionPublisher:
                 rejected=self._rejected,
             )
 
-    def last_result_snapshot(self) -> dict[str, object] | None:
-        """Privacy-safe exact binding for operator/physical qualification.
-
-        The snapshot intentionally excludes perception semantics and raw sensor
-        content.  It exposes only the source/frame identity and the already
-        verified ModelRig receipt refs/authority facts.
-        """
-        result = self.last_result
-        if result is None:
-            return None
+    @staticmethod
+    def _result_snapshot(result: BridgePublishResult) -> dict[str, object]:
         receipt = result.receipt
         return {
             "status": result.status,
@@ -233,6 +226,17 @@ class ModelRigPerceptionPublisher:
             ),
         }
 
+    def last_result_snapshot(self) -> dict[str, object] | None:
+        """Privacy-safe latest bridge result for operator observability."""
+        result = self.last_result
+        return self._result_snapshot(result) if result is not None else None
+
+    def successful_result_snapshots(self) -> list[dict[str, object]]:
+        """Bounded successful receipt bindings retained for qualification polling."""
+        with self._lock:
+            results = tuple(self._successful_results)
+        return [self._result_snapshot(result) for result in results]
+
     def _record(self, result: BridgePublishResult) -> BridgePublishResult:
         with self._lock:
             if result.status == "published":
@@ -245,6 +249,8 @@ class ModelRigPerceptionPublisher:
                 self._unavailable += 1
             elif result.status == "rejected":
                 self._rejected += 1
+            if result.status in {"published", "replayed"} and result.receipt is not None:
+                self._successful_results.append(result)
             self._last_result = result
         return result
 
