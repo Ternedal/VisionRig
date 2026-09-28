@@ -698,3 +698,15 @@ This lets dashboards schedule an accurate refresh instead of pretending online
 readiness can only change when a heartbeat or frame mutation occurs. It remains
 descriptive observability and does not introduce timers, alerts, or control
 actions.
+
+
+## VisionRig 0.84.0: timestamped coherent bootstrap
+
+Sensor bootstrap now includes `snapshot_utc`, sampled from VisionRig's effective
+server clock immediately after the single SensorIngress runtime snapshot used to
+build catalog and fleet projections.
+
+This gives UI clients an authoritative observation timestamp for the coherent
+bootstrap state without relying on client clocks or inferring freshness from
+nested fields. The timestamp is observational only and does not advance registry
+state, alter the semantic event cursor, or change capture/control behavior.
