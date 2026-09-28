@@ -681,3 +681,20 @@ deltas exposed by fleet telemetry.
 Repeated heartbeats that do not change readiness remain silent. This lets
 ModelRig/Kaliv control surfaces react incrementally instead of polling the fleet
 summary for migration progress.
+
+
+## VisionRig 0.83.0: online readiness expiry
+
+Online producer readiness is time-sensitive because an otherwise unchanged
+runtime source leaves the online set when its liveness age crosses the stale
+threshold.
+
+Fleet telemetry now exposes `online_producer_readiness_expiry` with the source
+that will next leave the online set, the first observable server-clock instant
+after the inclusive stale boundary, and the remaining seconds until that
+instant. If no producer is currently online, all three fields are `null`.
+
+This lets dashboards schedule an accurate refresh instead of pretending online
+readiness can only change when a heartbeat or frame mutation occurs. It remains
+descriptive observability and does not introduce timers, alerts, or control
+actions.
