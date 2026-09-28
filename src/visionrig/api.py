@@ -1004,7 +1004,7 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v61",
+            "schema": "visionrig/health/v62",
             "perception_schema": "visionrig/perception-event/v3",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
@@ -1073,7 +1073,7 @@ def create_app(
                 "max_wait_seconds": 30,
             },
             "sensor_bootstrap": {
-                "schema": "visionrig/sensor-bootstrap-snapshot/v33",
+                "schema": "visionrig/sensor-bootstrap-snapshot/v34",
             },
         }
 
@@ -1273,6 +1273,7 @@ def create_app(
         change_state = sensor_changes.read(after_cursor=0, limit=1)
         baseline_cursor = change_state.newest_available_cursor or 0
         runtime_status = sensor_ingress.stats()
+        snapshot_utc = effective_sensor_clock().astimezone(timezone.utc).isoformat()
         transition_state = {
             "current": (
                 dict(producer_readiness_transition_state["current"])
@@ -1287,7 +1288,8 @@ def create_app(
             "changed_utc": producer_readiness_transition_state["changed_utc"],
         }
         return {
-            "schema": "visionrig/sensor-bootstrap-snapshot/v33",
+            "schema": "visionrig/sensor-bootstrap-snapshot/v34",
+            "snapshot_utc": snapshot_utc,
             "sensor_state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "change_stream_id": sensor_changes.stream_id,
