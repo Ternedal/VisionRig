@@ -55,7 +55,7 @@ validation/visionrig-physical-perception-latest.json
 
 A PASS requires all of the following on one bounded observation:
 
-1. VisionRig health is `ok` and advertises `PerceptionEvent/v3`.
+1. VisionRig health is `ok` and advertises `PerceptionEvent/v4`.
 2. The ModelRig bridge is enabled and points explicitly to loopback.
 3. The selected source is online and its type is `camera` or `vr`.
 4. The source had accepted real frames before qualification.
@@ -111,3 +111,8 @@ The retained entries contain only the same privacy-safe source/frame identity
 and verified receipt authority/provenance fields exposed by health. Raw frames,
 OCR text, landmarks, labels, and perception semantics are not retained by this
 history.
+
+
+## Qualification receipt v2
+
+VisionRig 0.90.0 advances the generic physical qualification receipt to `visionrig/physical-perception-qualification/v2`. The receipt now records only privacy-safe semantic evidence metadata for the exact qualifying event: total observation count, bounded observation categories (`entities`, `relations`, `landmarks`, `depth`, `infrared`, `scene`), and per-category counts. It never records entity labels, OCR text, scene text, landmark coordinates, depth values, or infrared measurements. The existing exact event hash remains the authoritative binding to the full event.
