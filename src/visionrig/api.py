@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from threading import RLock
 from typing import Callable, Literal
 
@@ -375,12 +375,57 @@ def create_app(
     def producer_readiness_payload() -> dict[str, object]:
         return readiness_projection(sensor_ingress.stats().sources)
 
-    def online_producer_readiness_payload() -> dict[str, object]:
+    def online_producer_readiness_payload(
+        runtime_sources=None,
+    ) -> dict[str, object]:
+        sources = (
+            sensor_ingress.stats().sources
+            if runtime_sources is None
+            else runtime_sources
+        )
         return readiness_projection(
             source
-            for source in sensor_ingress.stats().sources
+            for source in sources
             if source.presence == "online"
         )
+
+    def online_producer_readiness_expiry_payload(
+        runtime_status,
+    ) -> dict[str, object]:
+        online_sources = [
+            source
+            for source in runtime_status.sources
+            if source.presence == "online"
+        ]
+        if not online_sources:
+            return {
+                "next_change_utc": None,
+                "next_change_seconds": None,
+                "source_id": None,
+            }
+
+        next_source = min(
+            online_sources,
+            key=lambda source: (-source.age_seconds, source.source_id),
+        )
+        expiry_grace_seconds = 0.001
+        remaining_seconds = max(
+            0.0,
+            runtime_status.stale_after_seconds
+            + expiry_grace_seconds
+            - next_source.age_seconds,
+        )
+        next_change_utc = (
+            datetime.fromisoformat(next_source.last_seen_utc)
+            + timedelta(
+                seconds=runtime_status.stale_after_seconds + expiry_grace_seconds
+            )
+        )
+        return {
+            "next_change_utc": next_change_utc.isoformat(),
+            "next_change_seconds": round(remaining_seconds, 3),
+            "source_id": next_source.source_id,
+        }
 
     def refresh_producer_readiness_transition(source_id: str) -> None:
         with producer_readiness_transition_lock:
@@ -945,10 +990,11 @@ def create_app(
         heartbeat_upgrade_candidate_total = len(heartbeat_upgrade_candidates)
         bounded_heartbeat_upgrade_candidates = heartbeat_upgrade_candidates[:32]
         producer_readiness = readiness_projection(runtime_status.sources)
-        online_producer_readiness = readiness_projection(
-            source
-            for source in runtime_status.sources
-            if source.presence == "online"
+        online_producer_readiness = online_producer_readiness_payload(
+            runtime_status.sources
+        )
+        online_producer_readiness_expiry = (
+            online_producer_readiness_expiry_payload(runtime_status)
         )
         producer_readiness_transition = producer_readiness_transition_payload(
             producer_readiness,
@@ -956,7 +1002,7 @@ def create_app(
         )
 
         return {
-            "schema": "visionrig/sensor-fleet-summary/v29",
+            "schema": "visionrig/sensor-fleet-summary/v30",
             "state_revision": registry.state_revision,
             "change_consistency": sensor_change_consistency_payload(),
             "total": len(source_ids),
@@ -990,6 +1036,9 @@ def create_app(
             ),
             "producer_readiness": producer_readiness,
             "online_producer_readiness": online_producer_readiness,
+            "online_producer_readiness_expiry": (
+                online_producer_readiness_expiry
+            ),
             "producer_readiness_transition": producer_readiness_transition,
             "packet_target_flap_window_seconds": packet_target_flap_window_seconds,
             "packet_target_overshoot": {
