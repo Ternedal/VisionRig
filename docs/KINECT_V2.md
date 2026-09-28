@@ -108,3 +108,46 @@ lossless per-plane compression.
 Budget adaptation happens before the durable producer sequence reservation.
 An irreducibly oversized packet therefore stops visibly instead of consuming a
 sequence that was never sent.
+
+
+## Physical release acceptance
+
+VisionRig 0.81.0 adds a fail-closed physical acceptance command for the
+`visionrig_physical_perception` system release gate. It is deliberately not a
+CI hardware simulation.
+
+Run it from an **exact clean checkout** whose SHA is the release candidate:
+
+~~~powershell
+$Sha = (git rev-parse HEAD).Trim()
+visionrig-kinect-acceptance `
+  --expected-sha $Sha `
+  --model-manifest .\models\yolo.json `
+  --modelrig-worker-url http://127.0.0.1:8099 `
+  --source-id kinect-living-room `
+  --frames 5
+~~~
+
+A PASS requires, in one bounded run:
+
+- real Kinect v2 RGB on every accepted frame;
+- raw hardware depth on every accepted frame;
+- color-aligned depth matching RGB dimensions on every accepted frame;
+- infrared signal on every accepted frame;
+- strictly contiguous Kinect frame sequence;
+- at least one meaningful semantic VisionRig observation;
+- at least one exact-bound ModelRig VisionRig-admission receipt; and
+- at least one ModelRig receipt with `world_changed=true`.
+
+The receipt defaults to
+`validation/visionrig-kinect-physical-acceptance.json` and contains only
+revision, counts, source metadata and semantic/WorldEvidence references. Raw RGB,
+depth and infrared bytes are never persisted by this acceptance command.
+
+The command fails instead of writing a PASS receipt when hardware modalities are
+missing, perception is empty, ModelRig is unavailable/rejects the event, the
+WorldState does not change, the checkout is dirty, or HEAD differs from
+`--expected-sha`.
+
+This receipt is evidence for the cross-repository release gate only. It does not
+grant identity, durable-memory, execution, scheduling or production authority.
