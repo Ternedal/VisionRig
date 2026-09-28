@@ -7,6 +7,18 @@ The bridge is off by default. Raw RGB, IR and depth-map data never cross it.
 
 ## Enable in the VisionRig service
 
+For development on the Kaliv rig, use the repository launcher:
+
+~~~powershell
+START_DEV_VISIONRIG.cmd
+~~~
+
+It enables the bridge explicitly and targets the local ModelRig worker at
+`127.0.0.1:8099`. Any existing VisionRig model/sensor environment variables are
+preserved.
+
+Manual equivalent:
+
 Set:
 
 ~~~text
