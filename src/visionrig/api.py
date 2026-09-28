@@ -1572,6 +1572,7 @@ def create_app(
                 was_registered=was_registered,
                 previous_discovery=previous_discovery,
             )
+            refresh_producer_readiness_transition()
             return receipt
         except SensorIdentityConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
