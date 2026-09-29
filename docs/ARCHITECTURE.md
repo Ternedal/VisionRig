@@ -163,3 +163,8 @@ VisionRig 0.95.0 exposes a process-unique `service_instance_id` in health v66. G
 ### V7 build identity
 
 VisionRig 0.96.0 health v67 adds runtime build identity: semantic package version plus an optional validated git revision sourced from `VISIONRIG_GIT_SHA`. Physical qualification can require an operator-supplied expected SHA and binds its receipt to the running build rather than only to the process instance.
+
+
+### V7 ModelRig cognition proof
+
+VisionRig 0.97.0 binds physical qualification beyond WorldState change to the downstream ModelRig attention-admission proof. Fresh qualifying admissions must carry the canonical world-evidence reference and prove that the fresh path queued a typed cognition event with a canonical event id. Replay remains disallowed.
