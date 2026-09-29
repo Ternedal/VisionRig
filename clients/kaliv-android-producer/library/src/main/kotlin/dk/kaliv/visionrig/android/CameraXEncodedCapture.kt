@@ -49,6 +49,7 @@ class CameraXEncodedCapture(
         get() = provider != null && imageCapture != null
 
     override fun open() {
+        requireWorkerThread()
         if (isOpen) return
         if (
             ContextCompat.checkSelfPermission(appContext, Manifest.permission.CAMERA) !=
@@ -88,6 +89,7 @@ class CameraXEncodedCapture(
     }
 
     override fun capture(): EncodedFrame {
+        requireWorkerThread()
         val capture = imageCapture
             ?: throw ProducerProtocolException("CameraX capture is not open")
 
@@ -176,6 +178,15 @@ class CameraXEncodedCapture(
             close()
         } finally {
             callbackExecutor.shutdownNow()
+        }
+    }
+
+
+    private fun requireWorkerThread() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            throw ProducerProtocolException(
+                "CameraX producer operations must run off the Android main thread"
+            )
         }
     }
 
