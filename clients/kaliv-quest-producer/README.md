@@ -13,8 +13,10 @@ The adapter discovers Meta passthrough cameras using the official vendor tags:
 - `com.meta.extra_metadata.camera_source`;
 - `com.meta.extra_metadata.position`.
 
-It runs a YUV_420_888 Camera2 stream, encodes the latest bounded frame as JPEG,
-and feeds the shared Kaliv producer state machine. Desired-state disable closes
+It selects a supported YUV_420_888 output size from the active passthrough camera
+instead of assuming a fixed headset resolution, encodes the latest bounded frame
+as JPEG, and feeds the shared Kaliv producer state machine. Applications may
+request an exact even width/height pair when needed; unsupported pairs fail closed. Desired-state disable closes
 the camera. Control-plane, permission, camera, session and transport failures
 fail closed.
 
