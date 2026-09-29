@@ -39,6 +39,8 @@ POLL_SECONDS = 0.25
 PHYSICAL_SOURCE_TYPES = {"camera", "vr"}
 _SHA_REF = re.compile(r"^visionrig-event:[a-f0-9]{64}$")
 _GIT_SHA = re.compile(r"^[a-f0-9]{40}$")
+_WORLD_EVIDENCE_REF = re.compile(r"^world-evidence-event:[a-f0-9]{64}$")
+_COGNITION_EVENT_ID = re.compile(r"^cevt-[a-f0-9]{32}$")
 
 
 class PhysicalPerceptionQualificationError(RuntimeError):
@@ -350,15 +352,24 @@ def _validate_bridge_binding(
                 f"ModelRig VisionRig receipt overclaimed {field}"
             )
     evidence_ref = receipt.get("evidence_ref")
-    if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+    if not isinstance(evidence_ref, str) or _WORLD_EVIDENCE_REF.fullmatch(evidence_ref) is None:
         raise PhysicalPerceptionQualificationError(
-            "ModelRig VisionRig receipt lacks evidence reference"
+            "ModelRig VisionRig receipt evidence reference is malformed"
+        )
+    if receipt.get("cognition_event_queued") is not True:
+        raise PhysicalPerceptionQualificationError(
+            "ModelRig receipt did not prove cognition event queueing"
+        )
+    cognition_event_id = receipt.get("cognition_event_id")
+    if not isinstance(cognition_event_id, str) or _COGNITION_EVENT_ID.fullmatch(cognition_event_id) is None:
+        raise PhysicalPerceptionQualificationError(
+            "ModelRig receipt cognition event id is malformed"
         )
     return {
         "status": result["status"],
         "visionrig_event_ref": expected_ref,
         "evidence_ref": evidence_ref,
-        "cognition_event_id": receipt.get("cognition_event_id"),
+        "cognition_event_id": cognition_event_id,
         "world_changed": receipt.get("world_changed"),
         "replayed": receipt.get("replayed"),
         "cognition_event_queued": receipt.get("cognition_event_queued"),
