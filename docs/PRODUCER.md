@@ -350,3 +350,8 @@ silent.
 ## Native Kaliv producer core
 
 The first native client slice now lives in `clients/kaliv-producer-core`. It is a Kotlin/JVM library shared by future Kaliv Android and Quest capture adapters. It implements the same fail-closed desired-state polling, authenticated heartbeat/frame transport and crash-safe sequence/drop recovery semantics as the Python reference producer. The platform-specific camera/passthrough adapters remain separate follow-up slices.
+
+
+## Kaliv Android CameraX adapter
+
+The native Android adapter lives under `clients/kaliv-android-producer`. It uses CameraX `ImageCapture` and the shared Kotlin producer core, so desired-state convergence, heartbeat acknowledgement and durable sequence/drop semantics stay aligned with the JVM core. Capture fails closed on missing permission, CameraX lifecycle/binding failure or VisionRig control/transport failure. Default durable state is isolated by gateway URL, source id and source type.
