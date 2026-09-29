@@ -2,6 +2,9 @@ package dk.kaliv.visionrig.producer
 
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -125,11 +128,19 @@ class FileProducerStateStore(
                 out.flush()
                 out.fd.sync()
             }
-            if (!temp.renameTo(file)) {
-                file.delete()
-                if (!temp.renameTo(file)) {
-                    throw ProducerProtocolException("unable to replace producer state")
-                }
+            try {
+                Files.move(
+                    temp.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(
+                    temp.toPath(),
+                    file.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                )
             }
         } finally {
             if (temp.exists()) temp.delete()
