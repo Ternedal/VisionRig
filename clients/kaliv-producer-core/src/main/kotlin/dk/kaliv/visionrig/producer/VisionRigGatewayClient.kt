@@ -26,6 +26,8 @@ class VisionRigGatewayClient(
 ) {
     private val baseUrl: HttpUrl
     private val bearerToken: String
+    @Volatile
+    private var negotiatedMaxPayloadBytes: Long? = null
 
     init {
         require(token.length >= 32) { "producer token must be at least 32 characters" }
@@ -42,6 +44,34 @@ class VisionRigGatewayClient(
         baseUrl = parsed
         bearerToken = token
         stateStore.recover()
+    }
+
+    fun fetchCapabilities(): ProducerCapabilities {
+        val url = baseUrl.newBuilder()
+            .addPathSegments("api/v1/producer-capabilities")
+            .build()
+        val response = execute(Request.Builder().url(url).get().authorized().build())
+        response.use {
+            requireSuccess(it.code, "producer-capabilities")
+            val body = it.body?.string()
+                ?: throw ProducerProtocolException(
+                    "producer-capabilities response has no body"
+                )
+            val capabilities = decode<ProducerCapabilities>(
+                body,
+                "producer-capabilities",
+            )
+            try {
+                capabilities.validate()
+            } catch (exc: IllegalArgumentException) {
+                throw ProducerProtocolException(
+                    "invalid VisionRig producer capabilities",
+                    exc,
+                )
+            }
+            negotiatedMaxPayloadBytes = capabilities.maxPayloadBytes
+            return capabilities
+        }
     }
 
     fun fetchDesiredState(): DesiredState {
@@ -111,6 +141,13 @@ class VisionRigGatewayClient(
     ): SendResult {
         require(payload.isNotEmpty()) { "frame payload must not be empty" }
         require(contentType in setOf("image/jpeg", "image/png", "image/webp"))
+
+        val maxPayload = negotiatedMaxPayloadBytes ?: fetchCapabilities().maxPayloadBytes
+        if (payload.size.toLong() > maxPayload) {
+            throw ProducerProtocolException(
+                "frame payload exceeds negotiated VisionRig limit"
+            )
+        }
 
         val reservation = stateStore.reserve()
         val urlBuilder = baseUrl.newBuilder()
