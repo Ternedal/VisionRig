@@ -128,6 +128,8 @@ def _health(*, event: dict | None = None, activation: bool = False) -> dict:
         "service": "visionrig",
         "schema": "visionrig/health/v66",
         "service_instance_id": "visionrig-instance:test",
+        "service_version": "0.95.0",
+        "service_revision": None,
         "perception_schema": "visionrig/perception-event/v4",
         "modelrig_bridge": {
             "enabled": True,
@@ -826,4 +828,71 @@ def test_physical_qualification_rejects_service_restart_mid_run() -> None:
             http_json=http_json,
             monotonic=monotonic,
             sleep_fn=lambda _seconds: None,
+        )
+
+
+def test_physical_qualification_accepts_matching_expected_build_sha() -> None:
+    event = _event()
+    expected_sha = "a" * 40
+    health_calls = 0
+    status_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls, status_calls
+        if url.endswith("/health"):
+            health_calls += 1
+            health = _health(event=event if health_calls > 1 else None)
+            health["service_revision"] = expected_sha
+            return health
+        if url.endswith("/api/v1/sensors/status"):
+            status_calls += 1
+            return {"sources": [_source(accepted=11 if status_calls > 1 else 10, sequence=11 if status_calls > 1 else 10)]}
+        if "after_cursor=0" in url:
+            return {"schema_id":"visionrig/event-batch/v1","entries":[],"next_cursor":0,"oldest_available_cursor":1,"newest_available_cursor":4,"gap":False}
+        return {"schema_id":"visionrig/event-batch/v1","entries":[{"cursor":5,"event":event}],"next_cursor":5,"oldest_available_cursor":1,"newest_available_cursor":5,"gap":False}
+
+    tick = [0.0]
+    def monotonic() -> float:
+        tick[0] += 0.01
+        return tick[0]
+
+    report = qualify_physical_perception(
+        "http://127.0.0.1:8110",
+        source_id="kinect-v2-0",
+        expected_sha=expected_sha,
+        timeout_seconds=2.0,
+        http_json=http_json,
+        monotonic=monotonic,
+        sleep_fn=lambda _seconds: None,
+    )
+    assert report["visionrig"]["service_revision"] == expected_sha
+
+
+def test_physical_qualification_rejects_missing_or_wrong_expected_build_sha() -> None:
+    health = _health()
+
+    def missing_sha(url: str, *, timeout: float):
+        if url.endswith("/health"):
+            return health
+        raise AssertionError(url)
+
+    with pytest.raises(PhysicalPerceptionQualificationError, match="does not match expected SHA"):
+        qualify_physical_perception(
+            "http://127.0.0.1:8110",
+            expected_sha="a" * 40,
+            http_json=missing_sha,
+        )
+
+    wrong = _health()
+    wrong["service_revision"] = "b" * 40
+    def wrong_sha(url: str, *, timeout: float):
+        if url.endswith("/health"):
+            return wrong
+        raise AssertionError(url)
+
+    with pytest.raises(PhysicalPerceptionQualificationError, match="does not match expected SHA"):
+        qualify_physical_perception(
+            "http://127.0.0.1:8110",
+            expected_sha="a" * 40,
+            http_json=wrong_sha,
         )
