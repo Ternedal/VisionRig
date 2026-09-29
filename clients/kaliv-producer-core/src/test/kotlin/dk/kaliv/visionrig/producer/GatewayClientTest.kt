@@ -199,6 +199,25 @@ class GatewayClientTest {
         }
     }
 
+    @Test
+    fun controlStepClosesCaptureWhenDesiredStateTransportFails() {
+        val server = MockWebServer()
+        server.start()
+        val gateway = client(server)
+        server.shutdown()
+
+        val capture = FakeCapture()
+        capture.open()
+        val loop = ProducerControlLoop(gateway, capture)
+
+        kotlin.test.assertFailsWith<ProducerProtocolException> {
+            loop.step()
+        }
+
+        assertFalse(capture.isOpen)
+        assertTrue(capture.closeCalls >= 1)
+    }
+
     private class FakeCapture : EncodedCapture {
         override var isOpen: Boolean = false
             private set
@@ -220,23 +239,3 @@ class GatewayClientTest {
         }
     }
 }
-
-
-    @Test
-    fun controlStepClosesCaptureWhenDesiredStateTransportFails() {
-        val server = MockWebServer()
-        server.start()
-        val gateway = client(server)
-        server.shutdown()
-
-        val capture = FakeCapture()
-        capture.open()
-        val loop = ProducerControlLoop(gateway, capture)
-
-        kotlin.test.assertFailsWith<ProducerProtocolException> {
-            loop.step()
-        }
-
-        assertFalse(capture.isOpen)
-        assertTrue(capture.closeCalls >= 1)
-    }
