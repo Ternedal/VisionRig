@@ -17,3 +17,14 @@ Not implemented here:
 - SensorPacket/v2 depth/IR transport.
 
 Those are platform adapter slices on top of this core, not alternate protocol implementations.
+
+
+## Durable state identity
+
+Native producer state is keyed by the normalized VisionRig gateway URL, `sourceId`
+and `sourceType`. Switching gateways or source types therefore does not reuse an
+unrelated sequence/drop journal.
+
+The state file provides crash/restart integrity through atomic replacement. It is
+not a multi-process leader-election mechanism: run only one active producer for
+a given state identity at a time.
