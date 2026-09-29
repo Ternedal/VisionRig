@@ -31,3 +31,13 @@ The app remains responsible for:
 - never exposing the VisionRig gateway directly to the public internet.
 
 The module deliberately does not own UI, identity, cognition, memory or action authority.
+
+
+## Network transport
+
+The library declares Android `INTERNET` permission but deliberately does not force
+`android:usesCleartextTraffic="true"`. If the app connects to the current
+`http://<tailscale-ip>:8111` VisionRig gateway, the consuming application must
+explicitly allow that cleartext transport through its own Android network-security
+policy. Prefer HTTPS if/when TLS termination is added to the gateway. Do not widen
+cleartext access globally by accident.
