@@ -8,8 +8,8 @@ class QuestCameraConfigTest {
     @Test
     fun defaultsMatchMetaPassthroughBaseline() {
         val config = QuestCameraConfig()
-        assertEquals(1280, config.width)
-        assertEquals(960, config.height)
+        assertEquals(null, config.width)
+        assertEquals(null, config.height)
         assertEquals(85, config.jpegQuality)
         assertEquals(QuestCameraPosition.RIGHT, config.position)
     }
@@ -17,16 +17,22 @@ class QuestCameraConfigTest {
     @Test
     fun rejectsInvalidBounds() {
         assertFailsWith<IllegalArgumentException> {
-            QuestCameraConfig(width = 0)
+            QuestCameraConfig(width = 1280)
         }
         assertFailsWith<IllegalArgumentException> {
-            QuestCameraConfig(height = 0)
+            QuestCameraConfig(height = 960)
         }
         assertFailsWith<IllegalArgumentException> {
-            QuestCameraConfig(width = 1279)
+            QuestCameraConfig(width = 0, height = 960)
         }
         assertFailsWith<IllegalArgumentException> {
-            QuestCameraConfig(height = 959)
+            QuestCameraConfig(width = 1280, height = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            QuestCameraConfig(width = 1279, height = 960)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            QuestCameraConfig(width = 1280, height = 959)
         }
         assertFailsWith<IllegalArgumentException> {
             QuestCameraConfig(jpegQuality = 101)
