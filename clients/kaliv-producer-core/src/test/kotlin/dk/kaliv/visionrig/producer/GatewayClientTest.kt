@@ -12,6 +12,23 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 
 class GatewayClientTest {
+
+    private fun capabilitiesResponse(maxPayloadBytes: Long = 1024): MockResponse =
+        MockResponse().setResponseCode(200).setBody(
+            """
+            {
+              "schema":"visionrig/producer-capabilities/v2",
+              "max_payload_bytes":$maxPayloadBytes,
+              "gateway_max_payload_bytes":$maxPayloadBytes,
+              "core_max_payload_bytes":$maxPayloadBytes,
+              "sensor_packet_schemas":["visionrig/sensor-packet/v2"],
+              "sensor_packet_compressions":["none","zlib","auto"],
+              "packet_payload_warning_utilization":0.8,
+              "packet_payload_critical_utilization":0.95
+            }
+            """.trimIndent()
+        )
+
     private fun client(
         server: MockWebServer,
         sourceId: String = "kaliv-quest",
@@ -81,6 +98,7 @@ class GatewayClientTest {
     @Test
     fun acceptedFrameCarriesDurableSequenceAndDropCount() {
         val server = MockWebServer()
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -105,6 +123,8 @@ class GatewayClientTest {
             assertEquals(0, result.frameSequence)
             assertEquals("evt-native-0", result.eventId)
 
+            val capabilities = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
             val request = server.takeRequest()
             assertEquals("0", request.requestUrl?.queryParameter("frame_sequence"))
             assertEquals("0", request.requestUrl?.queryParameter("dropped_frames"))
@@ -118,6 +138,7 @@ class GatewayClientTest {
     @Test
     fun overloadBecomesExplicitDropOnNextAcceptedFrame() {
         val server = MockWebServer()
+        server.enqueue(capabilitiesResponse())
         server.enqueue(MockResponse().setResponseCode(429))
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
@@ -146,6 +167,8 @@ class GatewayClientTest {
             assertEquals(SendStatus.ACCEPTED, accepted.status)
             assertEquals(1, accepted.frameSequence)
 
+            val capabilities = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
             server.takeRequest()
             val second = server.takeRequest()
             assertEquals("1", second.requestUrl?.queryParameter("dropped_frames"))
@@ -247,6 +270,7 @@ class GatewayClientTest {
                 """.trimIndent()
             )
         )
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -277,10 +301,78 @@ class GatewayClientTest {
 
             val desired = server.takeRequest()
             val heartbeat = server.takeRequest()
+            val capabilities = server.takeRequest()
             val frame = server.takeRequest()
             assertTrue(desired.path!!.contains("/desired-state"))
             assertEquals("/api/v1/sensors/heartbeat", heartbeat.path)
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
             assertTrue(frame.path!!.startsWith("/api/v1/frames/ingest"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+
+
+    @Test
+    fun capabilityNegotiationRejectsOversizeFrameBeforeSequenceReservation() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 1024))
+        server.start()
+        try {
+            val dir = createTempDirectory("visionrig-native-cap").toFile()
+            val stateFile = File(dir, "state.json")
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(stateFile),
+            )
+
+            kotlin.test.assertFailsWith<ProducerProtocolException> {
+                gateway.sendEncoded(ByteArray(1025) { 1 })
+            }
+
+            val state = FileProducerStateStore(stateFile).snapshot()
+            assertEquals(0, state.nextSequence)
+            assertEquals(0, state.pendingDropped)
+            assertEquals(null, state.inflightSequence)
+
+            val request = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", request.path)
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun capabilityNegotiationRejectsInconsistentPayloadLimit() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema":"visionrig/producer-capabilities/v2",
+                  "max_payload_bytes":2048,
+                  "gateway_max_payload_bytes":1024,
+                  "core_max_payload_bytes":4096,
+                  "sensor_packet_schemas":["visionrig/sensor-packet/v2"],
+                  "sensor_packet_compressions":["none"],
+                  "packet_payload_warning_utilization":0.8,
+                  "packet_payload_critical_utilization":0.95
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            val gateway = client(server)
+            kotlin.test.assertFailsWith<ProducerProtocolException> {
+                gateway.fetchCapabilities()
+            }
         } finally {
             server.shutdown()
         }
