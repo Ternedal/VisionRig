@@ -262,6 +262,26 @@ def _validate_bridge_binding(
         raise PhysicalPerceptionQualificationError(
             "VisionRig health lacks service instance identity"
         )
+    service_version = health.get("service_version")
+    if not isinstance(service_version, str) or not service_version.strip():
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health lacks service version"
+        )
+    service_revision = health.get("service_revision")
+    if service_revision is not None and _SHA_REF.fullmatch("visionrig-event:" + str(service_revision)) is None:
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health service revision is malformed"
+        )
+    if expected_sha is not None:
+        normalized_expected_sha = expected_sha.strip().lower()
+        if re.fullmatch(r"[0-9a-f]{40}", normalized_expected_sha) is None:
+            raise PhysicalPerceptionQualificationError(
+                "expected VisionRig SHA must be lowercase 40-hex"
+            )
+        if service_revision != normalized_expected_sha:
+            raise PhysicalPerceptionQualificationError(
+                "VisionRig service revision does not match expected SHA"
+            )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
         raise PhysicalPerceptionQualificationError(
@@ -423,6 +443,8 @@ def _success_report(
             "origin": base,
             "health_schema": initial_health.get("schema"),
             "service_instance_id": initial_health.get("service_instance_id"),
+            "service_version": initial_health.get("service_version"),
+            "service_revision": initial_health.get("service_revision"),
             "perception_schema": initial_health.get("perception_schema"),
         },
         "physical_source": {
@@ -468,6 +490,7 @@ def qualify_physical_perception(
     visionrig_url: str,
     *,
     source_id: str | None = None,
+    expected_sha: str | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     request_timeout: float = 5.0,
     http_json: Callable[..., Mapping[str, Any]] = _http_json,
@@ -659,6 +682,7 @@ def main() -> int:
         ),
     )
     parser.add_argument("--source-id")
+    parser.add_argument("--expected-sha")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     args = parser.parse_args()
@@ -667,6 +691,7 @@ def main() -> int:
         report = qualify_physical_perception(
             args.visionrig_url,
             source_id=args.source_id,
+            expected_sha=args.expected_sha,
             timeout_seconds=args.timeout,
         )
     except PhysicalPerceptionQualificationError as exc:
