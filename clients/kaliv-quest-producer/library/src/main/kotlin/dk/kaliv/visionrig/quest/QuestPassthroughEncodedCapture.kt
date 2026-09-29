@@ -224,6 +224,17 @@ class QuestPassthroughEncodedCapture(
                         override fun onConfigured(
                             configuredSession: CameraCaptureSession,
                         ) {
+                            if (camera !== device) {
+                                sessionFailure.compareAndSet(
+                                    null,
+                                    ProducerProtocolException(
+                                        "stale Quest passthrough session callback"
+                                    ),
+                                )
+                                configuredSession.close()
+                                configured.countDown()
+                                return
+                            }
                             session = configuredSession
                             configured.countDown()
                         }
