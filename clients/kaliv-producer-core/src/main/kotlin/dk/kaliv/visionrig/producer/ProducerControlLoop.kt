@@ -28,12 +28,12 @@ class ProducerControlLoop(
         val desired = try {
             gateway.fetchDesiredState()
         } catch (exc: RuntimeException) {
-            capture.close()
+            closeCaptureQuietly()
             throw exc
         }
 
         if (!desired.enabled) {
-            capture.close()
+            closeCaptureQuietly()
             gateway.sendHeartbeat(
                 captureActive = false,
                 appliedRevision = desired.revision,
@@ -62,12 +62,22 @@ class ProducerControlLoop(
                 frameResult = sent,
             )
         } catch (exc: RuntimeException) {
-            capture.close()
+            closeCaptureQuietly()
             throw exc
         }
     }
 
     override fun close() {
-        capture.close()
+        closeCaptureQuietly()
+    }
+
+    private fun closeCaptureQuietly() {
+        try {
+            capture.close()
+        } catch (_: RuntimeException) {
+            // Cleanup must not replace the control/transport failure that
+            // triggered shutdown. Capture implementations must clear their
+            // local open state before any best-effort hardware unbind.
+        }
     }
 }
