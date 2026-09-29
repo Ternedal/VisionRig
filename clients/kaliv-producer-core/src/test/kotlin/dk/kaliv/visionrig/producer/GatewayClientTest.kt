@@ -2,6 +2,9 @@ package dk.kaliv.visionrig.producer
 
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import java.util.concurrent.CountDownLatch
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,6 +17,22 @@ import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.SocketPolicy
 
 class GatewayClientTest {
+    private fun capabilitiesResponse(maxPayloadBytes: Long = 1024): MockResponse =
+        MockResponse().setResponseCode(200).setBody(
+            """
+            {
+              "schema":"visionrig/producer-capabilities/v2",
+              "max_payload_bytes":$maxPayloadBytes,
+              "gateway_max_payload_bytes":$maxPayloadBytes,
+              "core_max_payload_bytes":$maxPayloadBytes,
+              "sensor_packet_schemas":["visionrig/sensor-packet/v2"],
+              "sensor_packet_compressions":["none","zlib","auto"],
+              "packet_payload_warning_utilization":0.8,
+              "packet_payload_critical_utilization":0.95
+            }
+            """.trimIndent()
+        )
+
     private fun client(
         server: MockWebServer,
         sourceId: String = "kaliv-quest",
@@ -35,6 +54,8 @@ class GatewayClientTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 return when {
+                    request.path == "/api/v1/producer-capabilities" ->
+                        capabilitiesResponse()
                     request.path == "/api/v1/sensors/kaliv-quest/desired-state" ->
                         MockResponse().setResponseCode(200).setBody(
                             """
@@ -75,14 +96,6 @@ class GatewayClientTest {
                 appliedRevision = desired.revision,
             )
             assertEquals("kaliv-quest", heartbeat.sourceId)
-
-            server.takeRequest()
-            val heartbeatRequest = server.takeRequest()
-            assertTrue(
-                heartbeatRequest.body.readUtf8().contains(
-                    "\"schema_id\":\"visionrig/sensor-heartbeat/v6\""
-                )
-            )
         } finally {
             server.shutdown()
         }
@@ -180,6 +193,7 @@ class GatewayClientTest {
                 """.trimIndent()
             )
         )
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -204,6 +218,24 @@ class GatewayClientTest {
             assertFalse(capture.isOpen)
             assertEquals(0, capture.captureCalls)
             assertTrue(capture.closeCalls >= 1)
+
+            val desired = server.takeRequest()
+            val negotiated = server.takeRequest()
+            val heartbeat = server.takeRequest()
+            assertTrue(desired.path!!.contains("/desired-state"))
+            assertEquals("/api/v1/producer-capabilities", negotiated.path)
+            assertEquals("/api/v1/sensors/heartbeat", heartbeat.path)
+            val heartbeatBody = heartbeat.body.readUtf8()
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"negotiated_max_payload_bytes\":1024"
+                )
+            )
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"capability_refresh_seconds\":30.0"
+                )
+            )
         } finally {
             server.shutdown()
         }
@@ -244,6 +276,7 @@ class GatewayClientTest {
                 """.trimIndent()
             )
         )
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -286,9 +319,11 @@ class GatewayClientTest {
             assertEquals(SendStatus.ACCEPTED, step.frameResult?.status)
 
             val desired = server.takeRequest()
+            val capabilities = server.takeRequest()
             val heartbeat = server.takeRequest()
             val frame = server.takeRequest()
             assertTrue(desired.path!!.contains("/desired-state"))
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
             assertEquals("/api/v1/sensors/heartbeat", heartbeat.path)
             assertTrue(frame.path!!.startsWith("/api/v1/frames/ingest"))
         } finally {
@@ -512,6 +547,332 @@ class GatewayClientTest {
                 )
             )
         } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun oversizeCapturedFrameBecomesExplicitLocalDrop() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 1024))
+        server.start()
+        try {
+            val dir = createTempDirectory("visionrig-native-cap").toFile()
+            val stateFile = File(dir, "state.json")
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(stateFile),
+            )
+
+            kotlin.test.assertFailsWith<ProducerProtocolException> {
+                gateway.sendEncoded(ByteArray(1025) { 1 })
+            }
+
+            val state = FileProducerStateStore(stateFile).snapshot()
+            assertEquals(1, state.nextSequence)
+            assertEquals(1, state.pendingDropped)
+            assertEquals(null, state.inflightSequence)
+
+            val request = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", request.path)
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun capabilityNegotiationRejectsInconsistentPayloadLimit() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema":"visionrig/producer-capabilities/v2",
+                  "max_payload_bytes":2048,
+                  "gateway_max_payload_bytes":1024,
+                  "core_max_payload_bytes":4096,
+                  "sensor_packet_schemas":["visionrig/sensor-packet/v2"],
+                  "sensor_packet_compressions":["none"],
+                  "packet_payload_warning_utilization":0.8,
+                  "packet_payload_critical_utilization":0.95
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            val gateway = client(server)
+            kotlin.test.assertFailsWith<ProducerProtocolException> {
+                gateway.fetchCapabilities()
+            }
+        } finally {
+            server.shutdown()
+        }
+    }
+
+
+
+    @Test
+    fun heartbeatReportsNegotiatedPayloadTelemetryAfterFirstFrame() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 2048))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-frame-receipt/v1",
+                  "status":"processed",
+                  "source_id":"kaliv-quest",
+                  "source_type":"vr",
+                  "frame_sequence":0,
+                  "event_id":"evt-cap-0",
+                  "dropped_frames":0,
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-heartbeat-receipt/v1",
+                  "status":"accepted",
+                  "source_id":"kaliv-quest",
+                  "seen_utc":"2026-09-29T08:00:00Z",
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            val dir = createTempDirectory("visionrig-native-heartbeat-cap").toFile()
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(File(dir, "state.json")),
+                capabilityRefreshSeconds = 30.0,
+                monotonicMillis = { 1_000L },
+                utcNow = { "2026-09-29T08:00:00Z" },
+            )
+
+            gateway.sendEncoded(byteArrayOf(1, 2, 3))
+            gateway.sendHeartbeat(
+                captureActive = true,
+                appliedRevision = 5,
+            )
+
+            server.takeRequest()
+            server.takeRequest()
+            val heartbeat = server.takeRequest()
+            val body = heartbeat.body.readUtf8()
+            assertTrue(body.contains("\"negotiated_max_payload_bytes\":2048"))
+            assertTrue(body.contains("\"capability_refreshed_utc\":\"2026-09-29T08:00:00Z\""))
+            assertTrue(body.contains("\"capability_refresh_seconds\":30.0"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun expiredCapabilityCacheRefreshesBeforeNextFrame() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 2048))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-frame-receipt/v1",
+                  "status":"processed",
+                  "source_id":"kaliv-quest",
+                  "source_type":"vr",
+                  "frame_sequence":0,
+                  "event_id":"evt-cap-0",
+                  "dropped_frames":0,
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 4096))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-frame-receipt/v1",
+                  "status":"processed",
+                  "source_id":"kaliv-quest",
+                  "source_type":"vr",
+                  "frame_sequence":1,
+                  "event_id":"evt-cap-1",
+                  "dropped_frames":0,
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            var now = 0L
+            val dir = createTempDirectory("visionrig-native-cap-refresh").toFile()
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(File(dir, "state.json")),
+                capabilityRefreshSeconds = 1.0,
+                monotonicMillis = { now },
+                utcNow = { "2026-09-29T08:00:00Z" },
+            )
+
+            gateway.sendEncoded(byteArrayOf(1))
+            now = 1_001L
+            gateway.sendEncoded(byteArrayOf(2))
+
+            val firstCapabilities = server.takeRequest()
+            val firstFrame = server.takeRequest()
+            val secondCapabilities = server.takeRequest()
+            val secondFrame = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", firstCapabilities.path)
+            assertTrue(firstFrame.path!!.startsWith("/api/v1/frames/ingest"))
+            assertEquals("/api/v1/producer-capabilities", secondCapabilities.path)
+            assertTrue(secondFrame.path!!.startsWith("/api/v1/frames/ingest"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+
+
+    @Test
+    fun capabilityNegotiationFailureAccountsCapturedFrameAsDrop() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(502))
+        server.start()
+        try {
+            val dir = createTempDirectory("visionrig-native-cap-failure").toFile()
+            val stateFile = File(dir, "state.json")
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(stateFile),
+            )
+
+            kotlin.test.assertFailsWith<ProducerProtocolException> {
+                gateway.sendEncoded(byteArrayOf(1, 2, 3))
+            }
+
+            val state = FileProducerStateStore(stateFile).snapshot()
+            assertEquals(1, state.nextSequence)
+            assertEquals(1, state.pendingDropped)
+            assertEquals(null, state.inflightSequence)
+
+            val request = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", request.path)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+
+
+    @Test
+    fun concurrentHeartbeatNeverSeesPartialCapabilitySnapshot() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 2048))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-heartbeat-receipt/v1",
+                  "status":"accepted",
+                  "source_id":"kaliv-quest",
+                  "seen_utc":"2026-09-29T08:00:00Z",
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        val utcEntered = CountDownLatch(1)
+        val releaseUtc = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val dir = createTempDirectory("visionrig-native-cap-race").toFile()
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(File(dir, "state.json")),
+                capabilityRefreshSeconds = 30.0,
+                monotonicMillis = { 1_000L },
+                utcNow = {
+                    utcEntered.countDown()
+                    check(releaseUtc.await(5, TimeUnit.SECONDS))
+                    "2026-09-29T08:00:00Z"
+                },
+            )
+
+            val fetchFuture = executor.submit<ProducerCapabilities> {
+                gateway.fetchCapabilities()
+            }
+            assertTrue(utcEntered.await(5, TimeUnit.SECONDS))
+
+            val heartbeatFuture = executor.submit<HeartbeatReceipt> {
+                gateway.sendHeartbeat(
+                    captureActive = true,
+                    appliedRevision = 7,
+                )
+            }
+
+            // Heartbeat must wait for one complete published snapshot.
+            assertEquals(1, server.requestCount)
+            releaseUtc.countDown()
+
+            assertEquals(2048, fetchFuture.get(5, TimeUnit.SECONDS).maxPayloadBytes)
+            assertEquals(
+                "kaliv-quest",
+                heartbeatFuture.get(5, TimeUnit.SECONDS).sourceId,
+            )
+
+            val capabilities = server.takeRequest()
+            val heartbeat = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
+            val heartbeatBody = heartbeat.body.readUtf8()
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"negotiated_max_payload_bytes\":2048"
+                )
+            )
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"capability_refreshed_utc\":\"2026-09-29T08:00:00Z\""
+                )
+            )
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"capability_refresh_seconds\":30.0"
+                )
+            )
+        } finally {
+            releaseUtc.countDown()
+            executor.shutdownNow()
             server.shutdown()
         }
     }
