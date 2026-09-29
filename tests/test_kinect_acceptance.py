@@ -55,7 +55,13 @@ def _frame(*, infrared=True):
     )
 
 
-def _publisher(*, replayed: bool = False):
+def _publisher(
+    *,
+    replayed: bool = False,
+    cognition_queued: bool = True,
+    cognition_event_id: str | None = "cevt-" + "b" * 32,
+    evidence_ref: str = "world-evidence-event:" + "a" * 64,
+):
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         canonical = json.dumps(
@@ -70,11 +76,11 @@ def _publisher(*, replayed: bool = False):
             json={
                 "schema": "kaliv-consciousness-core/visionrig-admission/v1",
                 "visionrig_event_ref": event_ref,
-                "evidence_ref": "world-evidence-event:" + "a" * 64,
-                "cognition_event_id": "cevt-" + "b" * 32,
+                "evidence_ref": evidence_ref,
+                "cognition_event_id": cognition_event_id,
                 "world_changed": True,
                 "replayed": replayed,
-                "cognition_event_queued": True,
+                "cognition_event_queued": cognition_queued,
                 "epistemic_status": "inferred",
                 "confidence": 0.9,
                 "attention_salience": 0.7,
@@ -123,6 +129,9 @@ def test_physical_acceptance_requires_all_modalities_semantics_and_world_receipt
     # First semantic state publishes; later identical semantic state may suppress.
     assert receipt.modelrig_receipts >= 1
     assert receipt.modelrig_world_changed_receipts >= 1
+    assert receipt.modelrig_cognition_queued_receipts >= 1
+    assert receipt.modelrig_cognition_event_ids
+    assert receipt.schema == "visionrig/kinect-physical-acceptance/v3"
     assert receipt.sequences_strictly_contiguous is True
     assert receipt.raw_frames_persisted is False
     assert receipt.production_authority is False
@@ -253,6 +262,63 @@ def test_physical_acceptance_rejects_replayed_modelrig_admission():
             publisher=_publisher(replayed=True),
             frame_count=1,
             git_sha="8" * 40,
+        )
+
+    assert backend.closed is True
+
+
+def test_physical_acceptance_rejects_missing_cognition_queue_proof():
+    backend = _Backend([_frame()])
+    source = KinectV2Source(source_id="kinect-lab", backend=backend)
+
+    with pytest.raises(
+        acceptance.KinectPhysicalAcceptanceError,
+        match="did not prove cognition event queueing",
+    ):
+        acceptance.collect_kinect_physical_acceptance(
+            source=source,
+            pipeline=PerceptionPipeline((_EntityStage(), InfraredSummaryStage())),
+            publisher=_publisher(cognition_queued=False),
+            frame_count=1,
+            git_sha="9" * 40,
+        )
+
+    assert backend.closed is True
+
+
+def test_physical_acceptance_rejects_invalid_cognition_event_id():
+    backend = _Backend([_frame()])
+    source = KinectV2Source(source_id="kinect-lab", backend=backend)
+
+    with pytest.raises(
+        acceptance.KinectPhysicalAcceptanceError,
+        match="cognition event id is malformed",
+    ):
+        acceptance.collect_kinect_physical_acceptance(
+            source=source,
+            pipeline=PerceptionPipeline((_EntityStage(), InfraredSummaryStage())),
+            publisher=_publisher(cognition_event_id=None),
+            frame_count=1,
+            git_sha="a" * 40,
+        )
+
+    assert backend.closed is True
+
+
+def test_physical_acceptance_rejects_malformed_evidence_ref():
+    backend = _Backend([_frame()])
+    source = KinectV2Source(source_id="kinect-lab", backend=backend)
+
+    with pytest.raises(
+        acceptance.KinectPhysicalAcceptanceError,
+        match="evidence reference is malformed",
+    ):
+        acceptance.collect_kinect_physical_acceptance(
+            source=source,
+            pipeline=PerceptionPipeline((_EntityStage(), InfraredSummaryStage())),
+            publisher=_publisher(evidence_ref="world-evidence:" + "a" * 64),
+            frame_count=1,
+            git_sha="b" * 40,
         )
 
     assert backend.closed is True
