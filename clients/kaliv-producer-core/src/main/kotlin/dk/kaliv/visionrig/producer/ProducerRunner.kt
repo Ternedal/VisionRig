@@ -28,6 +28,7 @@ class ProducerRunner(
         shouldContinue: () -> Boolean = { true },
     ): Int {
         var capturedFrames = 0
+        var primaryFailure: Throwable? = null
         try {
             while (
                 shouldContinue() &&
@@ -38,6 +39,13 @@ class ProducerRunner(
                     capturedFrames += 1
                 }
 
+                if (
+                    config.maxFrames > 0 &&
+                    capturedFrames >= config.maxFrames
+                ) {
+                    break
+                }
+
                 val sleepMillis = if (step.desiredEnabled) {
                     config.enabledFrameDelayMillis
                 } else {
@@ -46,8 +54,19 @@ class ProducerRunner(
                 delayMillis(sleepMillis)
             }
             return capturedFrames
+        } catch (exc: Throwable) {
+            primaryFailure = exc
+            throw exc
         } finally {
-            loop.close()
+            try {
+                loop.close()
+            } catch (closeFailure: Throwable) {
+                if (primaryFailure != null) {
+                    primaryFailure.addSuppressed(closeFailure)
+                } else {
+                    throw closeFailure
+                }
+            }
         }
     }
 }
