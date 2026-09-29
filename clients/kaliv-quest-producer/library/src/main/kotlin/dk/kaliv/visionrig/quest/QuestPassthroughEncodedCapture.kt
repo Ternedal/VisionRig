@@ -79,9 +79,9 @@ class QuestPassthroughEncodedCapture(
 
     private var cameraThread: HandlerThread? = null
     private var cameraHandler: Handler? = null
-    private var camera: CameraDevice? = null
-    private var session: CameraCaptureSession? = null
-    private var reader: ImageReader? = null
+    @Volatile private var camera: CameraDevice? = null
+    @Volatile private var session: CameraCaptureSession? = null
+    @Volatile private var reader: ImageReader? = null
 
     override val isOpen: Boolean
         get() = camera != null && session != null && reader != null
