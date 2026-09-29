@@ -200,6 +200,71 @@ def test_release_evidence_ref_is_content_addressed_and_authority_safe() -> None:
         _attach_release_evidence_ref(overclaim)
 
 
+def test_physical_qualification_with_expected_sha_emits_release_ref() -> None:
+    event = _event()
+    revision = "e" * 40
+    health_calls = 0
+    status_calls = 0
+
+    def http_json(url: str, *, timeout: float):
+        nonlocal health_calls, status_calls
+        if url.endswith("/health"):
+            health_calls += 1
+            health = _health(event=event if health_calls > 1 else None)
+            health["service_revision"] = revision
+            return health
+        if url.endswith("/api/v1/sensors/status"):
+            status_calls += 1
+            return {
+                "sources": [
+                    _source(
+                        accepted=11 if status_calls > 1 else 10,
+                        sequence=11 if status_calls > 1 else 10,
+                    )
+                ]
+            }
+        if "after_cursor=0" in url:
+            return {
+                "schema_id": "visionrig/event-batch/v1",
+                "entries": [],
+                "next_cursor": 0,
+                "oldest_available_cursor": 1,
+                "newest_available_cursor": 4,
+                "gap": False,
+            }
+        return {
+            "schema_id": "visionrig/event-batch/v1",
+            "entries": [{"cursor": 5, "event": event}],
+            "next_cursor": 5,
+            "oldest_available_cursor": 1,
+            "newest_available_cursor": 5,
+            "gap": False,
+        }
+
+    tick = [0.0]
+
+    def monotonic() -> float:
+        tick[0] += 0.01
+        return tick[0]
+
+    report = qualify_physical_perception(
+        "http://127.0.0.1:8110",
+        source_id="kinect-v2-0",
+        expected_sha=revision,
+        timeout_seconds=2.0,
+        http_json=http_json,
+        monotonic=monotonic,
+        sleep_fn=lambda _seconds: None,
+    )
+
+    assert report["visionrig"]["service_revision"] == revision
+    assert report["release_evidence_ref"].startswith(
+        "visionrig-physical-perception:" + revision + ":"
+    )
+    assert len(report["release_evidence_ref"].rsplit(":", 1)[1]) == 64
+    assert report["gate"]["production_activation"] is False
+
+
 def test_physical_qualification_binds_fresh_camera_event_to_modelrig_receipt() -> None:
     event = _event()
     health_calls = 0
