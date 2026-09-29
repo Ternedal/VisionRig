@@ -59,7 +59,7 @@ def _publisher(
     *,
     replayed: bool = False,
     cognition_queued: bool = True,
-    cognition_event_id: str | None = "cevt-" + "b" * 32,
+    cognition_event_id: str | None = "__auto__",
     evidence_ref: str = "world-evidence-event:" + "a" * 64,
 ):
     def handler(request: httpx.Request) -> httpx.Response:
@@ -71,13 +71,18 @@ def _publisher(
             ensure_ascii=True,
         ).encode("utf-8")
         event_ref = "visionrig-event:" + hashlib.sha256(canonical).hexdigest()
+        effective_cognition_event_id = cognition_event_id
+        if cognition_event_id == "__auto__":
+            effective_cognition_event_id = "cevt-" + hashlib.sha256(
+                ("world-evidence-attention|world_change|" + evidence_ref).encode("utf-8")
+            ).hexdigest()[:32]
         return httpx.Response(
             200,
             json={
                 "schema": "kaliv-consciousness-core/visionrig-admission/v1",
                 "visionrig_event_ref": event_ref,
                 "evidence_ref": evidence_ref,
-                "cognition_event_id": None if replayed else cognition_event_id,
+                "cognition_event_id": None if replayed else effective_cognition_event_id,
                 "world_changed": not replayed,
                 "replayed": replayed,
                 "cognition_event_queued": False if replayed else cognition_queued,

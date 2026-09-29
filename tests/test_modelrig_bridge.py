@@ -87,13 +87,17 @@ def receipt_for_request(request: httpx.Request) -> httpx.Response:
         ensure_ascii=True,
     ).encode("utf-8")
     event_ref = "visionrig-event:" + hashlib.sha256(canonical).hexdigest()
+    evidence_ref = "world-evidence-event:" + "a" * 64
+    cognition_event_id = "cevt-" + hashlib.sha256(
+        ("world-evidence-attention|world_change|" + evidence_ref).encode("utf-8")
+    ).hexdigest()[:32]
     return httpx.Response(
         200,
         json={
             "schema": "kaliv-consciousness-core/visionrig-admission/v1",
             "visionrig_event_ref": event_ref,
-            "evidence_ref": "world-evidence-event:" + "a" * 64,
-            "cognition_event_id": "cevt-" + "b" * 32,
+            "evidence_ref": evidence_ref,
+            "cognition_event_id": cognition_event_id,
             "world_changed": True,
             "replayed": False,
             "cognition_event_queued": True,
@@ -444,6 +448,20 @@ def test_bridge_rejects_fresh_admission_without_world_change() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         body = receipt_for_request(request).json()
         body["world_changed"] = False
+        return httpx.Response(200, json=body)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    result = publisher.publish(event())
+    assert result.status == "rejected"
+    assert result.reason == "invalid ModelRig bridge receipt"
+
+
+def test_bridge_rejects_valid_shape_cognition_id_not_bound_to_evidence_ref() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = receipt_for_request(request).json()
+        body["cognition_event_id"] = "cevt-" + "c" * 32
         return httpx.Response(200, json=body)
 
     publisher = ModelRigPerceptionPublisher(
