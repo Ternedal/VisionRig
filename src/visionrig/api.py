@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import os
+import re
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 from typing import Callable, Literal
@@ -73,6 +75,8 @@ def create_app(
     packet_target_flap_window_seconds = float(packet_target_flap_window_seconds)
     app = FastAPI(title="VisionRig", version=__version__)
     service_instance_id = "visionrig-instance:" + uuid4().hex
+    raw_revision = os.environ.get("VISIONRIG_GIT_SHA", "").strip().lower()
+    service_revision = raw_revision if re.fullmatch(r"[0-9a-f]{40}", raw_revision) else None
     selected_pipeline = pipeline or PerceptionPipeline((PassthroughStage(),))
     runtime = VisionRuntime(
         selected_pipeline,
@@ -1125,8 +1129,10 @@ def create_app(
         return {
             "status": "ok",
             "service": "visionrig",
-            "schema": "visionrig/health/v66",
+            "schema": "visionrig/health/v67",
             "service_instance_id": service_instance_id,
+            "service_version": __version__,
+            "service_revision": service_revision,
             "perception_schema": "visionrig/perception-event/v4",
             "stages": selected_pipeline.stages,
             "capture_queue": asdict(runtime.stats()),
