@@ -869,7 +869,20 @@ def test_physical_qualification_accepts_matching_expected_build_sha() -> None:
     assert report["release_evidence_ref"].startswith(
         "visionrig-physical-perception:" + expected_sha + ":"
     )
-    assert len(report["release_evidence_ref"].rsplit(":", 1)[1]) == 64
+    digest = report["release_evidence_ref"].rsplit(":", 1)[1]
+    assert len(digest) == 64
+
+    unhashed_report = dict(report)
+    unhashed_report.pop("release_evidence_ref")
+    canonical = json.dumps(
+        unhashed_report,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    assert digest == hashlib.sha256(canonical).hexdigest()
+    assert report["privacy"]["raw_frame_included"] is False
+    assert report["gate"]["production_activation"] is False
 
 
 def test_physical_qualification_rejects_missing_or_wrong_expected_build_sha() -> None:
