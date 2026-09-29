@@ -393,3 +393,31 @@ def test_meaningful_infrared_bucket_change_is_published() -> None:
         == "published"
     )
     assert calls == 2
+
+
+def test_bridge_rejects_malformed_modelrig_receipt_references() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = receipt_for_request(request).json()
+        body["evidence_ref"] = "world-evidence:" + "a" * 64
+        return httpx.Response(200, json=body)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    result = publisher.publish(event())
+    assert result.status == "rejected"
+    assert result.reason == "invalid ModelRig bridge receipt"
+
+
+def test_bridge_rejects_inconsistent_cognition_queue_receipt() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = receipt_for_request(request).json()
+        body["cognition_event_queued"] = False
+        return httpx.Response(200, json=body)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    result = publisher.publish(event())
+    assert result.status == "rejected"
+    assert result.reason == "invalid ModelRig bridge receipt"
