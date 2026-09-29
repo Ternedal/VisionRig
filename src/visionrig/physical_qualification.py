@@ -263,26 +263,6 @@ def _validate_bridge_binding(
         raise PhysicalPerceptionQualificationError(
             "VisionRig health lacks service instance identity"
         )
-    service_version = health.get("service_version")
-    if not isinstance(service_version, str) or not service_version.strip():
-        raise PhysicalPerceptionQualificationError(
-            "VisionRig health lacks service version"
-        )
-    service_revision = health.get("service_revision")
-    if service_revision is not None and _GIT_SHA.fullmatch(str(service_revision)) is None:
-        raise PhysicalPerceptionQualificationError(
-            "VisionRig health service revision is malformed"
-        )
-    if expected_sha is not None:
-        normalized_expected_sha = expected_sha.strip().lower()
-        if _GIT_SHA.fullmatch(normalized_expected_sha) is None:
-            raise PhysicalPerceptionQualificationError(
-                "expected VisionRig SHA must be lowercase 40-hex"
-            )
-        if service_revision != normalized_expected_sha:
-            raise PhysicalPerceptionQualificationError(
-                "VisionRig service revision does not match expected SHA"
-            )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
         raise PhysicalPerceptionQualificationError(
@@ -516,6 +496,26 @@ def qualify_physical_perception(
         raise PhysicalPerceptionQualificationError(
             "VisionRig health lacks service instance identity"
         )
+    service_version = health.get("service_version")
+    if not isinstance(service_version, str) or not service_version.strip():
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health lacks service version"
+        )
+    service_revision = health.get("service_revision")
+    if service_revision is not None and _GIT_SHA.fullmatch(str(service_revision)) is None:
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health service revision is malformed"
+        )
+    if expected_sha is not None:
+        normalized_expected_sha = expected_sha.strip().lower()
+        if _GIT_SHA.fullmatch(normalized_expected_sha) is None:
+            raise PhysicalPerceptionQualificationError(
+                "expected VisionRig SHA must be lowercase 40-hex"
+            )
+        if service_revision != normalized_expected_sha:
+            raise PhysicalPerceptionQualificationError(
+                "VisionRig service revision does not match expected SHA"
+            )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
         raise PhysicalPerceptionQualificationError(
