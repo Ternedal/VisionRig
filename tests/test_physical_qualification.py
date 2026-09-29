@@ -610,6 +610,7 @@ def test_physical_qualification_rejects_event_device_identity_change() -> None:
     event = _event()
     event["source"]["device"] = "different-camera"
     health_calls = 0
+    status_calls = [0]
 
     def http_json(url: str, *, timeout: float):
         nonlocal health_calls
@@ -781,7 +782,15 @@ def test_physical_qualification_rejects_service_restart_mid_run() -> None:
                 health["service_instance_id"] = "visionrig-instance:restarted"
             return health
         if url.endswith("/api/v1/sensors/status"):
-            return {"sources": [_source(accepted=11, sequence=11)]}
+            status_calls[0] += 1
+            return {
+                "sources": [
+                    _source(
+                        accepted=11 if status_calls[0] > 1 else 10,
+                        sequence=11 if status_calls[0] > 1 else 10,
+                    )
+                ]
+            }
         if "after_cursor=0" in url:
             return {
                 "schema_id": "visionrig/event-batch/v1",
