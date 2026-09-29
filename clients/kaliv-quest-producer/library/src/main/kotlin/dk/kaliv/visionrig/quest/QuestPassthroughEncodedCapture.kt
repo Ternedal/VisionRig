@@ -17,6 +17,7 @@ import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import dk.kaliv.visionrig.producer.EncodedCapture
 import dk.kaliv.visionrig.producer.EncodedFrame
@@ -88,6 +89,7 @@ class QuestPassthroughEncodedCapture(
 
     @SuppressLint("MissingPermission")
     override fun open() {
+        requireWorkerThread()
         if (isOpen) return
         requirePermissions()
 
@@ -290,6 +292,7 @@ class QuestPassthroughEncodedCapture(
     }
 
     override fun capture(): EncodedFrame {
+        requireWorkerThread()
         if (!isOpen) {
             throw ProducerProtocolException(
                 "Quest passthrough capture is not open"
@@ -358,6 +361,15 @@ class QuestPassthroughEncodedCapture(
         } catch (_: Exception) {
         }
         frameQueue.clear()
+    }
+
+
+    private fun requireWorkerThread() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            throw ProducerProtocolException(
+                "Quest producer operations must run off the Android main thread"
+            )
+        }
     }
 
     private fun requirePermissions() {
