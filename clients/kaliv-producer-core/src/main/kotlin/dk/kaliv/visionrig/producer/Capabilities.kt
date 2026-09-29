@@ -22,8 +22,6 @@ data class ProducerCapabilities(
         require(gatewayMaxPayloadBytes in 1024..64L * 1024 * 1024)
         require(coreMaxPayloadBytes in 1024..64L * 1024 * 1024)
         require(maxPayloadBytes == minOf(gatewayMaxPayloadBytes, coreMaxPayloadBytes))
-        require("visionrig/sensor-packet/v2" in sensorPacketSchemas)
-        require(sensorPacketCompressions.isNotEmpty())
         val warning = packetPayloadWarningUtilization
             ?: throw IllegalArgumentException("producer capabilities lack warning threshold")
         val critical = packetPayloadCriticalUtilization
