@@ -5,6 +5,7 @@ import androidx.lifecycle.LifecycleOwner
 import dk.kaliv.visionrig.producer.ControlStepResult
 import dk.kaliv.visionrig.producer.FileProducerStateStore
 import dk.kaliv.visionrig.producer.ProducerControlLoop
+import dk.kaliv.visionrig.producer.ProducerStateIdentity
 import dk.kaliv.visionrig.producer.VisionRigGatewayClient
 import java.io.File
 
@@ -32,7 +33,11 @@ class KalivAndroidProducerSession private constructor(
             device: String = "android-camera",
             stateFile: File = File(
                 context.filesDir,
-                "visionrig/" + sourceId + "-producer-state.json",
+                "visionrig/" + ProducerStateIdentity(
+                    gatewayUrl = gatewayUrl,
+                    sourceId = sourceId,
+                    sourceType = "camera",
+                ).defaultStateFileName(),
             ),
             captureConfig: CameraXCaptureConfig = CameraXCaptureConfig(),
         ): KalivAndroidProducerSession {
