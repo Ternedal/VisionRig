@@ -117,7 +117,7 @@ class VisionRigGatewayClient(
         capabilities: List<String> = emptyList(),
     ): HeartbeatReceipt {
         require(appliedRevision >= 0)
-        val negotiated = capabilitySnapshot
+        val negotiated = ensureCapabilitySnapshot()
         val payload = HeartbeatRequest(
             sourceId = sourceId,
             sourceType = sourceType,
@@ -125,13 +125,9 @@ class VisionRigGatewayClient(
             capabilities = capabilities,
             captureActive = captureActive,
             appliedRevision = appliedRevision,
-            negotiatedMaxPayloadBytes = negotiated?.capabilities?.maxPayloadBytes,
-            capabilityRefreshedUtc = negotiated?.refreshedUtc,
-            capabilityRefreshSeconds = if (negotiated != null) {
-                capabilityRefreshSeconds
-            } else {
-                null
-            },
+            negotiatedMaxPayloadBytes = negotiated.capabilities.maxPayloadBytes,
+            capabilityRefreshedUtc = negotiated.refreshedUtc,
+            capabilityRefreshSeconds = capabilityRefreshSeconds,
         )
         val url = baseUrl.newBuilder()
             .addPathSegments("api/v1/sensors/heartbeat")
@@ -168,7 +164,7 @@ class VisionRigGatewayClient(
 
         val reservation = stateStore.reserve()
         val maxPayload = try {
-            ensureCapabilities().maxPayloadBytes
+            ensureCapabilitySnapshot().capabilities.maxPayloadBytes
         } catch (exc: RuntimeException) {
             stateStore.markDropped(reservation.sequence)
             throw exc
@@ -260,7 +256,7 @@ class VisionRigGatewayClient(
     }
 
 
-    private fun ensureCapabilities(): ProducerCapabilities {
+    private fun ensureCapabilitySnapshot(): CapabilitySnapshot {
         val now = monotonicMillis()
         val cached = capabilitySnapshot
         if (
@@ -268,7 +264,7 @@ class VisionRigGatewayClient(
             now - cached.refreshedMonotonicMillis <
             (capabilityRefreshSeconds * 1_000.0).toLong()
         ) {
-            return cached.capabilities
+            return cached
         }
 
         synchronized(capabilityLock) {
@@ -279,9 +275,13 @@ class VisionRigGatewayClient(
                 lockedNow - lockedCached.refreshedMonotonicMillis <
                 (capabilityRefreshSeconds * 1_000.0).toLong()
             ) {
-                return lockedCached.capabilities
+                return lockedCached
             }
-            return fetchCapabilities()
+            fetchCapabilities()
+            return capabilitySnapshot
+                ?: throw ProducerProtocolException(
+                    "VisionRig capability refresh did not publish a snapshot"
+                )
         }
     }
 
