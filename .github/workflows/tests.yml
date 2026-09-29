@@ -56,5 +56,5 @@ jobs:
         with:
           gradle-version: "9.6.0"
       - uses: android-actions/setup-android@v4
-      - run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+      - run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
       - run: gradle -p clients/kaliv-android-producer :library:assembleDebug :library:testDebugUnitTest --no-daemon
