@@ -84,7 +84,7 @@ class ProducerRunnerTest {
         val captured = runner.run()
 
         assertEquals(2, captured)
-        assertEquals(listOf(200L, 200L), delays)
+        assertEquals(listOf(200L), delays)
         assertTrue(loop.closed)
     }
 
@@ -127,6 +127,55 @@ class ProducerRunnerTest {
         kotlin.test.assertFailsWith<IllegalArgumentException> {
             ProducerRunConfig(maxFrames = -1)
         }
+    }
+
+
+
+    @Test
+    fun closeFailureDoesNotMaskPrimaryStepFailure() = runTest {
+        val loop = object : ProducerLoop {
+            override fun step(): ControlStepResult {
+                throw ProducerProtocolException("step boom")
+            }
+
+            override fun close() {
+                throw IllegalStateException("close boom")
+            }
+        }
+        val runner = ProducerRunner(
+            loop = loop,
+            delayMillis = {},
+        )
+
+        val failure = kotlin.test.assertFailsWith<ProducerProtocolException> {
+            runner.run()
+        }
+
+        assertEquals("step boom", failure.message)
+        assertEquals(1, failure.suppressed.size)
+        assertEquals("close boom", failure.suppressed.single().message)
+    }
+
+    @Test
+    fun closeFailureSurfacesOnNormalCompletion() = runTest {
+        val loop = object : ProducerLoop {
+            override fun step(): ControlStepResult =
+                error("step must not be reached")
+
+            override fun close() {
+                throw IllegalStateException("close boom")
+            }
+        }
+        val runner = ProducerRunner(
+            loop = loop,
+            delayMillis = {},
+        )
+
+        val failure = kotlin.test.assertFailsWith<IllegalStateException> {
+            runner.run(shouldContinue = { false })
+        }
+
+        assertEquals("close boom", failure.message)
     }
 
     private class FakeLoop(
