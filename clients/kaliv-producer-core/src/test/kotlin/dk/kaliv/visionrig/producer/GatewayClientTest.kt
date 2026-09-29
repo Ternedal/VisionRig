@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.mockwebserver.SocketPolicy
 
 class GatewayClientTest {
     private fun client(
@@ -388,6 +389,55 @@ class GatewayClientTest {
             }
 
             assertTrue(closed)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+
+
+    @Test
+    fun responseBodyIoFailureBecomesUnavailableDropAndClearsInflight() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "schema_id":"visionrig/sensor-frame-receipt/v1",
+                      "status":"processed",
+                      "source_id":"kaliv-quest",
+                      "source_type":"vr",
+                      "frame_sequence":0,
+                      "event_id":"evt-body-0",
+                      "dropped_frames":0,
+                      "production_authority":false
+                    }
+                    """.trimIndent()
+                )
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+        )
+        server.start()
+        try {
+            val dir = createTempDirectory("visionrig-native-body-io").toFile()
+            val stateFile = File(dir, "state.json")
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(stateFile),
+            )
+
+            val result = gateway.sendEncoded(byteArrayOf(1, 2, 3))
+            assertEquals(SendStatus.DROPPED_UNAVAILABLE, result.status)
+
+            val state = FileProducerStateStore(stateFile).snapshot()
+            assertEquals(1, state.nextSequence)
+            assertEquals(1, state.pendingDropped)
+            assertEquals(null, state.inflightSequence)
         } finally {
             server.shutdown()
         }
