@@ -1597,3 +1597,19 @@ def test_producer_readiness_distinguishes_missing_heartbeat_blocker(monkeypatch)
     assert by_id["camera-v5"]["upgrade_stage"] == "contract_upgrade"
     assert by_id["screen-frame-only"]["upgrade_stage"] == "establish_heartbeat"
     assert fleet["attention_total"] == 0
+
+
+def test_health_service_instance_id_is_stable_per_app_and_unique_across_apps() -> None:
+    first_app = create_app(PerceptionPipeline())
+    second_app = create_app(PerceptionPipeline())
+    first_client = TestClient(first_app)
+    second_client = TestClient(second_app)
+
+    first_id = first_client.get("/health").json()["service_instance_id"]
+    repeated_id = first_client.get("/health").json()["service_instance_id"]
+    second_id = second_client.get("/health").json()["service_instance_id"]
+
+    assert first_id.startswith("visionrig-instance:")
+    assert repeated_id == first_id
+    assert second_id.startswith("visionrig-instance:")
+    assert second_id != first_id
