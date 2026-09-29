@@ -1,7 +1,7 @@
 package dk.kaliv.visionrig.producer
 
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -11,7 +11,7 @@ class ProducerRunController(
     private val scope: CoroutineScope,
     private val runnerFactory: () -> ProducerRunner,
 ) : AutoCloseable {
-    private val started = AtomicBoolean(false)
+    private val lifecycleLock = Any()
     private val jobRef = AtomicReference<Job?>(null)
 
     val isRunning: Boolean
@@ -22,30 +22,36 @@ class ProducerRunController(
         onCompleted: (Int) -> Unit = {},
         onFailure: (Throwable) -> Unit = {},
     ): Boolean {
-        if (!started.compareAndSet(false, true)) {
-            return false
-        }
-
-        val job = scope.launch(start = CoroutineStart.LAZY) {
-            try {
-                val captured = runnerFactory().run(shouldContinue)
-                onCompleted(captured)
-            } catch (exc: Throwable) {
-                onFailure(exc)
-                throw exc
-            } finally {
-                jobRef.set(null)
-                started.set(false)
+        synchronized(lifecycleLock) {
+            if (jobRef.get() != null) {
+                return false
             }
+
+            lateinit var job: Job
+            job = scope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    val captured = runnerFactory().run(shouldContinue)
+                    onCompleted(captured)
+                } catch (exc: CancellationException) {
+                    throw exc
+                } catch (exc: Throwable) {
+                    onFailure(exc)
+                    throw exc
+                } finally {
+                    jobRef.compareAndSet(job, null)
+                }
+            }
+            jobRef.set(job)
+            job.start()
+            return true
         }
-        jobRef.set(job)
-        job.start()
-        return true
     }
 
     fun stop() {
-        jobRef.getAndSet(null)?.cancel()
-        started.set(false)
+        val job = synchronized(lifecycleLock) {
+            jobRef.getAndSet(null)
+        }
+        job?.cancel()
     }
 
     override fun close() {
