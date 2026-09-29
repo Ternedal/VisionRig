@@ -5,6 +5,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.test.assertFailsWith
 
 class ProducerStateStoreTest {
@@ -61,4 +62,41 @@ class ProducerStateStoreTest {
             store.markAccepted(99)
         }
     }
+
+    @Test
+    fun unreadableStatePathIsNormalizedToProducerProtocolError() {
+        val dir = createTempDirectory("visionrig-native-read-io").toFile()
+        val statePath = File(dir, "state.json")
+        assertTrue(statePath.mkdir())
+        val store = FileProducerStateStore(statePath)
+
+        val failure = assertFailsWith<ProducerProtocolException> {
+            store.recover()
+        }
+
+        assertEquals(
+            "unable to read producer state file",
+            failure.message,
+        )
+    }
+
+    @Test
+    fun unwritableStateParentIsNormalizedToProducerProtocolError() {
+        val dir = createTempDirectory("visionrig-native-write-io").toFile()
+        val parentFile = File(dir, "not-a-directory")
+        parentFile.writeText("x")
+        val store = FileProducerStateStore(
+            File(parentFile, "state.json")
+        )
+
+        val failure = assertFailsWith<ProducerProtocolException> {
+            store.reserve()
+        }
+
+        assertEquals(
+            "unable to persist producer state file",
+            failure.message,
+        )
+    }
+
 }
