@@ -426,7 +426,7 @@ def _success_report(
         return None
     elapsed_ms = round((monotonic() - started) * 1000.0, 3)
     semantic_summary = _semantic_summary(event)
-    return {
+    report = {
         "schema": SCHEMA,
         "generated_at": datetime.now(timezone.utc)
         .isoformat()
@@ -476,6 +476,16 @@ def _success_report(
             "production_activation": False,
         },
     }
+    service_revision = report["visionrig"].get("service_revision")
+    if isinstance(service_revision, str) and _GIT_SHA.fullmatch(service_revision):
+        release_digest = hashlib.sha256(_canonical_json(report)).hexdigest()
+        report["release_evidence_ref"] = (
+            "visionrig-physical-perception:"
+            + service_revision
+            + ":"
+            + release_digest
+        )
+    return report
 
 
 def qualify_physical_perception(
