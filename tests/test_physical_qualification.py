@@ -126,9 +126,9 @@ def _health(*, event: dict | None = None, activation: bool = False) -> dict:
     return {
         "status": "ok",
         "service": "visionrig",
-        "schema": "visionrig/health/v66",
+        "schema": "visionrig/health/v67",
         "service_instance_id": "visionrig-instance:test",
-        "service_version": "0.95.0",
+        "service_version": "0.96.0",
         "service_revision": None,
         "perception_schema": "visionrig/perception-event/v4",
         "modelrig_bridge": {
