@@ -772,6 +772,7 @@ def test_physical_qualification_rejects_final_sequence_behind_qualifying_event()
 def test_physical_qualification_rejects_service_restart_mid_run() -> None:
     event = _event()
     health_calls = 0
+    status_calls = [0]
 
     def http_json(url: str, *, timeout: float):
         nonlocal health_calls
