@@ -223,6 +223,24 @@ class GatewayClientTest {
             assertFalse(capture.isOpen)
             assertEquals(0, capture.captureCalls)
             assertTrue(capture.closeCalls >= 1)
+
+            val desired = server.takeRequest()
+            val negotiated = server.takeRequest()
+            val heartbeat = server.takeRequest()
+            assertTrue(desired.path!!.contains("/desired-state"))
+            assertEquals("/api/v1/producer-capabilities", negotiated.path)
+            assertEquals("/api/v1/sensors/heartbeat", heartbeat.path)
+            val heartbeatBody = heartbeat.body.readUtf8()
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"negotiated_max_payload_bytes\":1024"
+                )
+            )
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"capability_refresh_seconds\":30.0"
+                )
+            )
         } finally {
             server.shutdown()
         }
