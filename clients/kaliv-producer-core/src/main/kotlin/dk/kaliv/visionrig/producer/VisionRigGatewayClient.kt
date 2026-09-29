@@ -160,11 +160,19 @@ class VisionRigGatewayClient(
                 )
             }
 
-            val body = it.body?.string()
-                ?: run {
-                    stateStore.markDropped(reservation.sequence)
-                    throw ProducerProtocolException("frame response has no body")
-                }
+            val body = try {
+                it.body?.string()
+            } catch (exc: IOException) {
+                val state = stateStore.markDropped(reservation.sequence)
+                return SendResult(
+                    SendStatus.DROPPED_UNAVAILABLE,
+                    reservation.sequence,
+                    state.pendingDropped,
+                )
+            } ?: run {
+                stateStore.markDropped(reservation.sequence)
+                throw ProducerProtocolException("frame response has no body")
+            }
             val receipt = try {
                 decode<FrameReceipt>(body, "frame")
             } catch (exc: RuntimeException) {
