@@ -28,7 +28,9 @@ class ProducerControlLoop(
     private val capture: EncodedCapture,
     private val capabilities: List<String> = emptyList(),
 ) : ProducerLoop {
-    override fun step(): ControlStepResult {
+    private val stepLock = Any()
+
+    override fun step(): ControlStepResult = synchronized(stepLock) {
         val desired = try {
             gateway.fetchDesiredState()
         } catch (exc: Exception) {
@@ -71,7 +73,7 @@ class ProducerControlLoop(
         }
     }
 
-    override fun close() {
+    override fun close() = synchronized(stepLock) {
         closeCaptureQuietly()
     }
 
