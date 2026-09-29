@@ -1,6 +1,7 @@
 package dk.kaliv.visionrig.producer
 
 import java.io.IOException
+import java.time.Instant
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl
@@ -18,6 +19,9 @@ class VisionRigGatewayClient(
     private val device: String? = null,
     private val stateStore: ProducerStateStore,
     private val client: OkHttpClient = OkHttpClient(),
+    private val capabilityRefreshSeconds: Double = 30.0,
+    private val monotonicMillis: () -> Long = { System.nanoTime() / 1_000_000L },
+    private val utcNow: () -> String = { Instant.now().toString() },
     private val json: Json = Json {
         ignoreUnknownKeys = false
         encodeDefaults = true
@@ -27,11 +31,22 @@ class VisionRigGatewayClient(
     private val baseUrl: HttpUrl
     private val bearerToken: String
 
+    private data class CapabilitySnapshot(
+        val capabilities: ProducerCapabilities,
+        val refreshedMonotonicMillis: Long,
+        val refreshedUtc: String,
+    )
+
+    private val capabilityLock = Any()
+    @Volatile
+    private var capabilitySnapshot: CapabilitySnapshot? = null
+
     init {
         require(token.length >= 32) { "producer token must be at least 32 characters" }
         require(sourceId.isNotBlank() && sourceId.length <= 128)
         require(sourceType in setOf("camera", "screen", "vr", "image"))
         require(device == null || device.length <= 256)
+        require(capabilityRefreshSeconds in 1.0..3600.0)
         val parsed = gatewayUrl.toHttpUrl()
         require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
             "gateway URL must not contain credentials"
@@ -43,6 +58,49 @@ class VisionRigGatewayClient(
         bearerToken = token
         stateStore.recover()
     }
+
+    fun fetchCapabilities(): ProducerCapabilities =
+        synchronized(capabilityLock) {
+            val url = baseUrl.newBuilder()
+                .addPathSegments("api/v1/producer-capabilities")
+                .build()
+            val response = execute(
+                Request.Builder().url(url).get().authorized().build()
+            )
+            response.use {
+                requireSuccess(it.code, "producer-capabilities")
+                val body = try {
+                    it.body?.string()
+                } catch (exc: IOException) {
+                    throw ProducerProtocolException(
+                        "VisionRig producer-capabilities response I/O failed",
+                        exc,
+                    )
+                } ?: throw ProducerProtocolException(
+                    "producer-capabilities response has no body"
+                )
+
+                val capabilities = decode<ProducerCapabilities>(
+                    body,
+                    "producer-capabilities",
+                )
+                try {
+                    capabilities.validate()
+                } catch (exc: IllegalArgumentException) {
+                    throw ProducerProtocolException(
+                        "invalid VisionRig producer capabilities",
+                        exc,
+                    )
+                }
+
+                capabilitySnapshot = CapabilitySnapshot(
+                    capabilities = capabilities,
+                    refreshedMonotonicMillis = monotonicMillis(),
+                    refreshedUtc = utcNow(),
+                )
+                capabilities
+            }
+        }
 
     fun fetchDesiredState(): DesiredState {
         val url = baseUrl.newBuilder()
@@ -79,6 +137,7 @@ class VisionRigGatewayClient(
         capabilities: List<String> = emptyList(),
     ): HeartbeatReceipt {
         require(appliedRevision >= 0)
+        val negotiated = ensureCapabilitySnapshot()
         val payload = HeartbeatRequest(
             sourceId = sourceId,
             sourceType = sourceType,
@@ -86,6 +145,9 @@ class VisionRigGatewayClient(
             capabilities = capabilities,
             captureActive = captureActive,
             appliedRevision = appliedRevision,
+            negotiatedMaxPayloadBytes = negotiated.capabilities.maxPayloadBytes,
+            capabilityRefreshedUtc = negotiated.refreshedUtc,
+            capabilityRefreshSeconds = capabilityRefreshSeconds,
         )
         val url = baseUrl.newBuilder()
             .addPathSegments("api/v1/sensors/heartbeat")
@@ -129,6 +191,19 @@ class VisionRigGatewayClient(
         require(contentType in setOf("image/jpeg", "image/png", "image/webp"))
 
         val reservation = stateStore.reserve()
+        val maxPayload = try {
+            ensureCapabilitySnapshot().capabilities.maxPayloadBytes
+        } catch (exc: RuntimeException) {
+            stateStore.markDropped(reservation.sequence)
+            throw exc
+        }
+        if (payload.size.toLong() > maxPayload) {
+            stateStore.markDropped(reservation.sequence)
+            throw ProducerProtocolException(
+                "frame payload exceeds negotiated VisionRig limit"
+            )
+        }
+
         val urlBuilder = baseUrl.newBuilder()
             .addPathSegments("api/v1/frames/ingest")
             .addQueryParameter("source_id", sourceId)
@@ -213,6 +288,35 @@ class VisionRigGatewayClient(
                 0,
                 receipt.eventId,
             )
+        }
+    }
+
+    private fun ensureCapabilitySnapshot(): CapabilitySnapshot {
+        val now = monotonicMillis()
+        val cached = capabilitySnapshot
+        if (
+            cached != null &&
+            now - cached.refreshedMonotonicMillis <
+            (capabilityRefreshSeconds * 1_000.0).toLong()
+        ) {
+            return cached
+        }
+
+        synchronized(capabilityLock) {
+            val lockedNow = monotonicMillis()
+            val lockedCached = capabilitySnapshot
+            if (
+                lockedCached != null &&
+                lockedNow - lockedCached.refreshedMonotonicMillis <
+                (capabilityRefreshSeconds * 1_000.0).toLong()
+            ) {
+                return lockedCached
+            }
+            fetchCapabilities()
+            return capabilitySnapshot
+                ?: throw ProducerProtocolException(
+                    "VisionRig capability refresh did not publish a snapshot"
+                )
         }
     }
 
