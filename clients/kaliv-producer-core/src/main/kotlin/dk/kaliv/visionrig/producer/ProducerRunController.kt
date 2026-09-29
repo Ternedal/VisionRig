@@ -48,10 +48,9 @@ class ProducerRunController(
     }
 
     fun stop() {
-        val job = synchronized(lifecycleLock) {
-            jobRef.getAndSet(null)
+        synchronized(lifecycleLock) {
+            jobRef.get()?.cancel()
         }
-        job?.cancel()
     }
 
     override fun close() {
