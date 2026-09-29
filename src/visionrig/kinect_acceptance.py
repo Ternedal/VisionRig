@@ -30,6 +30,8 @@ from .runtime import VisionRuntime
 
 
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
+_WORLD_EVIDENCE_REF = re.compile(r"^world-evidence-event:[a-f0-9]{64}$")
+_COGNITION_EVENT_ID = re.compile(r"^cevt-[a-f0-9]{32}$")
 NonEmptyRef = Annotated[str, Field(min_length=1, max_length=256)]
 
 
@@ -47,7 +49,7 @@ class _StrictModel(BaseModel):
 
 
 class KinectPhysicalAcceptanceReceipt(_StrictModel):
-    schema: Literal["visionrig/kinect-physical-acceptance/v2"]
+    schema: Literal["visionrig/kinect-physical-acceptance/v3"]
     generated_at: datetime
     visionrig_version: str
     visionrig_git_sha: Annotated[str, Field(pattern=r"^[0-9a-f]{40}$")]
@@ -70,8 +72,10 @@ class KinectPhysicalAcceptanceReceipt(_StrictModel):
     semantic_observations: Annotated[int, Field(ge=1)]
     modelrig_receipts: Annotated[int, Field(ge=1)]
     modelrig_world_changed_receipts: Annotated[int, Field(ge=1)]
+    modelrig_cognition_queued_receipts: Annotated[int, Field(ge=1)]
     modelrig_event_refs: Annotated[tuple[NonEmptyRef, ...], Field(min_length=1, max_length=100)]
     modelrig_evidence_refs: Annotated[tuple[NonEmptyRef, ...], Field(min_length=1, max_length=100)]
+    modelrig_cognition_event_ids: Annotated[tuple[NonEmptyRef, ...], Field(min_length=1, max_length=100)]
     real_sensor_required: Literal[True]
     exact_checkout_required: Literal[True]
     raw_frames_persisted: Literal[False]
@@ -185,6 +189,8 @@ def collect_kinect_physical_acceptance(
     event_refs: list[str] = []
     evidence_refs: list[str] = []
     world_changed = 0
+    cognition_queued = 0
+    cognition_event_ids: list[str] = []
 
     try:
         for _ in range(frame_count):
@@ -259,9 +265,28 @@ def collect_kinect_physical_acceptance(
                         "ModelRig receipt was replayed instead of freshly admitted"
                     )
                 event_refs.append(result.receipt.visionrig_event_ref)
-                evidence_refs.append(result.receipt.evidence_ref)
+                evidence_ref = result.receipt.evidence_ref
+                if _WORLD_EVIDENCE_REF.fullmatch(evidence_ref) is None:
+                    raise KinectPhysicalAcceptanceError(
+                        "ModelRig Kinect receipt evidence reference is malformed"
+                    )
+                evidence_refs.append(evidence_ref)
                 if result.receipt.world_changed:
                     world_changed += 1
+                if result.receipt.cognition_event_queued is not True:
+                    raise KinectPhysicalAcceptanceError(
+                        "ModelRig Kinect receipt did not prove cognition event queueing"
+                    )
+                cognition_event_id = result.receipt.cognition_event_id
+                if (
+                    not isinstance(cognition_event_id, str)
+                    or _COGNITION_EVENT_ID.fullmatch(cognition_event_id) is None
+                ):
+                    raise KinectPhysicalAcceptanceError(
+                        "ModelRig Kinect receipt cognition event id is malformed"
+                    )
+                cognition_queued += 1
+                cognition_event_ids.append(cognition_event_id)
     finally:
         source.close()
         publisher.close()
@@ -285,9 +310,13 @@ def collect_kinect_physical_acceptance(
         raise KinectPhysicalAcceptanceError(
             "ModelRig accepted evidence but no receipt proved a WorldState change"
         )
+    if cognition_queued <= 0 or not cognition_event_ids:
+        raise KinectPhysicalAcceptanceError(
+            "ModelRig accepted evidence but no receipt proved cognition event queueing"
+        )
 
     return KinectPhysicalAcceptanceReceipt(
-        schema="visionrig/kinect-physical-acceptance/v2",
+        schema="visionrig/kinect-physical-acceptance/v3",
         generated_at=datetime.now(timezone.utc),
         visionrig_version=version,
         visionrig_git_sha=git_sha,
@@ -310,8 +339,10 @@ def collect_kinect_physical_acceptance(
         semantic_observations=semantic_observations,
         modelrig_receipts=len(event_refs),
         modelrig_world_changed_receipts=world_changed,
+        modelrig_cognition_queued_receipts=cognition_queued,
         modelrig_event_refs=tuple(event_refs),
         modelrig_evidence_refs=tuple(evidence_refs),
+        modelrig_cognition_event_ids=tuple(cognition_event_ids),
         real_sensor_required=True,
         exact_checkout_required=True,
         raw_frames_persisted=False,
