@@ -17,6 +17,7 @@ import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 data class CameraXCaptureConfig(
@@ -97,6 +98,7 @@ class CameraXEncodedCapture(
         )
         val latch = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>()
+        val abandoned = AtomicBoolean(false)
 
         capture.takePicture(
             ImageCapture.OutputFileOptions.Builder(output).build(),
@@ -105,11 +107,17 @@ class CameraXEncodedCapture(
                 override fun onImageSaved(
                     outputFileResults: ImageCapture.OutputFileResults,
                 ) {
+                    if (abandoned.get()) {
+                        output.delete()
+                    }
                     latch.countDown()
                 }
 
                 override fun onError(exception: ImageCaptureException) {
                     failure.set(exception)
+                    if (abandoned.get()) {
+                        output.delete()
+                    }
                     latch.countDown()
                 }
             },
@@ -119,11 +127,13 @@ class CameraXEncodedCapture(
             latch.await(config.timeoutSeconds, TimeUnit.SECONDS)
         } catch (exc: InterruptedException) {
             Thread.currentThread().interrupt()
+            abandoned.set(true)
             output.delete()
             throw ProducerProtocolException("CameraX capture interrupted", exc)
         }
 
         if (!completed) {
+            abandoned.set(true)
             output.delete()
             throw ProducerProtocolException("CameraX capture timed out")
         }
