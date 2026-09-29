@@ -7,6 +7,7 @@ import pytest
 
 from visionrig.physical_qualification import (
     PhysicalPerceptionQualificationError,
+    _attach_release_evidence_ref,
     _physical_sources,
     _validate_bridge_binding,
     qualify_physical_perception,
@@ -145,6 +146,58 @@ def _health(*, event: dict | None = None, activation: bool = False) -> dict:
             "last_result": result,
         },
     }
+
+
+def test_release_evidence_ref_requires_exact_service_revision() -> None:
+    base = {
+        "schema": "visionrig/physical-perception-qualification/v2",
+        "visionrig": {"service_revision": None},
+        "gate": {
+            "passed": True,
+            "physical_perception_qualified": True,
+            "production_activation": False,
+        },
+    }
+    without_revision = _attach_release_evidence_ref(dict(base))
+    assert "release_evidence_ref" not in without_revision
+
+    revision = "c" * 40
+    with_revision = dict(base)
+    with_revision["visionrig"] = {"service_revision": revision}
+    qualified = _attach_release_evidence_ref(with_revision)
+    ref = qualified["release_evidence_ref"]
+    assert ref.startswith("visionrig-physical-perception:" + revision + ":")
+    assert len(ref.rsplit(":", 1)[1]) == 64
+
+
+def test_release_evidence_ref_is_content_addressed_and_authority_safe() -> None:
+    revision = "d" * 40
+    report = {
+        "schema": "visionrig/physical-perception-qualification/v2",
+        "visionrig": {"service_revision": revision},
+        "event": {"frame_sequence": 11},
+        "gate": {
+            "passed": True,
+            "physical_perception_qualified": True,
+            "production_activation": False,
+        },
+    }
+    first = _attach_release_evidence_ref(json.loads(json.dumps(report)))
+    second = _attach_release_evidence_ref(json.loads(json.dumps(report)))
+    assert first["release_evidence_ref"] == second["release_evidence_ref"]
+
+    mutated = json.loads(json.dumps(report))
+    mutated["event"]["frame_sequence"] = 12
+    changed = _attach_release_evidence_ref(mutated)
+    assert changed["release_evidence_ref"] != first["release_evidence_ref"]
+
+    overclaim = json.loads(json.dumps(report))
+    overclaim["gate"]["production_activation"] = True
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="cannot activate production",
+    ):
+        _attach_release_evidence_ref(overclaim)
 
 
 def test_physical_qualification_binds_fresh_camera_event_to_modelrig_receipt() -> None:
