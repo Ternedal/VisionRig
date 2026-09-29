@@ -46,12 +46,16 @@ class ProducerRunner(
                     break
                 }
 
-                val sleepMillis = if (step.desiredEnabled) {
-                    config.enabledFrameDelayMillis
-                } else {
-                    config.disabledPollMillis
+                val reachedFrameLimit =
+                    config.maxFrames > 0 && capturedFrames >= config.maxFrames
+                if (!reachedFrameLimit) {
+                    val sleepMillis = if (step.desiredEnabled) {
+                        config.enabledFrameDelayMillis
+                    } else {
+                        config.disabledPollMillis
+                    }
+                    delayMillis(sleepMillis)
                 }
-                delayMillis(sleepMillis)
             }
             return capturedFrames
         } catch (exc: Throwable) {
