@@ -87,9 +87,8 @@ class VisionRigGatewayClient(
                     refreshedMonotonicMillis = monotonicMillis(),
                     refreshedUtc = utcNow(),
                 )
-                return capabilities
+                capabilities
             }
-    
         }
 
     fun fetchDesiredState(): DesiredState {
