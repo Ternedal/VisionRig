@@ -350,3 +350,8 @@ silent.
 ## Native Kaliv producer core
 
 The first native client slice now lives in `clients/kaliv-producer-core`. It is a Kotlin/JVM library shared by future Kaliv Android and Quest capture adapters. It implements the same fail-closed desired-state polling, authenticated heartbeat/frame transport and crash-safe sequence/drop recovery semantics as the Python reference producer. The platform-specific camera/passthrough adapters remain separate follow-up slices.
+
+
+## Kaliv Quest passthrough Camera2 adapter
+
+A Quest-native adapter is implemented under `clients/kaliv-quest-producer`. It targets Meta Quest 3 / Quest 3S on Horizon OS v74+ and uses the official Camera2 passthrough API with Meta vendor tags for passthrough source and left/right camera position. The adapter requires both Android camera permission and `horizonos.permission.HEADSET_CAMERA`, emits JPEG frames into the shared producer core, and closes capture when VisionRig desired state disables the source or a permission/camera/control/transport failure occurs. Quest 2 is intentionally not advertised as supported by this camera path because Meta does not expose passthrough RGB frames there.
