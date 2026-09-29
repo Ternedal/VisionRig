@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "dk.kaliv.visionrig.quest"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 34
