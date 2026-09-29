@@ -187,3 +187,8 @@ VisionRig now validates the semantic shape of ModelRig admission receipts at the
 ### V7 cognition-event evidence binding
 
 For fresh VisionRig world evidence, ModelRig derives the cognition event id deterministically from the canonical world-evidence reference and the fixed `world_change` cognition kind. VisionRig validates that exact derivation at the bridge boundary, so a syntactically valid but unrelated cognition id cannot be accepted as downstream proof.
+
+
+### Native Kaliv camera adapters
+
+The shared Kotlin producer core is extended by a phone CameraX adapter and a Meta Quest 3/3S passthrough Camera2 adapter. Both remain transport/capture clients only; VisionRig continues to own typed perception, while identity, durable memory, cognition and action authority remain outside these adapters.
