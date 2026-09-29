@@ -1,6 +1,9 @@
 package dk.kaliv.visionrig.producer
 
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,6 +53,8 @@ class GatewayClientTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 return when {
+                    request.path == "/api/v1/producer-capabilities" ->
+                        capabilitiesResponse()
                     request.path == "/api/v1/sensors/kaliv-quest/desired-state" ->
                         MockResponse().setResponseCode(200).setBody(
                             """
@@ -193,6 +198,7 @@ class GatewayClientTest {
                 """.trimIndent()
             )
         )
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -257,6 +263,7 @@ class GatewayClientTest {
                 """.trimIndent()
             )
         )
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -270,7 +277,6 @@ class GatewayClientTest {
                 """.trimIndent()
             )
         )
-        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -300,12 +306,12 @@ class GatewayClientTest {
             assertEquals(SendStatus.ACCEPTED, step.frameResult?.status)
 
             val desired = server.takeRequest()
-            val heartbeat = server.takeRequest()
             val capabilities = server.takeRequest()
+            val heartbeat = server.takeRequest()
             val frame = server.takeRequest()
             assertTrue(desired.path!!.contains("/desired-state"))
-            assertEquals("/api/v1/sensors/heartbeat", heartbeat.path)
             assertEquals("/api/v1/producer-capabilities", capabilities.path)
+            assertEquals("/api/v1/sensors/heartbeat", heartbeat.path)
             assertTrue(frame.path!!.startsWith("/api/v1/frames/ingest"))
         } finally {
             server.shutdown()
@@ -573,7 +579,7 @@ class GatewayClientTest {
         server.start()
         val utcEntered = CountDownLatch(1)
         val releaseUtc = CountDownLatch(1)
-        val executor = Executors.newSingleThreadExecutor()
+        val executor = Executors.newFixedThreadPool(2)
         try {
             val dir = createTempDirectory("visionrig-native-cap-race").toFile()
             val gateway = VisionRigGatewayClient(
@@ -597,9 +603,21 @@ class GatewayClientTest {
             }
             assertTrue(utcEntered.await(5, TimeUnit.SECONDS))
 
-            gateway.sendHeartbeat(
-                captureActive = true,
-                appliedRevision = 7,
+            val heartbeatFuture = executor.submit<HeartbeatReceipt> {
+                gateway.sendHeartbeat(
+                    captureActive = true,
+                    appliedRevision = 7,
+                )
+            }
+
+            // Heartbeat must wait for one complete published snapshot.
+            assertEquals(1, server.requestCount)
+            releaseUtc.countDown()
+
+            assertEquals(2048, fetchFuture.get(5, TimeUnit.SECONDS).maxPayloadBytes)
+            assertEquals(
+                "kaliv-quest",
+                heartbeatFuture.get(5, TimeUnit.SECONDS).sourceId,
             )
 
             val capabilities = server.takeRequest()
@@ -608,22 +626,19 @@ class GatewayClientTest {
             val heartbeatBody = heartbeat.body.readUtf8()
             assertTrue(
                 heartbeatBody.contains(
-                    "\"negotiated_max_payload_bytes\":null"
+                    "\"negotiated_max_payload_bytes\":2048"
                 )
             )
             assertTrue(
                 heartbeatBody.contains(
-                    "\"capability_refreshed_utc\":null"
+                    "\"capability_refreshed_utc\":\"2026-09-29T08:00:00Z\""
                 )
             )
             assertTrue(
                 heartbeatBody.contains(
-                    "\"capability_refresh_seconds\":null"
+                    "\"capability_refresh_seconds\":30.0"
                 )
             )
-
-            releaseUtc.countDown()
-            assertEquals(2048, fetchFuture.get(5, TimeUnit.SECONDS).maxPayloadBytes)
         } finally {
             releaseUtc.countDown()
             executor.shutdownNow()
