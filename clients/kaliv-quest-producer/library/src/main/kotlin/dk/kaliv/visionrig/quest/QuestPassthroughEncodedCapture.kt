@@ -56,8 +56,8 @@ data class QuestCameraConfig(
     val position: QuestCameraPosition = QuestCameraPosition.RIGHT,
 ) {
     init {
-        require(width > 0)
-        require(height > 0)
+        require(width > 0 && width % 2 == 0)
+        require(height > 0 && height % 2 == 0)
         require(jpegQuality in 1..100)
         require(timeoutSeconds in 1..60)
     }
@@ -165,7 +165,12 @@ class QuestPassthroughEncodedCapture(
             handler,
         )
 
-        await(opened, "Quest passthrough camera open")
+        try {
+            await(opened, "Quest passthrough camera open")
+        } catch (exc: RuntimeException) {
+            close()
+            throw exc
+        }
         openFailure.get()?.let {
             close()
             throw ProducerProtocolException(
@@ -221,7 +226,12 @@ class QuestPassthroughEncodedCapture(
             )
         }
 
-        await(configured, "Quest passthrough capture session")
+        try {
+            await(configured, "Quest passthrough capture session")
+        } catch (exc: RuntimeException) {
+            close()
+            throw exc
+        }
         sessionFailure.get()?.let {
             close()
             throw ProducerProtocolException(
@@ -397,8 +407,6 @@ internal fun yuv420ToNv21(image: Image): ByteArray {
         height = height,
         destination = output,
         destinationOffset = 0,
-        interleaved = false,
-        swapOrder = false,
     )
 
     val chromaOffset = width * height
@@ -419,24 +427,17 @@ private fun copyPlane(
     height: Int,
     destination: ByteArray,
     destinationOffset: Int,
-    interleaved: Boolean,
-    swapOrder: Boolean,
 ) {
     val buffer = plane.buffer.duplicate()
+    val base = buffer.position()
     val rowStride = plane.rowStride
     val pixelStride = plane.pixelStride
     var out = destinationOffset
 
     for (row in 0 until height) {
         for (col in 0 until width) {
-            val index = row * rowStride + col * pixelStride
-            val value = buffer.get(index)
-            if (interleaved) {
-                destination[out + if (swapOrder) 1 else 0] = value
-                out += 2
-            } else {
-                destination[out++] = value
-            }
+            val index = base + row * rowStride + col * pixelStride
+            destination[out++] = buffer.get(index)
         }
     }
 }
@@ -451,12 +452,14 @@ private fun copyChromaNv21(
 ) {
     val u = uPlane.buffer.duplicate()
     val v = vPlane.buffer.duplicate()
+    val uBase = u.position()
+    val vBase = v.position()
     var out = destinationOffset
 
     for (row in 0 until height) {
         for (col in 0 until width) {
-            val uIndex = row * uPlane.rowStride + col * uPlane.pixelStride
-            val vIndex = row * vPlane.rowStride + col * vPlane.pixelStride
+            val uIndex = uBase + row * uPlane.rowStride + col * uPlane.pixelStride
+            val vIndex = vBase + row * vPlane.rowStride + col * vPlane.pixelStride
             destination[out++] = v.get(vIndex)
             destination[out++] = u.get(uIndex)
         }
