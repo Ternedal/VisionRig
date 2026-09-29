@@ -158,3 +158,8 @@ VisionRig 0.89.0 tightens generic physical qualification so a fresh camera/VR fr
 ### V7 service-instance binding
 
 VisionRig 0.95.0 exposes a process-unique `service_instance_id` in health v66. Generic physical qualification binds its full evidence run to that instance and fails closed if VisionRig restarts before the exact physical event is admitted and finalized. The receipt records the instance id alongside the health/perception contract identifiers.
+
+
+### V7 build identity
+
+VisionRig 0.96.0 health v67 adds runtime build identity: semantic package version plus an optional validated git revision sourced from `VISIONRIG_GIT_SHA`. Physical qualification can require an operator-supplied expected SHA and binds its receipt to the running build rather than only to the process instance.
