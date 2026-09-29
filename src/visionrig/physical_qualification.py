@@ -257,6 +257,11 @@ def _validate_bridge_binding(
     source_id: str,
     frame_sequence: int,
 ) -> dict[str, Any] | None:
+    service_instance_id = health.get("service_instance_id")
+    if not isinstance(service_instance_id, str) or not service_instance_id.strip():
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health lacks service instance identity"
+        )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
         raise PhysicalPerceptionQualificationError(
@@ -417,6 +422,7 @@ def _success_report(
         "visionrig": {
             "origin": base,
             "health_schema": initial_health.get("schema"),
+            "service_instance_id": initial_health.get("service_instance_id"),
             "perception_schema": initial_health.get("perception_schema"),
         },
         "physical_source": {
@@ -480,6 +486,11 @@ def qualify_physical_perception(
     if health.get("perception_schema") != "visionrig/perception-event/v4":
         raise PhysicalPerceptionQualificationError(
             "VisionRig perception schema is not v4"
+        )
+    service_instance_id = health.get("service_instance_id")
+    if not isinstance(service_instance_id, str) or not service_instance_id.strip():
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health lacks service instance identity"
         )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
@@ -557,6 +568,10 @@ def qualify_physical_perception(
             candidate_cursor = entry_cursor
 
             current_health = http_json(base + "/health", timeout=request_timeout)
+            if current_health.get("service_instance_id") != service_instance_id:
+                raise PhysicalPerceptionQualificationError(
+                    "VisionRig service instance changed during qualification"
+                )
             bridge_binding = _validate_bridge_binding(
                 current_health,
                 event=event,
@@ -590,6 +605,10 @@ def qualify_physical_perception(
 
         if candidate_event is not None:
             current_health = http_json(base + "/health", timeout=request_timeout)
+            if current_health.get("service_instance_id") != service_instance_id:
+                raise PhysicalPerceptionQualificationError(
+                    "VisionRig service instance changed during qualification"
+                )
             frame_sequence = candidate_event.get("frame_sequence")
             if isinstance(frame_sequence, int):
                 bridge_binding = _validate_bridge_binding(

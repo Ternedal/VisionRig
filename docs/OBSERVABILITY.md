@@ -1171,7 +1171,7 @@ and refresh timestamps do not independently emit runtime changes.
 VisionRig 0.86.0 advances fleet summary to
 `visionrig/sensor-fleet-summary/v31`, bootstrap to
 `visionrig/sensor-bootstrap-snapshot/v36`, and health to
-`visionrig/health/v65`.
+`visionrig/health/v66`.
 
 Both `producer_readiness` and `online_producer_readiness` include
 `heartbeat_upgrade_stage_counts`:
