@@ -166,14 +166,20 @@ class VisionRigGatewayClient(
         require(payload.isNotEmpty()) { "frame payload must not be empty" }
         require(contentType in setOf("image/jpeg", "image/png", "image/webp"))
 
-        val maxPayload = ensureCapabilities().maxPayloadBytes
+        val reservation = stateStore.reserve()
+        val maxPayload = try {
+            ensureCapabilities().maxPayloadBytes
+        } catch (exc: RuntimeException) {
+            stateStore.markDropped(reservation.sequence)
+            throw exc
+        }
         if (payload.size.toLong() > maxPayload) {
+            stateStore.markDropped(reservation.sequence)
             throw ProducerProtocolException(
                 "frame payload exceeds negotiated VisionRig limit"
             )
         }
 
-        val reservation = stateStore.reserve()
         val urlBuilder = baseUrl.newBuilder()
             .addPathSegments("api/v1/frames/ingest")
             .addQueryParameter("source_id", sourceId)
