@@ -99,7 +99,12 @@ class QuestPassthroughEncodedCapture(
             "Quest passthrough camera lacks stream configuration"
         )
         val sizes = map.getOutputSizes(ImageFormat.YUV_420_888)
-            ?.filter { it.width > 0 && it.height > 0 }
+            ?.filter {
+                it.width > 0 &&
+                it.height > 0 &&
+                it.width % 2 == 0 &&
+                it.height % 2 == 0
+            }
             ?.sortedByDescending { it.width.toLong() * it.height.toLong() }
             ?: emptyList()
         if (sizes.isEmpty()) {
