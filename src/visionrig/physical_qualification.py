@@ -38,6 +38,7 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 POLL_SECONDS = 0.25
 PHYSICAL_SOURCE_TYPES = {"camera", "vr"}
 _SHA_REF = re.compile(r"^visionrig-event:[a-f0-9]{64}$")
+_GIT_SHA = re.compile(r"^[a-f0-9]{40}$")
 
 
 class PhysicalPerceptionQualificationError(RuntimeError):
@@ -268,13 +269,13 @@ def _validate_bridge_binding(
             "VisionRig health lacks service version"
         )
     service_revision = health.get("service_revision")
-    if service_revision is not None and _SHA_REF.fullmatch("visionrig-event:" + str(service_revision)) is None:
+    if service_revision is not None and _GIT_SHA.fullmatch(str(service_revision)) is None:
         raise PhysicalPerceptionQualificationError(
             "VisionRig health service revision is malformed"
         )
     if expected_sha is not None:
         normalized_expected_sha = expected_sha.strip().lower()
-        if re.fullmatch(r"[0-9a-f]{40}", normalized_expected_sha) is None:
+        if _GIT_SHA.fullmatch(normalized_expected_sha) is None:
             raise PhysicalPerceptionQualificationError(
                 "expected VisionRig SHA must be lowercase 40-hex"
             )
