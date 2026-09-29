@@ -104,6 +104,7 @@ class GatewayClientTest {
     @Test
     fun acceptedFrameCarriesDurableSequenceAndDropCount() {
         val server = MockWebServer()
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
@@ -128,6 +129,8 @@ class GatewayClientTest {
             assertEquals(0, result.frameSequence)
             assertEquals("evt-native-0", result.eventId)
 
+            val capabilities = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
             val request = server.takeRequest()
             assertEquals("0", request.requestUrl?.queryParameter("frame_sequence"))
             assertEquals("0", request.requestUrl?.queryParameter("dropped_frames"))
@@ -141,6 +144,7 @@ class GatewayClientTest {
     @Test
     fun overloadBecomesExplicitDropOnNextAcceptedFrame() {
         val server = MockWebServer()
+        server.enqueue(capabilitiesResponse())
         server.enqueue(MockResponse().setResponseCode(429))
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
@@ -169,7 +173,10 @@ class GatewayClientTest {
             assertEquals(SendStatus.ACCEPTED, accepted.status)
             assertEquals(1, accepted.frameSequence)
 
-            server.takeRequest()
+            val capabilities = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
+            val firstFrame = server.takeRequest()
+            assertTrue(firstFrame.path!!.startsWith("/api/v1/frames/ingest"))
             val second = server.takeRequest()
             assertEquals("1", second.requestUrl?.queryParameter("dropped_frames"))
         } finally {
@@ -434,6 +441,7 @@ class GatewayClientTest {
     @Test
     fun responseBodyIoFailureBecomesUnavailableDropAndClearsInflight() {
         val server = MockWebServer()
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)
@@ -517,6 +525,7 @@ class GatewayClientTest {
     @Test
     fun heartbeatResponseBodyIoFailureIsNormalized() {
         val server = MockWebServer()
+        server.enqueue(capabilitiesResponse())
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)
