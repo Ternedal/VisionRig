@@ -35,10 +35,11 @@ data class CameraXCaptureConfig(
 }
 
 class CameraXEncodedCapture(
-    private val context: Context,
+    context: Context,
     private val lifecycleOwner: LifecycleOwner,
     private val config: CameraXCaptureConfig = CameraXCaptureConfig(),
 ) : EncodedCapture {
+    private val appContext = context.applicationContext
     private val callbackExecutor = Executors.newSingleThreadExecutor()
     @Volatile private var provider: ProcessCameraProvider? = null
     @Volatile private var imageCapture: ImageCapture? = null
@@ -49,14 +50,14 @@ class CameraXEncodedCapture(
     override fun open() {
         if (isOpen) return
         if (
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) !=
+            ContextCompat.checkSelfPermission(appContext, Manifest.permission.CAMERA) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             throw ProducerProtocolException("camera permission is not granted")
         }
 
         val cameraProvider = try {
-            ProcessCameraProvider.getInstance(context).get(
+            ProcessCameraProvider.getInstance(appContext).get(
                 config.timeoutSeconds,
                 TimeUnit.SECONDS,
             )
@@ -92,7 +93,7 @@ class CameraXEncodedCapture(
         val output = File.createTempFile(
             "visionrig-frame-",
             ".jpg",
-            context.cacheDir,
+            appContext.cacheDir,
         )
         val latch = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>()
@@ -176,7 +177,7 @@ class CameraXEncodedCapture(
 
         val latch = CountDownLatch(1)
         val failure = AtomicReference<Throwable?>()
-        ContextCompat.getMainExecutor(context).execute {
+        ContextCompat.getMainExecutor(appContext).execute {
             try {
                 block()
             } catch (exc: Throwable) {
