@@ -348,19 +348,20 @@ class QuestPassthroughEncodedCapture(
 
 
     private fun invalidateCamera(device: CameraDevice) {
-        try {
-            session?.close()
-        } catch (_: Exception) {
-        }
-        session = null
-        if (camera === device) {
+        val ownsCurrentCamera = camera === device
+        if (ownsCurrentCamera) {
+            try {
+                session?.close()
+            } catch (_: Exception) {
+            }
+            session = null
             camera = null
+            frameQueue.clear()
         }
         try {
             device.close()
         } catch (_: Exception) {
         }
-        frameQueue.clear()
     }
 
 
