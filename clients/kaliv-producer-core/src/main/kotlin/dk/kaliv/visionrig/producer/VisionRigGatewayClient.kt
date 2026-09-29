@@ -53,8 +53,16 @@ class VisionRigGatewayClient(
         val response = execute(Request.Builder().url(url).get().authorized().build())
         response.use {
             requireSuccess(it.code, "desired-state")
-            val body = it.body?.string()
-                ?: throw ProducerProtocolException("desired-state response has no body")
+            val body = try {
+                it.body?.string()
+            } catch (exc: IOException) {
+                throw ProducerProtocolException(
+                    "VisionRig desired-state response I/O failed",
+                    exc,
+                )
+            } ?: throw ProducerProtocolException(
+                "desired-state response has no body"
+            )
             val state = decode<DesiredState>(body, "desired-state")
             try {
                 state.validate(sourceId)
@@ -93,8 +101,16 @@ class VisionRigGatewayClient(
         val response = execute(request)
         response.use {
             requireSuccess(it.code, "heartbeat")
-            val body = it.body?.string()
-                ?: throw ProducerProtocolException("heartbeat response has no body")
+            val body = try {
+                it.body?.string()
+            } catch (exc: IOException) {
+                throw ProducerProtocolException(
+                    "VisionRig heartbeat response I/O failed",
+                    exc,
+                )
+            } ?: throw ProducerProtocolException(
+                "heartbeat response has no body"
+            )
             val receipt = decode<HeartbeatReceipt>(body, "heartbeat")
             try {
                 receipt.validate(sourceId)
