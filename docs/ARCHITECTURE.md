@@ -168,3 +168,8 @@ VisionRig 0.96.0 health v67 adds runtime build identity: semantic package versio
 ### V7 ModelRig cognition proof
 
 VisionRig 0.97.0 binds physical qualification beyond WorldState change to the downstream ModelRig attention-admission proof. Fresh qualifying admissions must carry the canonical world-evidence reference and prove that the fresh path queued a typed cognition event with a canonical event id. Replay remains disallowed.
+
+
+### V7 bridge receipt reference validation
+
+The VisionRig → ModelRig bridge validates canonical receipt references at the parsing boundary, before release qualification consumes them. `visionrig_event_ref` must match `visionrig-event:<64hex>`, `evidence_ref` must match `world-evidence-event:<64hex>`, and cognition queue state must be consistent with a canonical `cevt-<32hex>` cognition event id. Invalid downstream receipts are rejected and never committed to semantic-change state.
