@@ -286,6 +286,57 @@ class GatewayClientTest {
         }
     }
 
+
+
+    @Test
+    fun cleanupFailureDoesNotMaskDesiredStateTransportFailure() {
+        val server = MockWebServer()
+        server.start()
+        val gateway = client(server)
+        server.shutdown()
+
+        val capture = object : EncodedCapture {
+            override val isOpen: Boolean = true
+
+            override fun open() {}
+
+            override fun close() {
+                throw IllegalStateException("close boom")
+            }
+
+            override fun capture(): EncodedFrame =
+                error("capture must not be reached")
+        }
+        val loop = ProducerControlLoop(gateway, capture)
+
+        val failure = kotlin.test.assertFailsWith<ProducerProtocolException> {
+            loop.step()
+        }
+
+        assertTrue(failure.message!!.contains("gateway unavailable"))
+    }
+
+    @Test
+    fun explicitLoopCloseIsBestEffort() {
+        val server = MockWebServer()
+        server.start()
+        try {
+            val capture = object : EncodedCapture {
+                override val isOpen: Boolean = true
+                override fun open() {}
+                override fun close() {
+                    throw IllegalStateException("close boom")
+                }
+                override fun capture(): EncodedFrame =
+                    error("capture must not be reached")
+            }
+            val loop = ProducerControlLoop(client(server), capture)
+            loop.close()
+        } finally {
+            server.shutdown()
+        }
+    }
+
     private class FakeCapture : EncodedCapture {
         override var isOpen: Boolean = false
             private set
