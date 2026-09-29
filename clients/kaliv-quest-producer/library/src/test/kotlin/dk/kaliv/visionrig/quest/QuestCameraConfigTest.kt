@@ -23,6 +23,12 @@ class QuestCameraConfigTest {
             QuestCameraConfig(height = 0)
         }
         assertFailsWith<IllegalArgumentException> {
+            QuestCameraConfig(width = 1279)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            QuestCameraConfig(height = 959)
+        }
+        assertFailsWith<IllegalArgumentException> {
             QuestCameraConfig(jpegQuality = 101)
         }
         assertFailsWith<IllegalArgumentException> {
