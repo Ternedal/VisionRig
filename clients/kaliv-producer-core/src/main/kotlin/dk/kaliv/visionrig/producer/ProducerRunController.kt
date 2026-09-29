@@ -3,6 +3,7 @@ package dk.kaliv.visionrig.producer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -25,7 +26,7 @@ class ProducerRunController(
             return false
         }
 
-        val job = scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 val captured = runnerFactory().run(shouldContinue)
                 onCompleted(captured)
@@ -38,6 +39,7 @@ class ProducerRunController(
             }
         }
         jobRef.set(job)
+        job.start()
         return true
     }
 
