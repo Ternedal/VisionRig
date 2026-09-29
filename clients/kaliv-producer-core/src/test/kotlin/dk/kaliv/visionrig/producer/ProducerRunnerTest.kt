@@ -178,6 +178,31 @@ class ProducerRunnerTest {
         assertEquals("close boom", failure.message)
     }
 
+
+
+    @Test
+    fun cleanupFailureDoesNotMaskRunnerFailure() = runTest {
+        val loop = object : ProducerLoop {
+            override fun step(): ControlStepResult {
+                throw ProducerProtocolException("primary failure")
+            }
+
+            override fun close() {
+                throw IllegalStateException("cleanup failure")
+            }
+        }
+        val runner = ProducerRunner(
+            loop = loop,
+            delayMillis = {},
+        )
+
+        val failure = kotlin.test.assertFailsWith<ProducerProtocolException> {
+            runner.run()
+        }
+
+        assertEquals("primary failure", failure.message)
+    }
+
     private class FakeLoop(
         private val steps: MutableList<ControlStepResult>,
     ) : ProducerLoop {
