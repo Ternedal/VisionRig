@@ -164,7 +164,7 @@ class QuestPassthroughEncodedCapture(
                             "Quest passthrough camera disconnected"
                         ),
                     )
-                    device.close()
+                    invalidateCamera(device)
                     opened.countDown()
                 }
 
@@ -175,7 +175,7 @@ class QuestPassthroughEncodedCapture(
                             "Quest passthrough camera error " + error
                         ),
                     )
-                    device.close()
+                    invalidateCamera(device)
                     opened.countDown()
                 }
             },
@@ -336,6 +336,23 @@ class QuestPassthroughEncodedCapture(
         cameraHandler = null
         cameraThread?.quitSafely()
         cameraThread = null
+    }
+
+
+    private fun invalidateCamera(device: CameraDevice) {
+        try {
+            session?.close()
+        } catch (_: Exception) {
+        }
+        session = null
+        if (camera === device) {
+            camera = null
+        }
+        try {
+            device.close()
+        } catch (_: Exception) {
+        }
+        frameQueue.clear()
     }
 
     private fun requirePermissions() {
