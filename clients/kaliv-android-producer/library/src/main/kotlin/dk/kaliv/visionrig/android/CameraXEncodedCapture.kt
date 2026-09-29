@@ -40,8 +40,8 @@ class CameraXEncodedCapture(
     private val config: CameraXCaptureConfig = CameraXCaptureConfig(),
 ) : EncodedCapture {
     private val callbackExecutor = Executors.newSingleThreadExecutor()
-    private var provider: ProcessCameraProvider? = null
-    private var imageCapture: ImageCapture? = null
+    @Volatile private var provider: ProcessCameraProvider? = null
+    @Volatile private var imageCapture: ImageCapture? = null
 
     override val isOpen: Boolean
         get() = provider != null && imageCapture != null
