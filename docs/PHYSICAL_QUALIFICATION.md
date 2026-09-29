@@ -136,3 +136,8 @@ VisionRig 0.94.0 binds generic physical qualification to the same physical sourc
 ## Build identity binding
 
 VisionRig 0.96.0 exposes `service_version` and optional validated `service_revision` in health v67. Set `VISIONRIG_GIT_SHA` to the exact 40-hex checkout revision when starting the service. `visionrig-qualify-physical --expected-sha <sha>` then fails closed unless the running service reports that exact revision, and the PASS receipt records both version and revision for later audit.
+
+
+## Cognition admission proof
+
+VisionRig 0.97.0 strengthens generic physical qualification after fresh ModelRig WorldState admission. A PASS now also requires the ModelRig receipt to expose a canonical `world-evidence-event:<64hex>` evidence reference, `cognition_event_queued=true`, and a canonical `cevt-<32hex>` cognition event id. This matches ModelRig's atomic fresh-admission contract: a non-replay world change queues exactly one typed cognition event, while replay does not.
