@@ -2,6 +2,7 @@ package dk.kaliv.visionrig.producer
 
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -103,8 +104,17 @@ class FileProducerStateStore(
 
     private fun load(): ProducerState {
         if (!file.exists()) return ProducerState()
-        val text = file.readText(Charsets.UTF_8)
-        if (text.isBlank()) throw ProducerProtocolException("producer state file is empty")
+        val text = try {
+            file.readText(Charsets.UTF_8)
+        } catch (exc: IOException) {
+            throw ProducerProtocolException(
+                "unable to read producer state file",
+                exc,
+            )
+        }
+        if (text.isBlank()) {
+            throw ProducerProtocolException("producer state file is empty")
+        }
         val state = try {
             json.decodeFromString<ProducerState>(text)
         } catch (exc: Exception) {
@@ -123,23 +133,33 @@ class FileProducerStateStore(
         }
         val temp = File(parent, "." + file.name + "." + System.nanoTime() + ".tmp")
         try {
-            FileOutputStream(temp).use { out ->
-                out.write((json.encodeToString(state) + "\n").toByteArray(Charsets.UTF_8))
-                out.flush()
-                out.fd.sync()
-            }
             try {
-                Files.move(
-                    temp.toPath(),
-                    file.toPath(),
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING,
-                )
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(
-                    temp.toPath(),
-                    file.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING,
+                FileOutputStream(temp).use { out ->
+                    out.write(
+                        (json.encodeToString(state) + "\n")
+                            .toByteArray(Charsets.UTF_8)
+                    )
+                    out.flush()
+                    out.fd.sync()
+                }
+                try {
+                    Files.move(
+                        temp.toPath(),
+                        file.toPath(),
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING,
+                    )
+                } catch (_: AtomicMoveNotSupportedException) {
+                    Files.move(
+                        temp.toPath(),
+                        file.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING,
+                    )
+                }
+            } catch (exc: IOException) {
+                throw ProducerProtocolException(
+                    "unable to persist producer state file",
+                    exc,
                 )
             }
         } finally {
