@@ -38,6 +38,7 @@ DEFAULT_TIMEOUT_SECONDS = 60.0
 POLL_SECONDS = 0.25
 PHYSICAL_SOURCE_TYPES = {"camera", "vr"}
 _SHA_REF = re.compile(r"^visionrig-event:[a-f0-9]{64}$")
+_GIT_SHA = re.compile(r"^[a-f0-9]{40}$")
 
 
 class PhysicalPerceptionQualificationError(RuntimeError):
@@ -423,6 +424,8 @@ def _success_report(
             "origin": base,
             "health_schema": initial_health.get("schema"),
             "service_instance_id": initial_health.get("service_instance_id"),
+            "service_version": initial_health.get("service_version"),
+            "service_revision": initial_health.get("service_revision"),
             "perception_schema": initial_health.get("perception_schema"),
         },
         "physical_source": {
@@ -468,6 +471,7 @@ def qualify_physical_perception(
     visionrig_url: str,
     *,
     source_id: str | None = None,
+    expected_sha: str | None = None,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     request_timeout: float = 5.0,
     http_json: Callable[..., Mapping[str, Any]] = _http_json,
@@ -492,6 +496,26 @@ def qualify_physical_perception(
         raise PhysicalPerceptionQualificationError(
             "VisionRig health lacks service instance identity"
         )
+    service_version = health.get("service_version")
+    if not isinstance(service_version, str) or not service_version.strip():
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health lacks service version"
+        )
+    service_revision = health.get("service_revision")
+    if service_revision is not None and _GIT_SHA.fullmatch(str(service_revision)) is None:
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health service revision is malformed"
+        )
+    if expected_sha is not None:
+        normalized_expected_sha = expected_sha.strip().lower()
+        if _GIT_SHA.fullmatch(normalized_expected_sha) is None:
+            raise PhysicalPerceptionQualificationError(
+                "expected VisionRig SHA must be lowercase 40-hex"
+            )
+        if service_revision != normalized_expected_sha:
+            raise PhysicalPerceptionQualificationError(
+                "VisionRig service revision does not match expected SHA"
+            )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
         raise PhysicalPerceptionQualificationError(
@@ -659,6 +683,7 @@ def main() -> int:
         ),
     )
     parser.add_argument("--source-id")
+    parser.add_argument("--expected-sha")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT)
     args = parser.parse_args()
@@ -667,6 +692,7 @@ def main() -> int:
         report = qualify_physical_perception(
             args.visionrig_url,
             source_id=args.source_id,
+            expected_sha=args.expected_sha,
             timeout_seconds=args.timeout,
         )
     except PhysicalPerceptionQualificationError as exc:
