@@ -8,9 +8,7 @@
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" />
     <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
 
-    <application>
-        <meta-data
-            android:name="com.oculus.supportedDevices"
-            android:value="quest3|quest3s" />
-    </application>
+    <meta-data
+        android:name="com.oculus.supportedDevices"
+        android:value="quest3|quest3s" />
 </manifest>
