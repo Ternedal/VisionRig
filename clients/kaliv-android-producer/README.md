@@ -41,3 +41,8 @@ The library declares Android `INTERNET` permission but deliberately does not for
 explicitly allow that cleartext transport through its own Android network-security
 policy. Prefer HTTPS if/when TLS termination is added to the gateway. Do not widen
 cleartext access globally by accident.
+
+
+## Threading
+
+`KalivAndroidProducerSession.step()` is a blocking producer step and must run on a worker thread/coroutine dispatcher, never the Android main/UI thread. The CameraX adapter fails closed if `open()` or `capture()` is invoked on the main thread. Lifecycle binding itself is marshalled back to the main executor internally.
