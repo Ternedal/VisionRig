@@ -273,7 +273,7 @@ def test_physical_acceptance_rejects_missing_cognition_queue_proof():
 
     with pytest.raises(
         acceptance.KinectPhysicalAcceptanceError,
-        match="did not prove cognition event queueing",
+        match="invalid ModelRig bridge receipt",
     ):
         acceptance.collect_kinect_physical_acceptance(
             source=source,
@@ -292,7 +292,7 @@ def test_physical_acceptance_rejects_invalid_cognition_event_id():
 
     with pytest.raises(
         acceptance.KinectPhysicalAcceptanceError,
-        match="cognition event id is malformed",
+        match="invalid ModelRig bridge receipt",
     ):
         acceptance.collect_kinect_physical_acceptance(
             source=source,
@@ -311,7 +311,7 @@ def test_physical_acceptance_rejects_malformed_evidence_ref():
 
     with pytest.raises(
         acceptance.KinectPhysicalAcceptanceError,
-        match="evidence reference is malformed",
+        match="invalid ModelRig bridge receipt",
     ):
         acceptance.collect_kinect_physical_acceptance(
             source=source,
