@@ -1,6 +1,7 @@
 package dk.kaliv.visionrig.producer
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CompletableDeferred
@@ -83,6 +84,78 @@ class ProducerRunControllerTest {
         assertTrue(controller.start(shouldContinue = { false }))
         advanceUntilIdle()
         assertFalse(controller.isRunning)
+    }
+
+
+
+    @Test
+    fun cancelledOldJobCannotClearRestartedJobReference() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = TestScope(dispatcher)
+        val firstLoop = BlockingLoop()
+        val secondLoop = BlockingLoop()
+        var factoryCalls = 0
+
+        val controller = ProducerRunController(
+            scope = scope,
+            runnerFactory = {
+                factoryCalls += 1
+                ProducerRunner(
+                    loop = if (factoryCalls == 1) firstLoop else secondLoop,
+                    config = ProducerRunConfig(fps = 5.0),
+                    delayMillis = { kotlinx.coroutines.delay(it) },
+                )
+            },
+        )
+
+        assertTrue(controller.start())
+        testScheduler.runCurrent()
+        controller.stop()
+
+        assertTrue(controller.start())
+        testScheduler.runCurrent()
+        assertTrue(controller.isRunning)
+
+        advanceUntilIdle()
+        assertTrue(controller.isRunning)
+
+        controller.stop()
+        advanceUntilIdle()
+        assertFalse(controller.isRunning)
+        assertTrue(firstLoop.closed)
+        assertTrue(secondLoop.closed)
+    }
+
+    @Test
+    fun normalStopDoesNotReportFailure() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = TestScope(dispatcher)
+        val loop = BlockingLoop()
+        var failures = 0
+
+        val controller = ProducerRunController(
+            scope = scope,
+            runnerFactory = {
+                ProducerRunner(
+                    loop = loop,
+                    config = ProducerRunConfig(fps = 5.0),
+                    delayMillis = { kotlinx.coroutines.delay(it) },
+                )
+            },
+        )
+
+        assertTrue(
+            controller.start(
+                onFailure = { failures += 1 },
+            )
+        )
+        testScheduler.runCurrent()
+        controller.stop()
+        advanceUntilIdle()
+
+        assertEquals(0, failures)
+        assertFalse(controller.isRunning)
+        assertTrue(loop.closed)
     }
 
     private class BlockingLoop : ProducerLoop {
