@@ -89,7 +89,7 @@ class ProducerRunControllerTest {
 
 
     @Test
-    fun cancelledOldJobCannotClearRestartedJobReference() = runTest {
+    fun restartIsRejectedUntilCancelledRunnerFinishesCleanup() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val scope = TestScope(dispatcher)
         val firstLoop = BlockingLoop()
@@ -112,14 +112,14 @@ class ProducerRunControllerTest {
         testScheduler.runCurrent()
         controller.stop()
 
-        assertTrue(controller.start())
-        testScheduler.runCurrent()
-        assertTrue(controller.isRunning)
-
-        controller.stop()
+        assertFalse(controller.start())
         advanceUntilIdle()
         assertFalse(controller.isRunning)
         assertTrue(firstLoop.closed)
+
+        assertTrue(controller.start(shouldContinue = { false }))
+        advanceUntilIdle()
+        assertFalse(controller.isRunning)
         assertTrue(secondLoop.closed)
     }
 
