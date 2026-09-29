@@ -38,3 +38,8 @@ a given state identity at a time.
 - captured frames count even when delivery is dropped;
 - no extra terminal delay is added after the configured frame limit;
 - loop cleanup runs from `finally` and cannot mask a primary runner failure or cancellation.
+
+
+## ProducerRunController
+
+`ProducerRunController` wraps `ProducerRunner` for application lifecycle use. It guarantees one active producer job, supports idempotent start/stop, prevents an old cancelled job from clearing a restarted job reference, and treats normal coroutine cancellation as lifecycle control rather than producer failure.
