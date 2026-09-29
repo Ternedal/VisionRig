@@ -128,7 +128,7 @@ class VisionRigGatewayClient(
             .build()
 
         val response = try {
-            execute(request)
+            client.newCall(request).execute()
         } catch (exc: IOException) {
             val state = stateStore.markDropped(reservation.sequence)
             return SendResult(
@@ -199,8 +199,12 @@ class VisionRigGatewayClient(
             throw ProducerProtocolException("invalid VisionRig " + label + " response", exc)
         }
 
-    @Throws(IOException::class)
-    private fun execute(request: Request) = client.newCall(request).execute()
+    private fun execute(request: Request) =
+        try {
+            client.newCall(request).execute()
+        } catch (exc: IOException) {
+            throw ProducerProtocolException("VisionRig gateway unavailable", exc)
+        }
 
     private fun requireSuccess(code: Int, label: String) {
         if (code == 401 || code == 403) {
