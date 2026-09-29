@@ -98,6 +98,82 @@ class ProducerControlLoopConcurrencyTest {
         }
     }
 
+
+    @Test
+    fun closeWaitsForActiveStepBeforeClosingCapture() {
+        val server = MockWebServer()
+        enqueueEnabledStep(server, revision = 1, sequence = 0)
+        server.start()
+
+        val captureEntered = CountDownLatch(1)
+        val releaseCapture = CountDownLatch(1)
+        val closeStarted = CountDownLatch(1)
+
+        val capture = object : EncodedCapture {
+            @Volatile
+            private var open = false
+
+            override val isOpen: Boolean
+                get() = open
+
+            override fun open() {
+                open = true
+            }
+
+            override fun close() {
+                open = false
+            }
+
+            override fun capture(): EncodedFrame {
+                captureEntered.countDown()
+                check(releaseCapture.await(5, TimeUnit.SECONDS))
+                return EncodedFrame(byteArrayOf(1))
+            }
+        }
+
+        val dir = createTempDirectory("visionrig-close-lock").toFile()
+        val gateway = VisionRigGatewayClient(
+            gatewayUrl = server.url("/").toString(),
+            token = "x".repeat(32),
+            sourceId = "kaliv-android",
+            sourceType = "camera",
+            device = "test-camera",
+            stateStore = FileProducerStateStore(File(dir, "state.json")),
+        )
+        val loop = ProducerControlLoop(gateway, capture)
+        val pool = Executors.newFixedThreadPool(2)
+
+        try {
+            val step = pool.submit<ControlStepResult> {
+                loop.step()
+            }
+            assertTrue(captureEntered.await(5, TimeUnit.SECONDS))
+
+            val close = pool.submit {
+                closeStarted.countDown()
+                loop.close()
+            }
+            assertTrue(closeStarted.await(5, TimeUnit.SECONDS))
+
+            assertFalse(close.isDone)
+            assertTrue(capture.isOpen)
+
+            releaseCapture.countDown()
+
+            assertEquals(
+                SendStatus.ACCEPTED,
+                step.get(5, TimeUnit.SECONDS).frameResult?.status,
+            )
+            close.get(5, TimeUnit.SECONDS)
+            assertFalse(capture.isOpen)
+        } finally {
+            releaseCapture.countDown()
+            pool.shutdownNow()
+            loop.close()
+            server.shutdown()
+        }
+    }
+
     private fun enqueueEnabledStep(
         server: MockWebServer,
         revision: Long,
