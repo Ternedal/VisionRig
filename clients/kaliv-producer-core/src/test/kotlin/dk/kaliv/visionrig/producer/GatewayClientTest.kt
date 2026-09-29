@@ -443,6 +443,79 @@ class GatewayClientTest {
         }
     }
 
+
+
+    @Test
+    fun desiredStateResponseBodyIoFailureIsNormalized() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "schema_id":"visionrig/sensor-desired-state/v2",
+                      "source_id":"kaliv-quest",
+                      "enabled":true,
+                      "revision":1,
+                      "production_authority":false
+                    }
+                    """.trimIndent()
+                )
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+        )
+        server.start()
+        try {
+            val failure = kotlin.test.assertFailsWith<ProducerProtocolException> {
+                client(server).fetchDesiredState()
+            }
+            assertTrue(
+                failure.message!!.contains(
+                    "desired-state response I/O failed"
+                )
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun heartbeatResponseBodyIoFailureIsNormalized() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setBody(
+                    """
+                    {
+                      "schema_id":"visionrig/sensor-heartbeat-receipt/v1",
+                      "status":"accepted",
+                      "source_id":"kaliv-quest",
+                      "seen_utc":"2026-09-29T08:00:00Z",
+                      "production_authority":false
+                    }
+                    """.trimIndent()
+                )
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+        )
+        server.start()
+        try {
+            val failure = kotlin.test.assertFailsWith<ProducerProtocolException> {
+                client(server).sendHeartbeat(
+                    captureActive = false,
+                    appliedRevision = 1,
+                )
+            }
+            assertTrue(
+                failure.message!!.contains(
+                    "heartbeat response I/O failed"
+                )
+            )
+        } finally {
+            server.shutdown()
+        }
+    }
+
     private class FakeCapture : EncodedCapture {
         override var isOpen: Boolean = false
             private set
