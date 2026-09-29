@@ -877,6 +877,37 @@ class GatewayClientTest {
         }
     }
 
+
+    @Test
+    fun genericFrameProducerDoesNotRequireSensorPacketSupport() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema":"visionrig/producer-capabilities/v2",
+                  "max_payload_bytes":2048,
+                  "gateway_max_payload_bytes":2048,
+                  "core_max_payload_bytes":2048,
+                  "sensor_packet_schemas":[],
+                  "sensor_packet_compressions":[],
+                  "packet_payload_warning_utilization":0.8,
+                  "packet_payload_critical_utilization":0.95
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            val capabilities = client(server).fetchCapabilities()
+            assertEquals(2048, capabilities.maxPayloadBytes)
+            assertTrue(capabilities.sensorPacketSchemas.isEmpty())
+            assertTrue(capabilities.sensorPacketCompressions.isEmpty())
+        } finally {
+            server.shutdown()
+        }
+    }
+
     private class FakeCapture : EncodedCapture {
         override var isOpen: Boolean = false
             private set
