@@ -95,7 +95,7 @@ def _receipt(event: dict, *, activation: bool = False, world_changed: bool = Tru
     return {
         "schema": "kaliv-consciousness-core/visionrig-admission/v1",
         "visionrig_event_ref": _event_ref(event),
-        "evidence_ref": "world-evidence:" + "a" * 64,
+        "evidence_ref": "world-evidence-event:" + "a" * 64,
         "cognition_event_id": "cevt-" + "b" * 32,
         "world_changed": world_changed,
         "replayed": False,
@@ -895,4 +895,55 @@ def test_physical_qualification_rejects_missing_or_wrong_expected_build_sha() ->
             "http://127.0.0.1:8110",
             expected_sha="a" * 40,
             http_json=wrong_sha,
+        )
+
+
+def test_bridge_binding_rejects_malformed_world_evidence_ref() -> None:
+    event = _event()
+    health = _health(event=event)
+    health["modelrig_bridge"]["last_result"]["receipt"]["evidence_ref"] = "world-evidence:" + "a" * 64
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="evidence reference is malformed",
+    ):
+        _validate_bridge_binding(
+            health,
+            event=event,
+            source_id=event["source"]["source_id"],
+            frame_sequence=event["frame_sequence"],
+        )
+
+
+def test_bridge_binding_requires_cognition_event_queueing() -> None:
+    event = _event()
+    health = _health(event=event)
+    health["modelrig_bridge"]["last_result"]["receipt"]["cognition_event_queued"] = False
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="did not prove cognition event queueing",
+    ):
+        _validate_bridge_binding(
+            health,
+            event=event,
+            source_id=event["source"]["source_id"],
+            frame_sequence=event["frame_sequence"],
+        )
+
+
+def test_bridge_binding_requires_valid_cognition_event_id() -> None:
+    event = _event()
+    health = _health(event=event)
+    health["modelrig_bridge"]["last_result"]["receipt"]["cognition_event_id"] = None
+
+    with pytest.raises(
+        PhysicalPerceptionQualificationError,
+        match="cognition event id is malformed",
+    ):
+        _validate_bridge_binding(
+            health,
+            event=event,
+            source_id=event["source"]["source_id"],
+            frame_sequence=event["frame_sequence"],
         )
