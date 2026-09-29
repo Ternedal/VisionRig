@@ -61,11 +61,21 @@ class ModelRigBridgeReceipt(BaseModel):
     production_activation: Literal[False]
 
     @model_validator(mode="after")
-    def validate_cognition_queue_binding(self) -> "ModelRigBridgeReceipt":
+    def validate_admission_shape(self) -> "ModelRigBridgeReceipt":
         if self.cognition_event_queued and self.cognition_event_id is None:
             raise ValueError("queued cognition event requires cognition_event_id")
         if not self.cognition_event_queued and self.cognition_event_id is not None:
             raise ValueError("non-queued cognition event must not expose cognition_event_id")
+        if self.replayed:
+            if self.world_changed:
+                raise ValueError("replayed admission cannot change WorldState")
+            if self.cognition_event_queued or self.cognition_event_id is not None:
+                raise ValueError("replayed admission cannot queue cognition")
+        else:
+            if not self.world_changed:
+                raise ValueError("fresh admission must change WorldState")
+            if not self.cognition_event_queued or self.cognition_event_id is None:
+                raise ValueError("fresh admission must queue cognition")
         return self
 
 

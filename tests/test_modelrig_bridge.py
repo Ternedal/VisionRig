@@ -421,3 +421,34 @@ def test_bridge_rejects_inconsistent_cognition_queue_receipt() -> None:
     result = publisher.publish(event())
     assert result.status == "rejected"
     assert result.reason == "invalid ModelRig bridge receipt"
+
+
+def test_bridge_rejects_replay_that_claims_world_change() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = receipt_for_request(request).json()
+        body["replayed"] = True
+        body["world_changed"] = True
+        body["cognition_event_queued"] = False
+        body["cognition_event_id"] = None
+        return httpx.Response(200, json=body)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    result = publisher.publish(event())
+    assert result.status == "rejected"
+    assert result.reason == "invalid ModelRig bridge receipt"
+
+
+def test_bridge_rejects_fresh_admission_without_world_change() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = receipt_for_request(request).json()
+        body["world_changed"] = False
+        return httpx.Response(200, json=body)
+
+    publisher = ModelRigPerceptionPublisher(
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    result = publisher.publish(event())
+    assert result.status == "rejected"
+    assert result.reason == "invalid ModelRig bridge receipt"

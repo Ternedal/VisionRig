@@ -178,3 +178,8 @@ VisionRig 0.98.0 brings the dedicated Kinect physical gate to parity with generi
 ### V7 bridge receipt reference validation
 
 The VisionRig → ModelRig bridge validates canonical receipt references at the parsing boundary, before release qualification consumes them. `visionrig_event_ref` must match `visionrig-event:<64hex>`, `evidence_ref` must match `world-evidence-event:<64hex>`, and cognition queue state must be consistent with a canonical `cevt-<32hex>` cognition event id. Invalid downstream receipts are rejected and never committed to semantic-change state.
+
+
+### V7 ModelRig admission-shape validation
+
+VisionRig now validates the semantic shape of ModelRig admission receipts at the bridge boundary. A replay must not change WorldState and must not queue cognition; a fresh admission must change WorldState and must queue exactly one cognition event. Receipts that contradict those invariants are rejected before semantic state is committed or release qualification observes them.
