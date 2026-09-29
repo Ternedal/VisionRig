@@ -2,7 +2,14 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="horizonos.permission.HEADSET_CAMERA" />
 
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
     <uses-feature android:name="android.hardware.camera2.full" android:required="true" />
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="true" />
     <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="true" />
+
+    <application>
+        <meta-data
+            android:name="com.oculus.supportedDevices"
+            android:value="quest3|quest3s" />
+    </application>
 </manifest>
