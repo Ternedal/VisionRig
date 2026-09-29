@@ -17,3 +17,14 @@ Not implemented here:
 - SensorPacket/v2 depth/IR transport.
 
 Those are platform adapter slices on top of this core, not alternate protocol implementations.
+
+
+## ProducerRunner
+
+`ProducerRunner` drives a `ProducerLoop` with bounded cadence:
+- enabled sources use `fps` cadence;
+- disabled sources back off to `disabledPollMillis`;
+- captured frames count even when delivery is dropped, matching the Python reference producer's capture-order semantics;
+- the underlying loop is always closed from `finally` on completion, failure or coroutine cancellation.
+
+Applications may still call `step()` directly when their own lifecycle scheduler owns cadence.
