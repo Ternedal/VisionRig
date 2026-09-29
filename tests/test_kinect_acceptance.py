@@ -82,7 +82,7 @@ def _publisher(
                 "schema": "kaliv-consciousness-core/visionrig-admission/v1",
                 "visionrig_event_ref": event_ref,
                 "evidence_ref": evidence_ref,
-                "cognition_event_id": None if replayed else cognition_event_id,
+                "cognition_event_id": None if replayed else effective_cognition_event_id,
                 "world_changed": not replayed,
                 "replayed": replayed,
                 "cognition_event_queued": False if replayed else cognition_queued,
