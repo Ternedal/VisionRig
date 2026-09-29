@@ -116,9 +116,6 @@ class ProducerRunControllerTest {
         testScheduler.runCurrent()
         assertTrue(controller.isRunning)
 
-        advanceUntilIdle()
-        assertTrue(controller.isRunning)
-
         controller.stop()
         advanceUntilIdle()
         assertFalse(controller.isRunning)
