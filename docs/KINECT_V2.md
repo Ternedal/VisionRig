@@ -168,9 +168,14 @@ does not create cognition traffic.
 
 ## IR-qualified release evidence
 
-VisionRig 0.88.0 advances the physical Kinect acceptance receipt to `visionrig/kinect-physical-acceptance/v2`. A PASS now requires every accepted physical frame to produce at least one bounded `InfraredObservation` in `visionrig/perception-event/v4`, in addition to the existing raw IR signal check. The receipt records `infrared_semantic_frames`, `infrared_observations`, and `perception_schema`. Non-IR semantic perception is still required independently, so a valid IR summary by itself cannot satisfy the semantic release criterion.
+VisionRig 0.88.0 advances the physical Kinect acceptance receipt to `visionrig/kinect-physical-acceptance/v3`. A PASS now requires every accepted physical frame to produce at least one bounded `InfraredObservation` in `visionrig/perception-event/v4`, in addition to the existing raw IR signal check. The receipt records `infrared_semantic_frames`, `infrared_observations`, and `perception_schema`. Non-IR semantic perception is still required independently, so a valid IR summary by itself cannot satisfy the semantic release criterion.
 
 
 ## Fresh ModelRig admission in physical Kinect acceptance
 
 VisionRig 0.93.0 requires the dedicated Kinect physical acceptance run to receive a fresh ModelRig admission. A `replayed` bridge result or a receipt with `replayed=true` fails the run immediately, even when the event binding and WorldState fields are otherwise valid. This keeps dedicated Kinect release evidence aligned with the generic physical qualification gate.
+
+
+## Cognition-qualified physical acceptance
+
+VisionRig 0.98.0 advances the Kinect physical receipt to `visionrig/kinect-physical-acceptance/v3`. Every exact-bound fresh ModelRig receipt used by the Kinect gate must now expose a canonical `world-evidence-event:<64hex>` evidence ref, prove `cognition_event_queued=true`, and expose a canonical `cevt-<32hex>` cognition event id. The receipt records cognition-queued receipt count and the bounded cognition event ids alongside existing WorldState evidence.
