@@ -16,7 +16,7 @@ from typing import Callable, Literal
 from urllib.parse import urlparse
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .contracts import PerceptionEvent
 
@@ -33,9 +33,19 @@ class ModelRigBridgeReceipt(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema: Literal["kaliv-consciousness-core/visionrig-admission/v1"]
-    visionrig_event_ref: str = Field(min_length=1, max_length=256)
-    evidence_ref: str = Field(min_length=1, max_length=256)
-    cognition_event_id: str | None = None
+    visionrig_event_ref: str = Field(
+        pattern=r"^visionrig-event:[a-f0-9]{64}$",
+        max_length=80,
+    )
+    evidence_ref: str = Field(
+        pattern=r"^world-evidence-event:[a-f0-9]{64}$",
+        max_length=85,
+    )
+    cognition_event_id: str | None = Field(
+        default=None,
+        pattern=r"^cevt-[a-f0-9]{32}$",
+        max_length=37,
+    )
     world_changed: bool
     replayed: bool
     cognition_event_queued: bool
@@ -49,6 +59,14 @@ class ModelRigBridgeReceipt(BaseModel):
     execution_authority: Literal[False]
     scheduling_authority: Literal[False]
     production_activation: Literal[False]
+
+    @model_validator(mode="after")
+    def validate_cognition_queue_binding(self) -> "ModelRigBridgeReceipt":
+        if self.cognition_event_queued and self.cognition_event_id is None:
+            raise ValueError("queued cognition event requires cognition_event_id")
+        if not self.cognition_event_queued and self.cognition_event_id is not None:
+            raise ValueError("non-queued cognition event must not expose cognition_event_id")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
