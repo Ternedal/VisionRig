@@ -76,6 +76,16 @@ class ModelRigBridgeReceipt(BaseModel):
                 raise ValueError("fresh admission must change WorldState")
             if not self.cognition_event_queued or self.cognition_event_id is None:
                 raise ValueError("fresh admission must queue cognition")
+            expected_cognition_event_id = "cevt-" + hashlib.sha256(
+                (
+                    "world-evidence-attention|world_change|"
+                    + self.evidence_ref
+                ).encode("utf-8")
+            ).hexdigest()[:32]
+            if self.cognition_event_id != expected_cognition_event_id:
+                raise ValueError(
+                    "fresh cognition event id is not bound to evidence ref"
+                )
         return self
 
 
