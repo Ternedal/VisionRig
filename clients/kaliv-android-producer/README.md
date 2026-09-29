@@ -1,0 +1,33 @@
+# Kaliv Android CameraX producer
+
+Android CameraX adapter for the shared VisionRig Kaliv producer core.
+
+This module:
+- binds CameraX `ImageCapture` to the app lifecycle;
+- captures JPEG frames through the shared `EncodedCapture` contract;
+- keeps capture closed until VisionRig desired-state enables the source;
+- sends heartbeat acknowledgement before each enabled capture step;
+- persists sequence/drop state under app files;
+- fails closed on permission, lifecycle, control-plane or transport errors.
+
+Typical app integration:
+
+```kotlin
+val producer = KalivAndroidProducerSession.create(
+    context = applicationContext,
+    lifecycleOwner = this,
+    gatewayUrl = "http://<tailscale-ip>:8111",
+    token = visionRigToken,
+    sourceId = "kaliv-android",
+)
+
+val result = producer.step()
+```
+
+The app remains responsible for:
+- requesting CAMERA permission before creating/running the producer;
+- choosing scheduling/lifecycle cadence for `step()`;
+- keeping the bearer token in an appropriate secret store;
+- never exposing the VisionRig gateway directly to the public internet.
+
+The module deliberately does not own UI, identity, cognition, memory or action authority.
