@@ -60,6 +60,45 @@ def _event_ref(event: Mapping[str, Any]) -> str:
     return "visionrig-event:" + hashlib.sha256(_canonical_json(event)).hexdigest()
 
 
+def _attach_release_evidence_ref(report: dict[str, Any]) -> dict[str, Any]:
+    """Attach canonical release evidence only to an exact revision-bound PASS."""
+    visionrig = report.get("visionrig")
+    if not isinstance(visionrig, Mapping):
+        raise PhysicalPerceptionQualificationError(
+            "physical qualification report lacks VisionRig identity"
+        )
+    revision = visionrig.get("service_revision")
+    if revision is None:
+        return report
+    if not isinstance(revision, str) or _GIT_SHA.fullmatch(revision) is None:
+        raise PhysicalPerceptionQualificationError(
+            "physical qualification service revision is malformed"
+        )
+
+    gate = report.get("gate")
+    if not isinstance(gate, Mapping) or gate.get("passed") is not True:
+        raise PhysicalPerceptionQualificationError(
+            "release evidence requires a passing physical qualification"
+        )
+    if gate.get("physical_perception_qualified") is not True:
+        raise PhysicalPerceptionQualificationError(
+            "release evidence requires physical perception qualification"
+        )
+    if gate.get("production_activation") is not False:
+        raise PhysicalPerceptionQualificationError(
+            "release evidence cannot activate production"
+        )
+
+    canonical = _canonical_json(report)
+    report["release_evidence_ref"] = (
+        "visionrig-physical-perception:"
+        + revision
+        + ":"
+        + hashlib.sha256(canonical).hexdigest()
+    )
+    return report
+
+
 def _write_json_atomic(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
@@ -426,7 +465,7 @@ def _success_report(
         return None
     elapsed_ms = round((monotonic() - started) * 1000.0, 3)
     semantic_summary = _semantic_summary(event)
-    return {
+    report = {
         "schema": SCHEMA,
         "generated_at": datetime.now(timezone.utc)
         .isoformat()
@@ -476,6 +515,7 @@ def _success_report(
             "production_activation": False,
         },
     }
+    return _attach_release_evidence_ref(report)
 
 
 def qualify_physical_perception(
