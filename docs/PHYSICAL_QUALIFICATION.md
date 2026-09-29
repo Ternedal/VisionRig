@@ -99,6 +99,26 @@ memory, action or production authority. A PASS is suitable evidence for the
 cross-repository `visionrig_physical_perception` release gate; it is not
 permission to activate production by itself.
 
+For **release** evidence, start VisionRig with `VISIONRIG_GIT_SHA` set to the
+exact checkout revision and run:
+
+~~~powershell
+$sha = (git rev-parse HEAD).Trim()
+visionrig-qualify-physical --expected-sha $sha --source-id kinect-v2-0
+~~~
+
+When the PASS report is bound to a validated 40-hex `service_revision`, it
+also contains one canonical content-addressed reference:
+
+~~~text
+visionrig-physical-perception:<visionrig-sha>:<sha256>
+~~~
+
+That exact reference is the only VisionRig physical-perception evidence format
+accepted by ModelRig's system release gate. A PASS report without a validated
+service revision deliberately has **no** `release_evidence_ref` and cannot be
+promoted to release authority.
+
 
 ## Stable bridge evidence window
 
