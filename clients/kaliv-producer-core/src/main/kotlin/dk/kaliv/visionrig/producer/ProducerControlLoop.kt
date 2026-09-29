@@ -27,7 +27,7 @@ class ProducerControlLoop(
     fun step(): ControlStepResult {
         val desired = try {
             gateway.fetchDesiredState()
-        } catch (exc: RuntimeException) {
+        } catch (exc: Exception) {
             closeCaptureQuietly()
             throw exc
         }
@@ -61,7 +61,7 @@ class ProducerControlLoop(
                 captureActive = true,
                 frameResult = sent,
             )
-        } catch (exc: RuntimeException) {
+        } catch (exc: Exception) {
             closeCaptureQuietly()
             throw exc
         }
@@ -74,7 +74,7 @@ class ProducerControlLoop(
     private fun closeCaptureQuietly() {
         try {
             capture.close()
-        } catch (_: RuntimeException) {
+        } catch (_: Exception) {
             // Cleanup must not replace the control/transport failure that
             // triggered shutdown. Capture implementations must clear their
             // local open state before any best-effort hardware unbind.
