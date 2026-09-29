@@ -30,13 +30,15 @@ class VisionRigGatewayClient(
 ) {
     private val baseUrl: HttpUrl
     private val bearerToken: String
+    private data class CapabilitySnapshot(
+        val capabilities: ProducerCapabilities,
+        val refreshedMonotonicMillis: Long,
+        val refreshedUtc: String,
+    )
+
     private val capabilityLock = Any()
     @Volatile
-    private var negotiatedCapabilities: ProducerCapabilities? = null
-    @Volatile
-    private var capabilityRefreshedMonotonicMillis: Long? = null
-    @Volatile
-    private var capabilityRefreshedUtc: String? = null
+    private var capabilitySnapshot: CapabilitySnapshot? = null
 
     init {
         require(token.length >= 32) { "producer token must be at least 32 characters" }
@@ -79,9 +81,11 @@ class VisionRigGatewayClient(
                     exc,
                 )
             }
-            negotiatedCapabilities = capabilities
-            capabilityRefreshedMonotonicMillis = monotonicMillis()
-            capabilityRefreshedUtc = utcNow()
+            capabilitySnapshot = CapabilitySnapshot(
+                capabilities = capabilities,
+                refreshedMonotonicMillis = monotonicMillis(),
+                refreshedUtc = utcNow(),
+            )
             return capabilities
         }
     }
@@ -113,7 +117,7 @@ class VisionRigGatewayClient(
         capabilities: List<String> = emptyList(),
     ): HeartbeatReceipt {
         require(appliedRevision >= 0)
-        val negotiated = negotiatedCapabilities
+        val negotiated = capabilitySnapshot
         val payload = HeartbeatRequest(
             sourceId = sourceId,
             sourceType = sourceType,
@@ -121,12 +125,8 @@ class VisionRigGatewayClient(
             capabilities = capabilities,
             captureActive = captureActive,
             appliedRevision = appliedRevision,
-            negotiatedMaxPayloadBytes = negotiated?.maxPayloadBytes,
-            capabilityRefreshedUtc = if (negotiated != null) {
-                capabilityRefreshedUtc
-            } else {
-                null
-            },
+            negotiatedMaxPayloadBytes = negotiated?.capabilities?.maxPayloadBytes,
+            capabilityRefreshedUtc = negotiated?.refreshedUtc,
             capabilityRefreshSeconds = if (negotiated != null) {
                 capabilityRefreshSeconds
             } else {
@@ -262,27 +262,24 @@ class VisionRigGatewayClient(
 
     private fun ensureCapabilities(): ProducerCapabilities {
         val now = monotonicMillis()
-        val cached = negotiatedCapabilities
-        val refreshed = capabilityRefreshedMonotonicMillis
+        val cached = capabilitySnapshot
         if (
             cached != null &&
-            refreshed != null &&
-            now - refreshed < (capabilityRefreshSeconds * 1_000.0).toLong()
+            now - cached.refreshedMonotonicMillis <
+            (capabilityRefreshSeconds * 1_000.0).toLong()
         ) {
-            return cached
+            return cached.capabilities
         }
 
         synchronized(capabilityLock) {
             val lockedNow = monotonicMillis()
-            val lockedCached = negotiatedCapabilities
-            val lockedRefreshed = capabilityRefreshedMonotonicMillis
+            val lockedCached = capabilitySnapshot
             if (
                 lockedCached != null &&
-                lockedRefreshed != null &&
-                lockedNow - lockedRefreshed <
+                lockedNow - lockedCached.refreshedMonotonicMillis <
                 (capabilityRefreshSeconds * 1_000.0).toLong()
             ) {
-                return lockedCached
+                return lockedCached.capabilities
             }
             return fetchCapabilities()
         }
