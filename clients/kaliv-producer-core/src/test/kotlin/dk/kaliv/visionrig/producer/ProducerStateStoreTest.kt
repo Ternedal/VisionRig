@@ -99,4 +99,28 @@ class ProducerStateStoreTest {
         )
     }
 
+
+    @Test
+    fun invalidStateInvariantIsNormalizedToProducerProtocolError() {
+        val dir = createTempDirectory("visionrig-native-invalid-state").toFile()
+        val stateFile = File(dir, "state.json")
+        stateFile.writeText(
+            """
+            {
+              "schemaId":"visionrig/native-producer-state/v1",
+              "nextSequence":1,
+              "pendingDropped":0,
+              "inflightSequence":1
+            }
+            """.trimIndent()
+        )
+        val store = FileProducerStateStore(stateFile)
+
+        val failure = assertFailsWith<ProducerProtocolException> {
+            store.snapshot()
+        }
+
+        assertEquals("invalid producer state file", failure.message)
+    }
+
 }
