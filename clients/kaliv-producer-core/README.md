@@ -28,3 +28,12 @@ Those are platform adapter slices on top of this core, not alternate protocol im
 - the underlying loop is always closed from `finally` on completion, failure or coroutine cancellation.
 
 Applications may still call `step()` directly when their own lifecycle scheduler owns cadence.
+
+
+## ProducerRunController
+
+`ProducerRunController` owns one active `ProducerRunner` job at a time for app/service
+lifecycle integration. Repeated `start()` calls are idempotent while a job is active;
+`stop()` cancels the coroutine, and runner cleanup still closes capture through its
+`finally` path. A lazy coroutine start is used so the job reference is published
+before execution begins, avoiding completion/start races.
