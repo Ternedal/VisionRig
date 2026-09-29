@@ -378,6 +378,144 @@ class GatewayClientTest {
         }
     }
 
+
+
+    @Test
+    fun heartbeatReportsNegotiatedPayloadTelemetryAfterFirstFrame() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 2048))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-frame-receipt/v1",
+                  "status":"processed",
+                  "source_id":"kaliv-quest",
+                  "source_type":"vr",
+                  "frame_sequence":0,
+                  "event_id":"evt-cap-0",
+                  "dropped_frames":0,
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-heartbeat-receipt/v1",
+                  "status":"accepted",
+                  "source_id":"kaliv-quest",
+                  "seen_utc":"2026-09-29T08:00:00Z",
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            val dir = createTempDirectory("visionrig-native-heartbeat-cap").toFile()
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(File(dir, "state.json")),
+                capabilityRefreshSeconds = 30.0,
+                monotonicMillis = { 1_000L },
+                utcNow = { "2026-09-29T08:00:00Z" },
+            )
+
+            gateway.sendEncoded(byteArrayOf(1, 2, 3))
+            gateway.sendHeartbeat(
+                captureActive = true,
+                appliedRevision = 5,
+            )
+
+            server.takeRequest()
+            server.takeRequest()
+            val heartbeat = server.takeRequest()
+            val body = heartbeat.body.readUtf8()
+            assertTrue(body.contains("\"negotiated_max_payload_bytes\":2048"))
+            assertTrue(body.contains("\"capability_refreshed_utc\":\"2026-09-29T08:00:00Z\""))
+            assertTrue(body.contains("\"capability_refresh_seconds\":30.0"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun expiredCapabilityCacheRefreshesBeforeNextFrame() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 2048))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-frame-receipt/v1",
+                  "status":"processed",
+                  "source_id":"kaliv-quest",
+                  "source_type":"vr",
+                  "frame_sequence":0,
+                  "event_id":"evt-cap-0",
+                  "dropped_frames":0,
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 4096))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-frame-receipt/v1",
+                  "status":"processed",
+                  "source_id":"kaliv-quest",
+                  "source_type":"vr",
+                  "frame_sequence":1,
+                  "event_id":"evt-cap-1",
+                  "dropped_frames":0,
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            var now = 0L
+            val dir = createTempDirectory("visionrig-native-cap-refresh").toFile()
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(File(dir, "state.json")),
+                capabilityRefreshSeconds = 1.0,
+                monotonicMillis = { now },
+                utcNow = { "2026-09-29T08:00:00Z" },
+            )
+
+            gateway.sendEncoded(byteArrayOf(1))
+            now = 1_001L
+            gateway.sendEncoded(byteArrayOf(2))
+
+            val firstCapabilities = server.takeRequest()
+            val firstFrame = server.takeRequest()
+            val secondCapabilities = server.takeRequest()
+            val secondFrame = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", firstCapabilities.path)
+            assertTrue(firstFrame.path!!.startsWith("/api/v1/frames/ingest"))
+            assertEquals("/api/v1/producer-capabilities", secondCapabilities.path)
+            assertTrue(secondFrame.path!!.startsWith("/api/v1/frames/ingest"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
     private class FakeCapture : EncodedCapture {
         override var isOpen: Boolean = false
             private set
