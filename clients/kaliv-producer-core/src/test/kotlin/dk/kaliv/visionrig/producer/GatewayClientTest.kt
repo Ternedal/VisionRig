@@ -315,7 +315,7 @@ class GatewayClientTest {
 
 
     @Test
-    fun capabilityNegotiationRejectsOversizeFrameBeforeSequenceReservation() {
+    fun oversizeCapturedFrameBecomesExplicitLocalDrop() {
         val server = MockWebServer()
         server.enqueue(capabilitiesResponse(maxPayloadBytes = 1024))
         server.start()
@@ -336,8 +336,8 @@ class GatewayClientTest {
             }
 
             val state = FileProducerStateStore(stateFile).snapshot()
-            assertEquals(0, state.nextSequence)
-            assertEquals(0, state.pendingDropped)
+            assertEquals(1, state.nextSequence)
+            assertEquals(1, state.pendingDropped)
             assertEquals(null, state.inflightSequence)
 
             val request = server.takeRequest()
@@ -511,6 +511,41 @@ class GatewayClientTest {
             assertTrue(firstFrame.path!!.startsWith("/api/v1/frames/ingest"))
             assertEquals("/api/v1/producer-capabilities", secondCapabilities.path)
             assertTrue(secondFrame.path!!.startsWith("/api/v1/frames/ingest"))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+
+
+    @Test
+    fun capabilityNegotiationFailureAccountsCapturedFrameAsDrop() {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(502))
+        server.start()
+        try {
+            val dir = createTempDirectory("visionrig-native-cap-failure").toFile()
+            val stateFile = File(dir, "state.json")
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(stateFile),
+            )
+
+            kotlin.test.assertFailsWith<ProducerProtocolException> {
+                gateway.sendEncoded(byteArrayOf(1, 2, 3))
+            }
+
+            val state = FileProducerStateStore(stateFile).snapshot()
+            assertEquals(1, state.nextSequence)
+            assertEquals(1, state.pendingDropped)
+            assertEquals(null, state.inflightSequence)
+
+            val request = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", request.path)
         } finally {
             server.shutdown()
         }
