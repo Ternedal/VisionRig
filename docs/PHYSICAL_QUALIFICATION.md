@@ -131,3 +131,8 @@ VisionRig 0.92.0 requires the generic physical qualification gate to bind to a f
 ## Stable physical source identity
 
 VisionRig 0.94.0 binds generic physical qualification to the same physical source identity across preflight, the qualifying `PerceptionEvent/v4`, and the final sensor-status sample. A matching `source_id` is no longer enough: `source_type` and device identity must remain stable for the full run. Device/source replacement during qualification therefore fails closed. The final sensor snapshot must also report `last_sequence` at or beyond the exact qualifying event sequence, so the status evidence cannot lag behind the event that made the gate pass.
+
+
+## Build identity binding
+
+VisionRig 0.96.0 exposes `service_version` and optional validated `service_revision` in health v67. Set `VISIONRIG_GIT_SHA` to the exact 40-hex checkout revision when starting the service. `visionrig-qualify-physical --expected-sha <sha>` then fails closed unless the running service reports that exact revision, and the PASS receipt records both version and revision for later audit.
