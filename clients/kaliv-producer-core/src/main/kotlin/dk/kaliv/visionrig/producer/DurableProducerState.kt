@@ -116,11 +116,10 @@ class FileProducerStateStore(
             throw ProducerProtocolException("producer state file is empty")
         }
         val state = try {
-            json.decodeFromString<ProducerState>(text)
+            json.decodeFromString<ProducerState>(text).also { it.validate() }
         } catch (exc: Exception) {
             throw ProducerProtocolException("invalid producer state file", exc)
         }
-        state.validate()
         return state
     }
 
