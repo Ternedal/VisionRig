@@ -1,6 +1,7 @@
 package dk.kaliv.visionrig.producer
 
 import java.io.IOException
+import java.time.Instant
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl
@@ -18,6 +19,9 @@ class VisionRigGatewayClient(
     private val device: String? = null,
     private val stateStore: ProducerStateStore,
     private val client: OkHttpClient = OkHttpClient(),
+    private val capabilityRefreshSeconds: Double = 30.0,
+    private val monotonicMillis: () -> Long = { System.nanoTime() / 1_000_000L },
+    private val utcNow: () -> String = { Instant.now().toString() },
     private val json: Json = Json {
         ignoreUnknownKeys = false
         encodeDefaults = true
@@ -26,14 +30,20 @@ class VisionRigGatewayClient(
 ) {
     private val baseUrl: HttpUrl
     private val bearerToken: String
+    private val capabilityLock = Any()
     @Volatile
-    private var negotiatedMaxPayloadBytes: Long? = null
+    private var negotiatedCapabilities: ProducerCapabilities? = null
+    @Volatile
+    private var capabilityRefreshedMonotonicMillis: Long? = null
+    @Volatile
+    private var capabilityRefreshedUtc: String? = null
 
     init {
         require(token.length >= 32) { "producer token must be at least 32 characters" }
         require(sourceId.isNotBlank() && sourceId.length <= 128)
         require(sourceType in setOf("camera", "screen", "vr", "image"))
         require(device == null || device.length <= 256)
+        require(capabilityRefreshSeconds in 1.0..3600.0)
         val parsed = gatewayUrl.toHttpUrl()
         require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
             "gateway URL must not contain credentials"
@@ -69,7 +79,9 @@ class VisionRigGatewayClient(
                     exc,
                 )
             }
-            negotiatedMaxPayloadBytes = capabilities.maxPayloadBytes
+            negotiatedCapabilities = capabilities
+            capabilityRefreshedMonotonicMillis = monotonicMillis()
+            capabilityRefreshedUtc = utcNow()
             return capabilities
         }
     }
@@ -101,6 +113,7 @@ class VisionRigGatewayClient(
         capabilities: List<String> = emptyList(),
     ): HeartbeatReceipt {
         require(appliedRevision >= 0)
+        val negotiated = negotiatedCapabilities
         val payload = HeartbeatRequest(
             sourceId = sourceId,
             sourceType = sourceType,
@@ -108,6 +121,17 @@ class VisionRigGatewayClient(
             capabilities = capabilities,
             captureActive = captureActive,
             appliedRevision = appliedRevision,
+            negotiatedMaxPayloadBytes = negotiated?.maxPayloadBytes,
+            capabilityRefreshedUtc = if (negotiated != null) {
+                capabilityRefreshedUtc
+            } else {
+                null
+            },
+            capabilityRefreshSeconds = if (negotiated != null) {
+                capabilityRefreshSeconds
+            } else {
+                null
+            },
         )
         val url = baseUrl.newBuilder()
             .addPathSegments("api/v1/sensors/heartbeat")
@@ -142,7 +166,7 @@ class VisionRigGatewayClient(
         require(payload.isNotEmpty()) { "frame payload must not be empty" }
         require(contentType in setOf("image/jpeg", "image/png", "image/webp"))
 
-        val maxPayload = negotiatedMaxPayloadBytes ?: fetchCapabilities().maxPayloadBytes
+        val maxPayload = ensureCapabilities().maxPayloadBytes
         if (payload.size.toLong() > maxPayload) {
             throw ProducerProtocolException(
                 "frame payload exceeds negotiated VisionRig limit"
@@ -226,6 +250,35 @@ class VisionRigGatewayClient(
                 0,
                 receipt.eventId,
             )
+        }
+    }
+
+
+    private fun ensureCapabilities(): ProducerCapabilities {
+        val now = monotonicMillis()
+        val cached = negotiatedCapabilities
+        val refreshed = capabilityRefreshedMonotonicMillis
+        if (
+            cached != null &&
+            refreshed != null &&
+            now - refreshed < (capabilityRefreshSeconds * 1_000.0).toLong()
+        ) {
+            return cached
+        }
+
+        synchronized(capabilityLock) {
+            val lockedNow = monotonicMillis()
+            val lockedCached = negotiatedCapabilities
+            val lockedRefreshed = capabilityRefreshedMonotonicMillis
+            if (
+                lockedCached != null &&
+                lockedRefreshed != null &&
+                lockedNow - lockedRefreshed <
+                (capabilityRefreshSeconds * 1_000.0).toLong()
+            ) {
+                return lockedCached
+            }
+            return fetchCapabilities()
         }
     }
 
