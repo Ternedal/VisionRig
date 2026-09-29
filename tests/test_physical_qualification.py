@@ -866,6 +866,10 @@ def test_physical_qualification_accepts_matching_expected_build_sha() -> None:
         sleep_fn=lambda _seconds: None,
     )
     assert report["visionrig"]["service_revision"] == expected_sha
+    assert report["release_evidence_ref"].startswith(
+        "visionrig-physical-perception:" + expected_sha + ":"
+    )
+    assert len(report["release_evidence_ref"].rsplit(":", 1)[1]) == 64
 
 
 def test_physical_qualification_rejects_missing_or_wrong_expected_build_sha() -> None:
