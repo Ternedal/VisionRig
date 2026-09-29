@@ -28,3 +28,13 @@ unrelated sequence/drop journal.
 The state file provides crash/restart integrity through atomic replacement. It is
 not a multi-process leader-election mechanism: run only one active producer for
 a given state identity at a time.
+
+
+## ProducerRunner
+
+`ProducerRunner` drives a `ProducerLoop` with bounded cadence:
+- enabled sources use configured FPS cadence;
+- disabled sources back off to a slower control poll;
+- captured frames count even when delivery is dropped;
+- no extra terminal delay is added after the configured frame limit;
+- loop cleanup runs from `finally` and cannot mask a primary runner failure or cancellation.

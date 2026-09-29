@@ -19,12 +19,16 @@ data class ControlStepResult(
     val frameResult: SendResult? = null,
 )
 
+interface ProducerLoop : AutoCloseable {
+    fun step(): ControlStepResult
+}
+
 class ProducerControlLoop(
     private val gateway: VisionRigGatewayClient,
     private val capture: EncodedCapture,
     private val capabilities: List<String> = emptyList(),
-) : AutoCloseable {
-    fun step(): ControlStepResult {
+) : ProducerLoop {
+    override fun step(): ControlStepResult {
         val desired = try {
             gateway.fetchDesiredState()
         } catch (exc: Exception) {
