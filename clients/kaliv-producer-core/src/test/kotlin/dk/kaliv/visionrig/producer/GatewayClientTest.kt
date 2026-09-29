@@ -1,6 +1,7 @@
 package dk.kaliv.visionrig.producer
 
 import java.io.File
+import java.io.IOException
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -332,6 +333,53 @@ class GatewayClientTest {
             }
             val loop = ProducerControlLoop(client(server), capture)
             loop.close()
+        } finally {
+            server.shutdown()
+        }
+    }
+
+
+
+    @Test
+    fun checkedCaptureExceptionStillClosesFailClosed() {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-desired-state/v2",
+                  "source_id":"kaliv-quest",
+                  "enabled":true,
+                  "revision":11,
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        try {
+            var closed = false
+            val capture = object : EncodedCapture {
+                override val isOpen: Boolean = false
+
+                override fun open() {
+                    throw IOException("camera storage unavailable")
+                }
+
+                override fun close() {
+                    closed = true
+                }
+
+                override fun capture(): EncodedFrame =
+                    error("capture must not be reached")
+            }
+            val loop = ProducerControlLoop(client(server), capture)
+
+            kotlin.test.assertFailsWith<IOException> {
+                loop.step()
+            }
+
+            assertTrue(closed)
         } finally {
             server.shutdown()
         }
