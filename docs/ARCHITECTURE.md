@@ -168,3 +168,8 @@ VisionRig 0.96.0 health v67 adds runtime build identity: semantic package versio
 ### V7 ModelRig cognition proof
 
 VisionRig 0.97.0 binds physical qualification beyond WorldState change to the downstream ModelRig attention-admission proof. Fresh qualifying admissions must carry the canonical world-evidence reference and prove that the fresh path queued a typed cognition event with a canonical event id. Replay remains disallowed.
+
+
+### V7 Kinect cognition-proof parity
+
+VisionRig 0.98.0 brings the dedicated Kinect physical gate to parity with generic physical qualification. A fresh physical Kinect admission is not sufficient until ModelRig proves both WorldState change and downstream typed cognition-event queueing with canonical evidence and cognition references.
