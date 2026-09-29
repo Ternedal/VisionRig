@@ -66,7 +66,7 @@ data class HeartbeatReceipt(
 
 @Serializable
 data class HeartbeatRequest(
-    @SerialName("schema_id") val schemaId: String = "visionrig/sensor-heartbeat/v3",
+    @SerialName("schema_id") val schemaId: String = "visionrig/sensor-heartbeat/v6",
     @SerialName("source_id") val sourceId: String,
     @SerialName("source_type") val sourceType: String,
     val device: String? = null,
