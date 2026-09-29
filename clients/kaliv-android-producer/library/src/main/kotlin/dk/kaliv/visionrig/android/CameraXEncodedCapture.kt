@@ -149,15 +149,23 @@ class CameraXEncodedCapture(
         imageCapture = null
 
         if (currentProvider != null && currentCapture != null) {
-            runOnMainThread {
-                currentProvider.unbind(currentCapture)
+            try {
+                runOnMainThread {
+                    currentProvider.unbind(currentCapture)
+                }
+            } catch (_: RuntimeException) {
+                // Internal references are already cleared. Cleanup must not mask
+                // the original producer/control failure that triggered close().
             }
         }
     }
 
     fun shutdown() {
-        close()
-        callbackExecutor.shutdownNow()
+        try {
+            close()
+        } finally {
+            callbackExecutor.shutdownNow()
+        }
     }
 
     private fun runOnMainThread(block: () -> Unit) {
