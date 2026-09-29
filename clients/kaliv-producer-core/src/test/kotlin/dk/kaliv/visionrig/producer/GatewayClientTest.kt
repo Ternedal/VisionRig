@@ -551,6 +551,86 @@ class GatewayClientTest {
         }
     }
 
+
+
+    @Test
+    fun concurrentHeartbeatNeverSeesPartialCapabilitySnapshot() {
+        val server = MockWebServer()
+        server.enqueue(capabilitiesResponse(maxPayloadBytes = 2048))
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
+                  "schema_id":"visionrig/sensor-heartbeat-receipt/v1",
+                  "status":"accepted",
+                  "source_id":"kaliv-quest",
+                  "seen_utc":"2026-09-29T08:00:00Z",
+                  "production_authority":false
+                }
+                """.trimIndent()
+            )
+        )
+        server.start()
+        val utcEntered = CountDownLatch(1)
+        val releaseUtc = CountDownLatch(1)
+        val executor = Executors.newSingleThreadExecutor()
+        try {
+            val dir = createTempDirectory("visionrig-native-cap-race").toFile()
+            val gateway = VisionRigGatewayClient(
+                gatewayUrl = server.url("/").toString(),
+                token = "x".repeat(32),
+                sourceId = "kaliv-quest",
+                sourceType = "vr",
+                device = "quest",
+                stateStore = FileProducerStateStore(File(dir, "state.json")),
+                capabilityRefreshSeconds = 30.0,
+                monotonicMillis = { 1_000L },
+                utcNow = {
+                    utcEntered.countDown()
+                    check(releaseUtc.await(5, TimeUnit.SECONDS))
+                    "2026-09-29T08:00:00Z"
+                },
+            )
+
+            val fetchFuture = executor.submit<ProducerCapabilities> {
+                gateway.fetchCapabilities()
+            }
+            assertTrue(utcEntered.await(5, TimeUnit.SECONDS))
+
+            gateway.sendHeartbeat(
+                captureActive = true,
+                appliedRevision = 7,
+            )
+
+            val capabilities = server.takeRequest()
+            val heartbeat = server.takeRequest()
+            assertEquals("/api/v1/producer-capabilities", capabilities.path)
+            val heartbeatBody = heartbeat.body.readUtf8()
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"negotiated_max_payload_bytes\":null"
+                )
+            )
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"capability_refreshed_utc\":null"
+                )
+            )
+            assertTrue(
+                heartbeatBody.contains(
+                    "\"capability_refresh_seconds\":null"
+                )
+            )
+
+            releaseUtc.countDown()
+            assertEquals(2048, fetchFuture.get(5, TimeUnit.SECONDS).maxPayloadBytes)
+        } finally {
+            releaseUtc.countDown()
+            executor.shutdownNow()
+            server.shutdown()
+        }
+    }
+
     private class FakeCapture : EncodedCapture {
         override var isOpen: Boolean = false
             private set
