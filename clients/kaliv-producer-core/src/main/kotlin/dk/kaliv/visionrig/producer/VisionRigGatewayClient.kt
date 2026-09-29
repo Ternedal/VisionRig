@@ -58,37 +58,39 @@ class VisionRigGatewayClient(
         stateStore.recover()
     }
 
-    fun fetchCapabilities(): ProducerCapabilities {
-        val url = baseUrl.newBuilder()
-            .addPathSegments("api/v1/producer-capabilities")
-            .build()
-        val response = execute(Request.Builder().url(url).get().authorized().build())
-        response.use {
-            requireSuccess(it.code, "producer-capabilities")
-            val body = it.body?.string()
-                ?: throw ProducerProtocolException(
-                    "producer-capabilities response has no body"
+    fun fetchCapabilities(): ProducerCapabilities =
+        synchronized(capabilityLock) {
+            val url = baseUrl.newBuilder()
+                .addPathSegments("api/v1/producer-capabilities")
+                .build()
+            val response = execute(Request.Builder().url(url).get().authorized().build())
+            response.use {
+                requireSuccess(it.code, "producer-capabilities")
+                val body = it.body?.string()
+                    ?: throw ProducerProtocolException(
+                        "producer-capabilities response has no body"
+                    )
+                val capabilities = decode<ProducerCapabilities>(
+                    body,
+                    "producer-capabilities",
                 )
-            val capabilities = decode<ProducerCapabilities>(
-                body,
-                "producer-capabilities",
-            )
-            try {
-                capabilities.validate()
-            } catch (exc: IllegalArgumentException) {
-                throw ProducerProtocolException(
-                    "invalid VisionRig producer capabilities",
-                    exc,
+                try {
+                    capabilities.validate()
+                } catch (exc: IllegalArgumentException) {
+                    throw ProducerProtocolException(
+                        "invalid VisionRig producer capabilities",
+                        exc,
+                    )
+                }
+                capabilitySnapshot = CapabilitySnapshot(
+                    capabilities = capabilities,
+                    refreshedMonotonicMillis = monotonicMillis(),
+                    refreshedUtc = utcNow(),
                 )
+                return capabilities
             }
-            capabilitySnapshot = CapabilitySnapshot(
-                capabilities = capabilities,
-                refreshedMonotonicMillis = monotonicMillis(),
-                refreshedUtc = utcNow(),
-            )
-            return capabilities
+    
         }
-    }
 
     fun fetchDesiredState(): DesiredState {
         val url = baseUrl.newBuilder()
