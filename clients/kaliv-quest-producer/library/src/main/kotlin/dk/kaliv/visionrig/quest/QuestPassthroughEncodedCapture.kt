@@ -49,15 +49,20 @@ enum class QuestCameraPosition(val vendorValue: Int) {
 }
 
 data class QuestCameraConfig(
-    val width: Int = 1280,
-    val height: Int = 960,
+    val width: Int? = null,
+    val height: Int? = null,
     val jpegQuality: Int = 85,
     val timeoutSeconds: Long = 10,
     val position: QuestCameraPosition = QuestCameraPosition.RIGHT,
 ) {
     init {
-        require(width > 0 && width % 2 == 0)
-        require(height > 0 && height % 2 == 0)
+        require((width == null) == (height == null)) {
+            "width and height must be supplied together"
+        }
+        if (width != null && height != null) {
+            require(width > 0 && width % 2 == 0)
+            require(height > 0 && height % 2 == 0)
+        }
         require(jpegQuality in 1..100)
         require(timeoutSeconds in 1..60)
     }
@@ -93,13 +98,25 @@ class QuestPassthroughEncodedCapture(
         ) ?: throw ProducerProtocolException(
             "Quest passthrough camera lacks stream configuration"
         )
-        val supported = map.getOutputSizes(ImageFormat.YUV_420_888)
-            ?.any { it.width == config.width && it.height == config.height }
-            ?: false
-        if (!supported) {
+        val sizes = map.getOutputSizes(ImageFormat.YUV_420_888)
+            ?.filter { it.width > 0 && it.height > 0 }
+            ?.sortedByDescending { it.width.toLong() * it.height.toLong() }
+            ?: emptyList()
+        if (sizes.isEmpty()) {
             throw ProducerProtocolException(
+                "Quest passthrough camera exposes no YUV_420_888 output size"
+            )
+        }
+        val selectedSize = if (config.width != null && config.height != null) {
+            sizes.firstOrNull {
+                it.width == config.width && it.height == config.height
+            } ?: throw ProducerProtocolException(
                 "Quest passthrough camera does not support requested YUV size"
             )
+        } else {
+            sizes.firstOrNull {
+                it.width.toLong() * it.height.toLong() <= 2_000_000L
+            } ?: sizes.last()
         }
 
         val thread = HandlerThread("visionrig-quest-camera").apply { start() }
@@ -108,8 +125,8 @@ class QuestPassthroughEncodedCapture(
         cameraHandler = handler
 
         val imageReader = ImageReader.newInstance(
-            config.width,
-            config.height,
+            selectedSize.width,
+            selectedSize.height,
             ImageFormat.YUV_420_888,
             3,
         )
