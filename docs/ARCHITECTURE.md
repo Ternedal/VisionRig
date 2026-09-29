@@ -173,3 +173,8 @@ VisionRig 0.97.0 binds physical qualification beyond WorldState change to the do
 ### V7 Kinect cognition-proof parity
 
 VisionRig 0.98.0 brings the dedicated Kinect physical gate to parity with generic physical qualification. A fresh physical Kinect admission is not sufficient until ModelRig proves both WorldState change and downstream typed cognition-event queueing with canonical evidence and cognition references.
+
+
+### V7 bridge receipt reference validation
+
+The VisionRig → ModelRig bridge validates canonical receipt references at the parsing boundary, before release qualification consumes them. `visionrig_event_ref` must match `visionrig-event:<64hex>`, `evidence_ref` must match `world-evidence-event:<64hex>`, and cognition queue state must be consistent with a canonical `cevt-<32hex>` cognition event id. Invalid downstream receipts are rejected and never committed to semantic-change state.
