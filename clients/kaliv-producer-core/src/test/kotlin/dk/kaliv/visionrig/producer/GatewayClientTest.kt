@@ -74,6 +74,14 @@ class GatewayClientTest {
                 appliedRevision = desired.revision,
             )
             assertEquals("kaliv-quest", heartbeat.sourceId)
+
+            server.takeRequest()
+            val heartbeatRequest = server.takeRequest()
+            assertTrue(
+                heartbeatRequest.body.readUtf8().contains(
+                    "\"schema_id\":\"visionrig/sensor-heartbeat/v6\""
+                )
+            )
         } finally {
             server.shutdown()
         }
