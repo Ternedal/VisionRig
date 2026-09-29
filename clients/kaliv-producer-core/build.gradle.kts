@@ -24,3 +24,7 @@ kotlin {
 tasks.test {
     useJUnitPlatform()
 }
+
+
+group = "dk.kaliv.visionrig"
+version = "0.1.0"
