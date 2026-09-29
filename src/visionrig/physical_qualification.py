@@ -487,6 +487,11 @@ def qualify_physical_perception(
         raise PhysicalPerceptionQualificationError(
             "VisionRig perception schema is not v4"
         )
+    service_instance_id = health.get("service_instance_id")
+    if not isinstance(service_instance_id, str) or not service_instance_id.strip():
+        raise PhysicalPerceptionQualificationError(
+            "VisionRig health lacks service instance identity"
+        )
     bridge = health.get("modelrig_bridge")
     if not isinstance(bridge, Mapping) or bridge.get("enabled") is not True:
         raise PhysicalPerceptionQualificationError(
