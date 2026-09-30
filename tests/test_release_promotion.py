@@ -286,3 +286,22 @@ def test_release_promotion_never_grants_production_activation(
 
     with pytest.raises(ReleasePromotionError, match="gate contract mismatch"):
         validate_promotion_attestation(attestation)
+
+def test_promotion_rejects_bundle_ref_for_other_revision(tmp_path: Path) -> None:
+    attestation = build_promotion_attestation(
+        _bundle_file(tmp_path),
+        expected_sha=SHA,
+        expected_candidate_version=VERSION,
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["physical_evidence"]["bundle_ref"] = (
+        "visionrig-release-evidence:" + "b" * 40 + ":" + "c" * 64
+    )
+
+    with pytest.raises(
+        ReleasePromotionError,
+        match="not bound to promotion revision",
+    ):
+        validate_promotion_attestation(attestation)
+
