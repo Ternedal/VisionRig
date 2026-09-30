@@ -76,12 +76,17 @@ class CameraXEncodedCapture(
             .requireLensFacing(config.lensFacing)
             .build()
 
-        runOnMainThread {
-            cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                selector,
-                capture,
-            )
+        try {
+            runOnMainThread {
+                cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    selector,
+                    capture,
+                )
+            }
+        } catch (exc: RuntimeException) {
+            scheduleUnbind(cameraProvider, capture)
+            throw exc
         }
 
         provider = cameraProvider
@@ -181,6 +186,18 @@ class CameraXEncodedCapture(
         }
     }
 
+
+    private fun scheduleUnbind(
+        cameraProvider: ProcessCameraProvider,
+        capture: ImageCapture,
+    ) {
+        ContextCompat.getMainExecutor(appContext).execute {
+            try {
+                cameraProvider.unbind(capture)
+            } catch (_: RuntimeException) {
+            }
+        }
+    }
 
     private fun requireWorkerThread() {
         if (Looper.myLooper() == Looper.getMainLooper()) {
