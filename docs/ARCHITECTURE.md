@@ -102,7 +102,7 @@ isolated from local perception.
 Authenticated Windows/screen/camera and Kaliv VR/passthrough producer transport,
 persistent sensor catalog/discovery, stable source identity, desired-state control,
 effective-state convergence, and managed local webcam/Kinect control are
-implemented. A shared Kotlin/JVM Kaliv producer core is now implemented under `clients/kaliv-producer-core`, covering authenticated transport, desired-state convergence and crash-safe sequence/drop state. Native Android CameraX and Quest passthrough capture adapters remain separate client-delivery slices.
+implemented. A shared Kotlin/JVM Kaliv producer core is implemented under `clients/kaliv-producer-core`, covering authenticated transport, desired-state convergence and crash-safe sequence/drop state. Native Android CameraX and Quest 3/3S passthrough Camera2 adapters are implemented and both platform sessions expose the shared coroutine cadence/lifecycle runner.
 
 ### V6 — operational sensor observability — implemented
 VisionRig 0.86.0 exposes coherent sensor bootstrap snapshots, restart-detectable
