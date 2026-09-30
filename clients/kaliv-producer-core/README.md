@@ -10,13 +10,16 @@ Implemented in this slice:
 - hardware-agnostic encoded-frame capture interface reusable by Android camera and Quest passthrough adapters;
 - Kotlin/JVM CI tests.
 
-Not implemented here:
-- Android CameraX binding;
-- Meta Quest passthrough/camera binding;
-- lifecycle/service UI;
-- SensorPacket/v2 depth/IR transport.
+Implemented on top of this core:
+- Android CameraX binding in `clients/kaliv-android-producer`;
+- Meta Quest 3/3S passthrough Camera2 binding in `clients/kaliv-quest-producer`;
+- shared coroutine cadence/lifecycle orchestration through `ProducerRunner` and `ProducerRunController`.
 
-Those are platform adapter slices on top of this core, not alternate protocol implementations.
+Still outside this core's scope:
+- application UI/background-service ownership;
+- SensorPacket/v2 depth/IR transport for native mobile/Quest clients.
+
+The platform adapters reuse this protocol/state-machine core rather than defining alternate producer contracts.
 
 
 ## Durable state identity
