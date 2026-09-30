@@ -228,8 +228,11 @@ def test_builds_content_addressed_v1_promotion_attestation(
     validate_promotion_attestation(attestation)
 
 
-def test_rejects_bundle_for_different_candidate_version(tmp_path: Path) -> None:
-    with pytest.raises(ReleasePromotionError, match="bundle version mismatch"):
+def test_rejects_non_v1_candidate_version(tmp_path: Path) -> None:
+    with pytest.raises(
+        ReleasePromotionError,
+        match="v1 promotion candidate must be 0.99.0",
+    ):
         build_promotion_attestation(
             _bundle_file(tmp_path),
             expected_sha=SHA,
@@ -305,3 +308,89 @@ def test_promotion_rejects_bundle_ref_for_other_revision(tmp_path: Path) -> None
     ):
         validate_promotion_attestation(attestation)
 
+
+
+def test_standalone_promotion_rejects_non_hex_revision(tmp_path: Path) -> None:
+    attestation = build_promotion_attestation(
+        _bundle_file(tmp_path),
+        expected_sha=SHA,
+        expected_candidate_version=VERSION,
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["visionrig_git_sha"] = "z" * 40
+
+    with pytest.raises(ReleasePromotionError, match="revision is malformed"):
+        validate_promotion_attestation(attestation)
+
+
+def test_standalone_promotion_rejects_malformed_bundle_digest(
+    tmp_path: Path,
+) -> None:
+    attestation = build_promotion_attestation(
+        _bundle_file(tmp_path),
+        expected_sha=SHA,
+        expected_candidate_version=VERSION,
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["physical_evidence"]["bundle_sha256"] = "sha256:" + "Z" * 64
+
+    with pytest.raises(ReleasePromotionError, match="bundle digest is invalid"):
+        validate_promotion_attestation(attestation)
+
+
+def test_standalone_promotion_rejects_malformed_bundle_ref(
+    tmp_path: Path,
+) -> None:
+    attestation = build_promotion_attestation(
+        _bundle_file(tmp_path),
+        expected_sha=SHA,
+        expected_candidate_version=VERSION,
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["physical_evidence"]["bundle_ref"] = (
+        "visionrig-release-evidence:" + SHA + ":" + "Z" * 64
+    )
+
+    with pytest.raises(
+        ReleasePromotionError,
+        match="not bound to promotion revision",
+    ):
+        validate_promotion_attestation(attestation)
+
+
+def test_standalone_promotion_rejects_invalid_evidence_count(
+    tmp_path: Path,
+) -> None:
+    attestation = build_promotion_attestation(
+        _bundle_file(tmp_path),
+        expected_sha=SHA,
+        expected_candidate_version=VERSION,
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["physical_evidence"]["evidence_count"] = 0
+
+    with pytest.raises(ReleasePromotionError, match="evidence count is invalid"):
+        validate_promotion_attestation(attestation)
+
+
+def test_standalone_promotion_rejects_non_v1_candidate(
+    tmp_path: Path,
+) -> None:
+    attestation = build_promotion_attestation(
+        _bundle_file(tmp_path),
+        expected_sha=SHA,
+        expected_candidate_version=VERSION,
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["candidate_version"] = "0.98.0"
+
+    with pytest.raises(
+        ReleasePromotionError,
+        match="promotion candidate version mismatch",
+    ):
+        validate_promotion_attestation(attestation)
