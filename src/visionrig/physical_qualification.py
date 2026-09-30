@@ -439,6 +439,26 @@ def _success_report(
         base + "/api/v1/sensors/status",
         timeout=request_timeout,
     )
+    final_health = http_json(
+        base + "/health",
+        timeout=request_timeout,
+    )
+    for field, message in (
+        (
+            "service_instance_id",
+            "VisionRig service instance changed during qualification finalization",
+        ),
+        (
+            "service_version",
+            "VisionRig service version changed during qualification finalization",
+        ),
+        (
+            "service_revision",
+            "VisionRig service revision changed during qualification finalization",
+        ),
+    ):
+        if final_health.get(field) != initial_health.get(field):
+            raise PhysicalPerceptionQualificationError(message)
     current_sources = _physical_sources(
         current_status,
         requested_source_id=selected_id,
