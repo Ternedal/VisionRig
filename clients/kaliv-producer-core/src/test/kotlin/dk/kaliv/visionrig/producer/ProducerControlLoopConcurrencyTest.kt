@@ -17,8 +17,18 @@ class ProducerControlLoopConcurrencyTest {
     @Test
     fun concurrentStepsAreSerializedAcrossCaptureAndDelivery() {
         val server = MockWebServer()
-        enqueueEnabledStep(server, revision = 1, sequence = 0)
-        enqueueEnabledStep(server, revision = 2, sequence = 1)
+        enqueueEnabledStep(
+            server,
+            revision = 1,
+            sequence = 0,
+            includeCapabilities = true,
+        )
+        enqueueEnabledStep(
+            server,
+            revision = 2,
+            sequence = 1,
+            includeCapabilities = false,
+        )
         server.start()
 
         val firstCaptureEntered = CountDownLatch(1)
@@ -178,6 +188,7 @@ class ProducerControlLoopConcurrencyTest {
         server: MockWebServer,
         revision: Long,
         sequence: Long,
+        includeCapabilities: Boolean = true,
     ) {
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
@@ -192,6 +203,24 @@ class ProducerControlLoopConcurrencyTest {
                 """.trimIndent()
             )
         )
+        if (includeCapabilities) {
+            server.enqueue(
+                MockResponse().setResponseCode(200).setBody(
+                    """
+                    {
+                      "schema":"visionrig/producer-capabilities/v2",
+                      "max_payload_bytes":1048576,
+                      "gateway_max_payload_bytes":1048576,
+                      "core_max_payload_bytes":1048576,
+                      "sensor_packet_schemas":["visionrig/sensor-packet/v2"],
+                      "sensor_packet_compressions":["none","zlib","auto"],
+                      "packet_payload_warning_utilization":0.8,
+                      "packet_payload_critical_utilization":0.95
+                    }
+                    """.trimIndent()
+                )
+            )
+        }
         server.enqueue(
             MockResponse().setResponseCode(200).setBody(
                 """
