@@ -133,9 +133,7 @@ As of VisionRig 0.89.0, `main` is the authoritative implementation branch.
 Historical feature branches may remain for provenance, but they are not a source
 of newer runtime behavior unless explicitly rebased into a new pull request.
 
-The shared native producer core and Android CameraX client have landed. The
-Quest 3/3S Camera2 adapter is delivered as the remaining platform-specific
-VisionRig client slice; application UI and lifecycle scheduling remain client concerns.
+The shared native producer core plus Android CameraX and Quest 3/3S Camera2 clients have landed. Both platform sessions expose the shared coroutine cadence runner; application UI and ownership of the coroutine lifecycle remain client concerns.
 
 
 ## Contract change: v3 -> v4

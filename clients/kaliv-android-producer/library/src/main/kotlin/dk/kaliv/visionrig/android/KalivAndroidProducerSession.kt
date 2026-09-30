@@ -5,6 +5,8 @@ import androidx.lifecycle.LifecycleOwner
 import dk.kaliv.visionrig.producer.ControlStepResult
 import dk.kaliv.visionrig.producer.FileProducerStateStore
 import dk.kaliv.visionrig.producer.ProducerControlLoop
+import dk.kaliv.visionrig.producer.ProducerRunConfig
+import dk.kaliv.visionrig.producer.ProducerRunner
 import dk.kaliv.visionrig.producer.ProducerStateIdentity
 import dk.kaliv.visionrig.producer.VisionRigGatewayClient
 import java.io.File
@@ -14,6 +16,14 @@ class KalivAndroidProducerSession private constructor(
     private val capture: CameraXEncodedCapture,
 ) : AutoCloseable {
     fun step(): ControlStepResult = controlLoop.step()
+
+    suspend fun run(
+        config: ProducerRunConfig = ProducerRunConfig(),
+        shouldContinue: () -> Boolean = { true },
+    ): Int = ProducerRunner(
+        loop = controlLoop,
+        config = config,
+    ).run(shouldContinue)
 
     override fun close() {
         try {
