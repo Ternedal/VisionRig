@@ -274,8 +274,18 @@ To include Kinect v2:
   -ModelRigWorkerUrl http://127.0.0.1:<port>
 ```
 
-After the exact candidate SHA has a green `main` push workflow, add the run id
-to create the promotion attestation in the same invocation:
+After the exact candidate SHA has a green `main` push workflow, the wrapper
+automatically discovers the newest successful `tests` push run for that exact
+SHA and passes its run id to the promotion validator. You can still override the
+selection explicitly with `-CandidateCiRunId` when auditing a specific run:
+
+```powershell
+.\run-v1-release-gate.ps1 \
+  -QualifyAndroid \
+  -QualifyQuest
+```
+
+Explicit override:
 
 ```powershell
 .\run-v1-release-gate.ps1 \
