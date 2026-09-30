@@ -758,3 +758,16 @@ PerceptionEvent, WorldSnapshot, or ModelRig context.
 ## VisionRig 0.88.0: IR-qualified physical release evidence
 
 The physical Kinect acceptance gate now proves both sides of the infrared path: every accepted hardware frame must contain a real IR plane and must produce at least one bounded `InfraredObservation` in `PerceptionEvent/v4`. The receipt schema advances to `visionrig/kinect-physical-acceptance/v3` and records the number of frames carrying semantic IR, total bounded IR observations, and the exact perception schema. The gate still independently requires non-IR semantic perception plus an exact-bound ModelRig WorldState-changing receipt, so IR alone cannot make a release candidate pass.
+
+
+## VisionRig 0.99.0: v1 release candidate
+
+0.99.0 is the release-candidate baseline for the first stable VisionRig release.
+The native Android and Quest clients, shared coroutine runner, transport
+capability negotiation, exact ModelRig evidence binding and physical release
+qualification are all on `main`.
+
+The remaining 1.0 gate is evidence-driven: repository CI must be green and the
+target physical paths must produce passing qualification receipts on real
+hardware. The package/runtime version exposed by `/health` is now locked to
+project metadata by test.
