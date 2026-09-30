@@ -39,6 +39,7 @@ visionrig-profile = "visionrig.profile_cli:main"
 visionrig-kinect-acceptance = "visionrig.kinect_acceptance:main"
 visionrig-qualify-physical = "visionrig.physical_qualification:main"
 visionrig-release-evidence = "visionrig.release_evidence:main"
+visionrig-release-promote = "visionrig.release_promotion:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
