@@ -156,10 +156,19 @@ class QuestPassthroughEncodedCapture(
 
         val opened = CountDownLatch(1)
         val openFailure = AtomicReference<Throwable?>()
+        val openAbandoned = java.util.concurrent.atomic.AtomicBoolean(false)
         cameraManager.openCamera(
             cameraId,
             object : CameraDevice.StateCallback() {
                 override fun onOpened(device: CameraDevice) {
+                    if (openAbandoned.get()) {
+                        try {
+                            device.close()
+                        } catch (_: Exception) {
+                        }
+                        opened.countDown()
+                        return
+                    }
                     camera = device
                     opened.countDown()
                 }
@@ -192,6 +201,7 @@ class QuestPassthroughEncodedCapture(
         try {
             await(opened, "Quest passthrough camera open")
         } catch (exc: RuntimeException) {
+            openAbandoned.set(true)
             close()
             throw exc
         }
