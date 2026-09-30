@@ -182,10 +182,17 @@ def validate_promotion_attestation(attestation: Mapping[str, Any]) -> None:
     bundle_ref = physical.get("bundle_ref")
     bundle_digest = physical.get("bundle_sha256")
     bundle_bytes = physical.get("bundle_bytes")
-    if not isinstance(bundle_ref, str) or not bundle_ref.startswith(
+    expected_bundle_prefix = (
         "visionrig-release-evidence:"
+        + str(attestation.get("visionrig_git_sha"))
+        + ":"
+    )
+    if not isinstance(bundle_ref, str) or not bundle_ref.startswith(
+        expected_bundle_prefix
     ):
-        raise ReleasePromotionError("physical bundle ref is invalid")
+        raise ReleasePromotionError(
+            "physical bundle ref is not bound to promotion revision"
+        )
     if (
         not isinstance(bundle_digest, str)
         or not bundle_digest.startswith("sha256:")
