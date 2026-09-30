@@ -208,3 +208,41 @@ It is content-addressed as:
 A PASS sets `release_finalized=true` while still keeping
 `production_activation=false`. Only after that PASS should the 1.0.0 tag or
 release be published.
+
+
+## Release status / doctor
+
+At any point in the v1 process, inspect the local release artifacts without
+creating evidence or granting authority:
+
+```powershell
+visionrig-release-status
+```
+
+For machine-readable output:
+
+```powershell
+visionrig-release-status --json
+```
+
+The status tool validates each artifact with the same release validators used by
+the promotion/finalization commands and then verifies the **actual file-byte
+bindings** across the chain:
+
+- physical bundle bytes -> promotion attestation;
+- promotion attestation bytes -> finalization attestation.
+
+Missing evidence is reported as a blocker rather than manufactured. Invalid or
+cross-bound artifacts fail closed. The tool always reports
+`production_activation=false`.
+
+Useful automation gates:
+
+```powershell
+visionrig-release-status --require-ready
+visionrig-release-status --require-finalized
+```
+
+`--require-ready` succeeds only after a valid, byte-bound promotion
+attestation. `--require-finalized` succeeds only after the complete v1
+finalization chain is valid and the installed package reports 1.0.0.

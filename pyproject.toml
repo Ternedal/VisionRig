@@ -41,6 +41,7 @@ visionrig-qualify-physical = "visionrig.physical_qualification:main"
 visionrig-release-evidence = "visionrig.release_evidence:main"
 visionrig-release-promote = "visionrig.release_promotion:main"
 visionrig-release-finalize = "visionrig.release_finalization:main"
+visionrig-release-status = "visionrig.release_status:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
