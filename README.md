@@ -241,6 +241,7 @@ See:
 - docs/PERCEPTION_V4.md
 - docs/MODELRIG_BRIDGE.md
 - docs/OBSERVABILITY.md
+- docs/RELEASE.md
 
 
 ### Negotiated packet-pressure policy
@@ -771,3 +772,13 @@ The remaining 1.0 gate is evidence-driven: repository CI must be green and the
 target physical paths must produce passing qualification receipts on real
 hardware. The package/runtime version exposed by `/health` is now locked to
 project metadata by test.
+
+
+## v1 physical release evidence
+
+After repository CI is green and real hardware has produced revision-bound
+qualification receipts, run `visionrig-release-evidence` to validate and bundle
+those receipts against the exact candidate SHA/version. The tool validates
+physical evidence only; it deliberately does not claim that CI passed.
+
+See `docs/RELEASE.md`.
