@@ -63,8 +63,8 @@ A PASS requires all of the following on one bounded observation:
 6. That event belongs to the exact selected source and has a frame sequence
    newer than the preflight sequence.
 7. VisionRig exposes a privacy-safe bridge result for that exact source/frame.
-8. The bridge result is `published` or `replayed` and includes the
-   ModelRig receipt VisionRig already validated.
+8. The bridge result is a fresh `published` admission and includes the
+   ModelRig receipt VisionRig already validated; replay cannot satisfy the gate.
 9. The receipt's `visionrig_event_ref` equals SHA-256 of the exact serialized
    journal event and `observed_sequence` equals the frame sequence.
 10. ModelRig reports `epistemic_status=inferred`, zero model calls, no
@@ -161,3 +161,15 @@ VisionRig 0.96.0 exposes `service_version` and optional validated `service_revis
 ## Cognition admission proof
 
 VisionRig 0.97.0 strengthens generic physical qualification after fresh ModelRig WorldState admission. A PASS now also requires the ModelRig receipt to expose a canonical `world-evidence-event:<64hex>` evidence reference, `cognition_event_queued=true`, and a canonical `cevt-<32hex>` cognition event id. This matches ModelRig's atomic fresh-admission contract: a non-replay world change queues exactly one typed cognition event, while replay does not.
+
+
+## Final VisionRig identity binding
+
+Physical qualification now re-reads VisionRig health during finalization after
+the qualifying source/event/ModelRig binding has been established. The PASS
+receipt is rejected if `service_instance_id`, `service_version`, or
+`service_revision` differs from preflight.
+
+This closes the final restart/build-drift window between bridge admission and
+the final sensor-status sample. A release PASS therefore belongs to one stable
+VisionRig process/build identity for the complete qualification run.
