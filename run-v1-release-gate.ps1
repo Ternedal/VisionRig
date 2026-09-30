@@ -35,6 +35,53 @@ try {
         }
     }
 
+    function Find-ExactCandidateCiRunId {
+        param([Parameter(Mandatory = $true)][string]$Sha)
+
+        $headers = @{
+            "Accept" = "application/vnd.github+json"
+            "User-Agent" = "VisionRig-v1-release-gate"
+            "X-GitHub-Api-Version" = "2022-11-28"
+        }
+        if ($env:GITHUB_TOKEN) {
+            $headers["Authorization"] = "Bearer " + $env:GITHUB_TOKEN
+        }
+
+        $uri = (
+            "https://api.github.com/repos/Ternedal/VisionRig/actions/runs" +
+            "?head_sha=" + [uri]::EscapeDataString($Sha) +
+            "&event=push&status=success&per_page=20"
+        )
+
+        try {
+            $response = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers
+        }
+        catch {
+            Write-Warning (
+                "Unable to auto-discover exact-SHA GitHub Actions run: " +
+                $_.Exception.Message
+            )
+            return [long]0
+        }
+
+        $run = @($response.workflow_runs) |
+            Where-Object {
+                $_.name -eq "tests" -and
+                $_.head_branch -eq "main" -and
+                $_.head_sha -eq $Sha -and
+                $_.event -eq "push" -and
+                $_.status -eq "completed" -and
+                $_.conclusion -eq "success"
+            } |
+            Sort-Object -Property id -Descending |
+            Select-Object -First 1
+
+        if ($null -eq $run) {
+            return [long]0
+        }
+        return [long]$run.id
+    }
+
     function Assert-CleanCheckout {
         $dirty = (& git status --porcelain=v1)
         if ($LASTEXITCODE -ne 0) { throw "git status failed" }
@@ -86,7 +133,7 @@ try {
     Invoke-Checked "visionrig-release-status" "--json"
 
     $collectPhysical = $QualifyAndroid -or $QualifyQuest -or $QualifyKinect
-    if ($StatusOnly -or (-not $collectPhysical -and $CandidateCiRunId -le 0)) {
+    if ($StatusOnly) {
         Write-Host "Status-only run complete. No release evidence was manufactured."
         exit 0
     }
@@ -124,12 +171,19 @@ try {
         throw "No physical evidence was collected and no existing release bundle exists at $bundle"
     }
 
+    if ($CandidateCiRunId -le 0) {
+        $CandidateCiRunId = Find-ExactCandidateCiRunId -Sha $sha
+        if ($CandidateCiRunId -gt 0) {
+            Write-Host "Auto-discovered exact-SHA green main CI run: $CandidateCiRunId"
+        }
+    }
+
     if ($CandidateCiRunId -gt 0) {
         $promotion = Join-Path $validationPath "visionrig-v1-release-promotion.json"
         $promotionArgs = @("--expected-sha", $sha, "--candidate-version", $ExpectedVersion, "--target-version", $TargetVersion, "--ci-run-id", ([string]$CandidateCiRunId), "--output", $promotion, $bundle)
         Invoke-Checked "visionrig-release-promote" @promotionArgs
     } else {
-        Write-Host "Physical release bundle is ready. Promotion skipped because -CandidateCiRunId was not supplied."
+        Write-Host "Physical release bundle is ready. No exact-SHA successful main CI run was found yet; promotion was not attempted."
     }
 
     Invoke-Checked "visionrig-release-status" "--json"
