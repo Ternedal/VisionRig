@@ -25,11 +25,15 @@ VisionRig includes:
 - **live capability refresh so remote Kinect adapts to payload-limit changes without restart**
 - **negotiated SensorPacket compression strategy with live raw/zlib fallback**
 - **negotiated packet-pressure thresholds so adaptive JPEG follows server policy**
-- **heartbeat v3/v4/v5 observability for negotiated producer budget, compression, target utilization and refresh freshness**
+- **heartbeat v3/v4/v5/v6 observability for negotiated producer budget, compression, target utilization, observed utilization and refresh freshness**
 - **fleet attention for stale producer capability negotiation**
 - **fleet packet-target compliance with target-vs-observed attention**
 - **clock-skew-safe capability freshness using VisionRig-observed refresh time**
 - crash-safe webcam/screen reference producer
+- **shared Kotlin/JVM native producer core for Kaliv Android and Quest**
+- **native Kaliv Android CameraX producer adapter**
+- **native Quest 3/3S passthrough Camera2 producer adapter**
+- **shared coroutine cadence/lifecycle runner exposed through both native platform sessions**
 - **live sensor/runtime observability with online/stale/offline liveness**
 - authenticated producer heartbeat + declared sensor capabilities
 - **operator-owned sensor catalog metadata for UI/control surfaces**
@@ -782,3 +786,22 @@ those receipts against the exact candidate SHA/version. The tool validates
 physical evidence only; it deliberately does not claim that CI passed.
 
 See `docs/RELEASE.md`.
+
+
+## Release-candidate status
+
+VisionRig is currently at **0.99.0**, the v1 release-candidate baseline.
+
+Repository CI on current `main` covers and gates:
+- Python tests;
+- Kotlin producer-core tests;
+- Android producer build/unit tests;
+- Quest producer build/unit tests.
+
+The remaining 1.0.0 promotion gate is intentionally external to CI: physical
+qualification receipts from the target sensor/client hardware must be validated
+and bundled against the exact 0.99.0 candidate revision, then combined with the
+matching green main CI run through `visionrig-release-promote`.
+
+Do not treat the 0.99.0 version number or green repository CI alone as a physical
+hardware PASS. See `docs/RELEASE.md` for the exact evidence and finalization flow.
