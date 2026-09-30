@@ -38,6 +38,7 @@ visionrig-producer = "visionrig.producer_cli:main"
 visionrig-profile = "visionrig.profile_cli:main"
 visionrig-kinect-acceptance = "visionrig.kinect_acceptance:main"
 visionrig-qualify-physical = "visionrig.physical_qualification:main"
+visionrig-release-evidence = "visionrig.release_evidence:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
