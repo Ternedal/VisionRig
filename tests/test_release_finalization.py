@@ -315,3 +315,97 @@ def test_finalization_never_grants_production_activation(
         match="gate contract mismatch",
     ):
         validate_finalization_attestation(attestation)
+
+
+def test_standalone_finalization_rejects_non_hex_candidate_sha(
+    tmp_path: Path,
+) -> None:
+    attestation = build_finalization_attestation(
+        _promotion_file(tmp_path),
+        checkout=_checkout(),
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["candidate_sha"] = "z" * 40
+
+    with pytest.raises(
+        ReleaseFinalizationError,
+        match="candidate revision is malformed",
+    ):
+        validate_finalization_attestation(attestation)
+
+
+def test_standalone_finalization_rejects_non_hex_release_sha(
+    tmp_path: Path,
+) -> None:
+    attestation = build_finalization_attestation(
+        _promotion_file(tmp_path),
+        checkout=_checkout(),
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["release_sha"] = "z" * 40
+
+    with pytest.raises(
+        ReleaseFinalizationError,
+        match="release revision is malformed",
+    ):
+        validate_finalization_attestation(attestation)
+
+
+def test_standalone_finalization_rejects_malformed_promotion_digest(
+    tmp_path: Path,
+) -> None:
+    attestation = build_finalization_attestation(
+        _promotion_file(tmp_path),
+        checkout=_checkout(),
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["promotion"]["promotion_sha256"] = "sha256:" + "Z" * 64
+
+    with pytest.raises(
+        ReleaseFinalizationError,
+        match="promotion digest is invalid",
+    ):
+        validate_finalization_attestation(attestation)
+
+
+def test_standalone_finalization_rejects_malformed_promotion_ref(
+    tmp_path: Path,
+) -> None:
+    attestation = build_finalization_attestation(
+        _promotion_file(tmp_path),
+        checkout=_checkout(),
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["promotion"]["promotion_ref"] = (
+        "visionrig-release-promotion:" + CANDIDATE_SHA + ":" + "Z" * 64
+    )
+
+    with pytest.raises(
+        ReleaseFinalizationError,
+        match="promotion ref is not bound to candidate revision",
+    ):
+        validate_finalization_attestation(attestation)
+
+
+def test_standalone_finalization_rejects_malformed_finalization_ref(
+    tmp_path: Path,
+) -> None:
+    attestation = build_finalization_attestation(
+        _promotion_file(tmp_path),
+        checkout=_checkout(),
+        ci_run=_ci_run(),
+        ci_jobs=_ci_jobs(),
+    )
+    attestation["finalization_ref"] = (
+        "visionrig-release-finalization:" + RELEASE_SHA + ":" + "Z" * 64
+    )
+
+    with pytest.raises(
+        ReleaseFinalizationError,
+        match="finalization ref hash mismatch",
+    ):
+        validate_finalization_attestation(attestation)

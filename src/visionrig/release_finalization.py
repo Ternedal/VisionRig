@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -24,6 +25,14 @@ FINALIZATION_SCHEMA = "visionrig/v1-release-finalization/v1"
 FINALIZATION_PREFIX = "visionrig-release-finalization:"
 DEFAULT_OUTPUT = Path("validation/visionrig-v1-release-finalization.json")
 MAX_PROMOTION_BYTES = 1024 * 1024
+_SHA40 = re.compile(r"^[0-9a-f]{40}$")
+_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+_PROMOTION_REF = re.compile(
+    r"^visionrig-release-promotion:[0-9a-f]{40}:[0-9a-f]{64}$"
+)
+_FINALIZATION_REF = re.compile(
+    r"^visionrig-release-finalization:[0-9a-f]{40}:[0-9a-f]{64}$"
+)
 
 CANDIDATE_VERSION = "0.99.0"
 RELEASE_VERSION = DEFAULT_TARGET_VERSION
@@ -270,7 +279,7 @@ def _finalization_binding_payload(
 
 def _expected_finalization_ref(attestation: Mapping[str, Any]) -> str:
     release_sha = attestation.get("release_sha")
-    if not isinstance(release_sha, str) or len(release_sha) != 40:
+    if not isinstance(release_sha, str) or _SHA40.fullmatch(release_sha) is None:
         raise ReleaseFinalizationError("release revision is malformed")
     digest = hashlib.sha256(
         _canonical_json(_finalization_binding_payload(attestation))
@@ -292,9 +301,15 @@ def validate_finalization_attestation(
 
     candidate_sha = attestation.get("candidate_sha")
     release_sha = attestation.get("release_sha")
-    if not isinstance(candidate_sha, str) or len(candidate_sha) != 40:
+    if (
+        not isinstance(candidate_sha, str)
+        or _SHA40.fullmatch(candidate_sha) is None
+    ):
         raise ReleaseFinalizationError("candidate revision is malformed")
-    if not isinstance(release_sha, str) or len(release_sha) != 40:
+    if (
+        not isinstance(release_sha, str)
+        or _SHA40.fullmatch(release_sha) is None
+    ):
         raise ReleaseFinalizationError("release revision is malformed")
     if candidate_sha == release_sha:
         raise ReleaseFinalizationError(
@@ -307,6 +322,7 @@ def validate_finalization_attestation(
     promotion_ref = promotion.get("promotion_ref")
     if (
         not isinstance(promotion_ref, str)
+        or _PROMOTION_REF.fullmatch(promotion_ref) is None
         or not promotion_ref.startswith(
             "visionrig-release-promotion:" + candidate_sha + ":"
         )
@@ -317,8 +333,7 @@ def validate_finalization_attestation(
     promotion_digest = promotion.get("promotion_sha256")
     if (
         not isinstance(promotion_digest, str)
-        or not promotion_digest.startswith("sha256:")
-        or len(promotion_digest) != 71
+        or _SHA256.fullmatch(promotion_digest) is None
     ):
         raise ReleaseFinalizationError("promotion digest is invalid")
     promotion_bytes = promotion.get("promotion_bytes")
@@ -365,6 +380,7 @@ def validate_finalization_attestation(
     actual_ref = attestation.get("finalization_ref")
     if (
         not isinstance(actual_ref, str)
+        or _FINALIZATION_REF.fullmatch(actual_ref) is None
         or actual_ref != _expected_finalization_ref(attestation)
     ):
         raise ReleaseFinalizationError("finalization ref hash mismatch")

@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,9 +30,18 @@ REQUIRED_CI_JOBS = (
     "android-producer",
     "quest-producer",
 )
+DEFAULT_CANDIDATE_VERSION = "0.99.0"
 DEFAULT_TARGET_VERSION = "1.0.0"
 DEFAULT_OUTPUT = Path("validation/visionrig-v1-release-promotion.json")
 MAX_BUNDLE_BYTES = 1024 * 1024
+_SHA40 = re.compile(r"^[0-9a-f]{40}$")
+_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+_BUNDLE_REF = re.compile(
+    r"^visionrig-release-evidence:[0-9a-f]{40}:[0-9a-f]{64}$"
+)
+_PROMOTION_REF = re.compile(
+    r"^visionrig-release-promotion:[0-9a-f]{40}:[0-9a-f]{64}$"
+)
 
 
 class ReleasePromotionError(RuntimeError):
@@ -219,7 +229,7 @@ def _promotion_binding_payload(attestation: Mapping[str, Any]) -> dict[str, Any]
 
 def _expected_promotion_ref(attestation: Mapping[str, Any]) -> str:
     sha = attestation.get("visionrig_git_sha")
-    if not isinstance(sha, str) or len(sha) != 40:
+    if not isinstance(sha, str) or _SHA40.fullmatch(sha) is None:
         raise ReleasePromotionError("promotion revision is malformed")
     digest = hashlib.sha256(
         _canonical_json(_promotion_binding_payload(attestation))
@@ -232,8 +242,13 @@ def validate_promotion_attestation(attestation: Mapping[str, Any]) -> None:
         raise ReleasePromotionError("promotion schema mismatch")
     if attestation.get("repository") != OFFICIAL_REPOSITORY:
         raise ReleasePromotionError("promotion repository mismatch")
+    if attestation.get("candidate_version") != DEFAULT_CANDIDATE_VERSION:
+        raise ReleasePromotionError("promotion candidate version mismatch")
     if attestation.get("target_version") != DEFAULT_TARGET_VERSION:
         raise ReleasePromotionError("promotion target version mismatch")
+    sha = attestation.get("visionrig_git_sha")
+    if not isinstance(sha, str) or _SHA40.fullmatch(sha) is None:
+        raise ReleasePromotionError("promotion revision is malformed")
 
     physical = attestation.get("physical_evidence")
     if not isinstance(physical, Mapping):
@@ -246,20 +261,24 @@ def validate_promotion_attestation(attestation: Mapping[str, Any]) -> None:
         + str(attestation.get("visionrig_git_sha"))
         + ":"
     )
-    if not isinstance(bundle_ref, str) or not bundle_ref.startswith(
-        expected_bundle_prefix
+    if (
+        not isinstance(bundle_ref, str)
+        or _BUNDLE_REF.fullmatch(bundle_ref) is None
+        or not bundle_ref.startswith(expected_bundle_prefix)
     ):
         raise ReleasePromotionError(
             "physical bundle ref is not bound to promotion revision"
         )
     if (
         not isinstance(bundle_digest, str)
-        or not bundle_digest.startswith("sha256:")
-        or len(bundle_digest) != 71
+        or _SHA256.fullmatch(bundle_digest) is None
     ):
         raise ReleasePromotionError("physical bundle digest is invalid")
     if not isinstance(bundle_bytes, int) or not 1 <= bundle_bytes <= MAX_BUNDLE_BYTES:
         raise ReleasePromotionError("physical bundle byte count is invalid")
+    evidence_count = physical.get("evidence_count")
+    if not isinstance(evidence_count, int) or not 1 <= evidence_count <= 16:
+        raise ReleasePromotionError("physical evidence count is invalid")
 
     ci = attestation.get("repository_ci")
     if not isinstance(ci, Mapping):
@@ -280,8 +299,10 @@ def validate_promotion_attestation(attestation: Mapping[str, Any]) -> None:
         raise ReleasePromotionError("promotion gate contract mismatch")
 
     actual_ref = attestation.get("promotion_ref")
-    if not isinstance(actual_ref, str) or actual_ref != _expected_promotion_ref(
-        attestation
+    if (
+        not isinstance(actual_ref, str)
+        or _PROMOTION_REF.fullmatch(actual_ref) is None
+        or actual_ref != _expected_promotion_ref(attestation)
     ):
         raise ReleasePromotionError("promotion ref hash mismatch")
 
@@ -300,8 +321,10 @@ def build_promotion_attestation(
         char not in "0123456789abcdef" for char in normalized_sha
     ):
         raise ReleasePromotionError("expected SHA must be 40 lowercase hex characters")
-    if not expected_candidate_version.strip():
-        raise ReleasePromotionError("candidate version must not be empty")
+    if expected_candidate_version != DEFAULT_CANDIDATE_VERSION:
+        raise ReleasePromotionError(
+            "v1 promotion candidate must be 0.99.0"
+        )
     if target_version != DEFAULT_TARGET_VERSION:
         raise ReleasePromotionError("v1 promotion target must be 1.0.0")
 
