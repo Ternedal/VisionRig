@@ -207,9 +207,17 @@ def _validate_kinect(
     expected_version: str,
 ) -> dict[str, Any]:
     try:
-        receipt = KinectPhysicalAcceptanceReceipt.model_validate(report)
+        receipt = KinectPhysicalAcceptanceReceipt.model_validate_json(
+            json.dumps(
+                report,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            )
+        )
     except Exception as exc:
-        raise ReleaseEvidenceError("Kinect physical acceptance receipt is invalid") from exc
+        raise ReleaseEvidenceError(
+            "Kinect physical acceptance receipt is invalid"
+        ) from exc
 
     if receipt.visionrig_git_sha != expected_sha:
         raise ReleaseEvidenceError(
