@@ -46,3 +46,24 @@ cleartext access globally by accident.
 ## Threading
 
 `KalivAndroidProducerSession.step()` is a blocking producer step and must run on a worker thread/coroutine dispatcher, never the Android main/UI thread. The CameraX adapter fails closed if `open()` or `capture()` is invoked on the main thread. Lifecycle binding itself is marshalled back to the main executor internally.
+
+
+## Physical qualification
+
+Once the Android producer is online in VisionRig as source `kaliv-android`, use
+the same physical release-evidence gate as Kinect:
+
+```powershell
+$sha = (git -C C:\path\to\VisionRig rev-parse HEAD).Trim()
+visionrig-qualify-physical --expected-sha $sha --source-id kaliv-android
+```
+
+While the gate is running, create an obvious semantic scene change in front of
+the phone camera. A PASS requires a fresh `camera` PerceptionEvent/v4 from that
+exact source, a fresh exact-bound ModelRig admission, stable VisionRig
+process/build identity through finalization, and no production/identity/memory
+authority escalation.
+
+The qualifier talks to the loopback VisionRig service, not directly to the
+Android device. The Android producer must already be online and actively
+delivering frames through the authenticated sensor gateway.
