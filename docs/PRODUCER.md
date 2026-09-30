@@ -355,3 +355,16 @@ The first native client slice now lives in `clients/kaliv-producer-core`. It is 
 ## Kaliv Quest passthrough Camera2 adapter
 
 A Quest-native adapter lives in `clients/kaliv-quest-producer`. It targets Meta Quest 3 / Quest 3S on Horizon OS v74+ and uses the official Camera2 passthrough API with Meta vendor tags for passthrough source and left/right camera position. The adapter requires both Android camera permission and `horizonos.permission.HEADSET_CAMERA`, negotiates a supported even YUV_420_888 output size, emits JPEG frames into the shared producer core, and closes capture when VisionRig desired state disables the source or a permission/camera/control/transport failure occurs. Quest 2 is intentionally not advertised as supported by this camera path because Meta does not expose passthrough RGB frames there.
+
+
+## Native platform coroutine runner
+
+The Android and Quest producer sessions expose both a single blocking `step()`
+and a suspending `run()`. The latter delegates to the shared
+`ProducerRunner`, preserving the same enabled FPS cadence, disabled control-poll
+cadence, cancellation cleanup and durable sequence/drop semantics as the core
+reference loop.
+
+The consuming application owns the coroutine lifecycle (for example Android
+`lifecycleScope`) and should run producer work on a worker dispatcher. VisionRig
+does not create a hidden global scope or background service inside the library.
