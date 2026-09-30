@@ -39,6 +39,24 @@ or let the qualifier select the freshest online camera/VR source:
 visionrig-qualify-physical
 ~~~
 
+Native Kaliv clients use the same gate once they are online and already
+delivering frames through the authenticated sensor gateway:
+
+~~~powershell
+# Kaliv Android / CameraX
+$sha = (git rev-parse HEAD).Trim()
+visionrig-qualify-physical --expected-sha $sha --source-id kaliv-android
+
+# Kaliv Quest 3/3S / passthrough Camera2
+$sha = (git rev-parse HEAD).Trim()
+visionrig-qualify-physical --expected-sha $sha --source-id kaliv-quest
+~~~
+
+For Android the source type is `camera`; for Quest it is `vr`. In both cases
+the qualifier still runs locally against the loopback VisionRig service. The
+remote device is evidence only after VisionRig has accepted fresh frames from
+that exact source.
+
 Default VisionRig origin:
 
 ~~~text
