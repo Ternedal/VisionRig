@@ -196,6 +196,22 @@ class ProducerControlLoopConcurrencyTest {
             MockResponse().setResponseCode(200).setBody(
                 """
                 {
+                  "schema":"visionrig/producer-capabilities/v2",
+                  "max_payload_bytes":1048576,
+                  "gateway_max_payload_bytes":1048576,
+                  "core_max_payload_bytes":1048576,
+                  "sensor_packet_schemas":["visionrig/sensor-packet/v2"],
+                  "sensor_packet_compressions":["none","zlib","auto"],
+                  "packet_payload_warning_utilization":0.8,
+                  "packet_payload_critical_utilization":0.95
+                }
+                """.trimIndent()
+            )
+        )
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """
+                {
                   "schema_id":"visionrig/sensor-heartbeat-receipt/v1",
                   "status":"accepted",
                   "source_id":"kaliv-android",
