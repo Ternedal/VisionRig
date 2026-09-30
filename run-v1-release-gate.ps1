@@ -1,5 +1,6 @@
 param(
     [switch]$StatusOnly,
+    [switch]$AllowDetachedHeadForCi,
     [switch]$QualifyAndroid,
     [switch]$QualifyQuest,
     [switch]$QualifyKinect,
@@ -40,10 +41,18 @@ try {
         if ($dirty) {
             throw "Release gate requires a clean checkout. Commit or discard local changes first."
         }
-        $branch = (& git branch --show-current).Trim()
+        $branchRaw = (& git branch --show-current)
         if ($LASTEXITCODE -ne 0) { throw "Unable to resolve current branch" }
-        if ($branch -ne "main") {
-            throw "Release gate must run from main; current branch is '$branch'"
+        $branch = if ($null -eq $branchRaw) { "" } else { ([string]$branchRaw).Trim() }
+        $detachedCiStatusCheck = (
+            $branch -eq "" -and
+            $StatusOnly -and
+            $AllowDetachedHeadForCi -and
+            $env:GITHUB_ACTIONS -eq "true"
+        )
+        if (-not $detachedCiStatusCheck -and $branch -ne "main") {
+            $displayBranch = if ($branch) { $branch } else { "<detached>" }
+            throw "Release gate must run from main; current branch is '$displayBranch'"
         }
         $sha = (& git rev-parse HEAD).Trim()
         if ($LASTEXITCODE -ne 0 -or $sha -notmatch "^[0-9a-f]{40}$") {
