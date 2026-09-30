@@ -11,6 +11,7 @@ from visionrig.release_evidence import (
     BUNDLE_SCHEMA,
     ReleaseEvidenceError,
     build_release_evidence_bundle,
+    validate_bundle_integrity,
     validate_evidence,
 )
 
@@ -212,12 +213,20 @@ def test_builds_bundle_without_claiming_ci_verification(tmp_path: Path) -> None:
 
     assert bundle["schema"] == BUNDLE_SCHEMA
     assert bundle["evidence_count"] == 2
+    assert str(bundle["bundle_ref"]).startswith(
+        "visionrig-release-evidence:" + SHA + ":"
+    )
     assert bundle["gate"] == {
         "physical_evidence_validated": True,
         "repository_ci_required": True,
         "repository_ci_verified_by_this_tool": False,
         "production_activation": False,
     }
+    for item in bundle["evidence"]:
+        assert str(item["receipt_sha256"]).startswith("sha256:")
+        assert item["receipt_bytes"] > 0
+
+    validate_bundle_integrity(bundle)
 
 
 def test_rejects_duplicate_source_evidence(tmp_path: Path) -> None:
@@ -231,3 +240,59 @@ def test_rejects_duplicate_source_evidence(tmp_path: Path) -> None:
             expected_version=VERSION,
             require_clean_checkout=False,
         )
+
+
+def test_receipt_digest_binds_exact_file_bytes(tmp_path: Path) -> None:
+    import hashlib
+
+    path = _write(tmp_path / "android.json", _generic_report())
+    raw = path.read_bytes()
+
+    bundle = build_release_evidence_bundle(
+        [path],
+        expected_sha=SHA,
+        expected_version=VERSION,
+        require_clean_checkout=False,
+    )
+
+    item = bundle["evidence"][0]
+    assert item["receipt_sha256"] == "sha256:" + hashlib.sha256(raw).hexdigest()
+    assert item["receipt_bytes"] == len(raw)
+
+
+def test_bundle_ref_is_independent_of_evidence_path(tmp_path: Path) -> None:
+    first_dir = tmp_path / "one"
+    second_dir = tmp_path / "two"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    first = _write(first_dir / "receipt.json", _generic_report())
+    second = _write(second_dir / "receipt.json", _generic_report())
+
+    first_bundle = build_release_evidence_bundle(
+        [first],
+        expected_sha=SHA,
+        expected_version=VERSION,
+        require_clean_checkout=False,
+    )
+    second_bundle = build_release_evidence_bundle(
+        [second],
+        expected_sha=SHA,
+        expected_version=VERSION,
+        require_clean_checkout=False,
+    )
+
+    assert first_bundle["bundle_ref"] == second_bundle["bundle_ref"]
+
+
+def test_bundle_integrity_detects_bound_metadata_tampering(tmp_path: Path) -> None:
+    path = _write(tmp_path / "android.json", _generic_report())
+    bundle = build_release_evidence_bundle(
+        [path],
+        expected_sha=SHA,
+        expected_version=VERSION,
+        require_clean_checkout=False,
+    )
+    bundle["evidence"][0]["receipt_bytes"] += 1
+
+    with pytest.raises(ReleaseEvidenceError, match="ref hash mismatch"):
+        validate_bundle_integrity(bundle)

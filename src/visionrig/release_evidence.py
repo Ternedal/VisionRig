@@ -28,6 +28,10 @@ _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _EVENT_REF = re.compile(r"^visionrig-event:[0-9a-f]{64}$")
 _EVIDENCE_REF = re.compile(r"^world-evidence-event:[0-9a-f]{64}$")
 _COGNITION_REF = re.compile(r"^cevt-[0-9a-f]{32}$")
+_RECEIPT_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
+_BUNDLE_REF = re.compile(
+    r"^visionrig-release-evidence:[0-9a-f]{40}:[0-9a-f]{64}$"
+)
 
 
 class ReleaseEvidenceError(RuntimeError):
@@ -43,24 +47,32 @@ def _canonical_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def _read_json(path: Path) -> Mapping[str, Any]:
+def _read_evidence_file(
+    path: Path,
+) -> tuple[Mapping[str, Any], str, int]:
     if path.is_symlink():
         raise ReleaseEvidenceError(f"evidence path cannot be a symlink: {path}")
     try:
-        size = path.stat().st_size
+        raw = path.read_bytes()
     except OSError as exc:
         raise ReleaseEvidenceError(f"evidence file is unavailable: {path}") from exc
+    size = len(raw)
     if size <= 0 or size > MAX_EVIDENCE_BYTES:
         raise ReleaseEvidenceError(
             f"evidence file size is outside (0, {MAX_EVIDENCE_BYTES}]: {path}"
         )
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise ReleaseEvidenceError(f"evidence file is not valid UTF-8 JSON: {path}") from exc
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ReleaseEvidenceError(
+            f"evidence file is not valid UTF-8 JSON: {path}"
+        ) from exc
     if not isinstance(value, Mapping):
-        raise ReleaseEvidenceError(f"evidence file must contain a JSON object: {path}")
-    return value
+        raise ReleaseEvidenceError(
+            f"evidence file must contain a JSON object: {path}"
+        )
+    digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+    return value, digest, size
 
 
 def _require_mapping(
@@ -316,8 +328,9 @@ def build_release_evidence_bundle(
     evidence: list[dict[str, Any]] = []
     source_keys: set[tuple[str, str]] = set()
     for path in evidence_paths:
+        report, receipt_sha256, receipt_bytes = _read_evidence_file(path)
         summary = validate_evidence(
-            _read_json(path),
+            report,
             expected_sha=normalized_sha,
             expected_version=expected_version,
         )
@@ -327,10 +340,17 @@ def build_release_evidence_bundle(
                 "duplicate physical evidence for source " + summary["source_id"]
             )
         source_keys.add(key)
-        evidence.append({"path": str(path), **summary})
+        evidence.append(
+            {
+                "path": str(path),
+                "receipt_sha256": receipt_sha256,
+                "receipt_bytes": receipt_bytes,
+                **summary,
+            }
+        )
 
     evidence.sort(key=lambda item: (str(item["source_type"]), str(item["source_id"])))
-    return {
+    bundle = {
         "schema": BUNDLE_SCHEMA,
         "generated_at": datetime.now(timezone.utc)
         .isoformat()
@@ -346,6 +366,95 @@ def build_release_evidence_bundle(
             "production_activation": False,
         },
     }
+    bundle["bundle_ref"] = _expected_bundle_ref(bundle)
+    validate_bundle_integrity(bundle)
+    return bundle
+
+
+def _bundle_binding_payload(bundle: Mapping[str, Any]) -> dict[str, Any]:
+    raw_evidence = bundle.get("evidence")
+    if not isinstance(raw_evidence, list):
+        raise ReleaseEvidenceError("release evidence bundle lacks evidence list")
+    evidence: list[dict[str, Any]] = []
+    for item in raw_evidence:
+        if not isinstance(item, Mapping):
+            raise ReleaseEvidenceError("release evidence bundle item must be an object")
+        bound = dict(item)
+        bound.pop("path", None)
+        evidence.append(bound)
+    return {
+        "schema": bundle.get("schema"),
+        "visionrig_version": bundle.get("visionrig_version"),
+        "visionrig_git_sha": bundle.get("visionrig_git_sha"),
+        "evidence_count": bundle.get("evidence_count"),
+        "evidence": evidence,
+        "gate": bundle.get("gate"),
+    }
+
+
+def _expected_bundle_ref(bundle: Mapping[str, Any]) -> str:
+    revision = bundle.get("visionrig_git_sha")
+    if not isinstance(revision, str) or _SHA40.fullmatch(revision) is None:
+        raise ReleaseEvidenceError("release evidence bundle revision is malformed")
+    digest = hashlib.sha256(
+        _canonical_json(_bundle_binding_payload(bundle))
+    ).hexdigest()
+    return "visionrig-release-evidence:" + revision + ":" + digest
+
+
+def validate_bundle_integrity(bundle: Mapping[str, Any]) -> None:
+    if bundle.get("schema") != BUNDLE_SCHEMA:
+        raise ReleaseEvidenceError("release evidence bundle schema mismatch")
+    evidence = bundle.get("evidence")
+    if not isinstance(evidence, list) or not 1 <= len(evidence) <= 16:
+        raise ReleaseEvidenceError("release evidence bundle evidence list is invalid")
+    if bundle.get("evidence_count") != len(evidence):
+        raise ReleaseEvidenceError("release evidence bundle count mismatch")
+
+    source_keys: set[tuple[str, str]] = set()
+    for item in evidence:
+        if not isinstance(item, Mapping):
+            raise ReleaseEvidenceError("release evidence bundle item must be an object")
+        digest = item.get("receipt_sha256")
+        if not isinstance(digest, str) or _RECEIPT_SHA256.fullmatch(digest) is None:
+            raise ReleaseEvidenceError("release evidence receipt SHA-256 is malformed")
+        receipt_bytes = item.get("receipt_bytes")
+        if (
+            not isinstance(receipt_bytes, int)
+            or receipt_bytes <= 0
+            or receipt_bytes > MAX_EVIDENCE_BYTES
+        ):
+            raise ReleaseEvidenceError("release evidence receipt byte count is invalid")
+        source_id = item.get("source_id")
+        source_type = item.get("source_type")
+        if not isinstance(source_id, str) or not source_id:
+            raise ReleaseEvidenceError("release evidence bundle source id is missing")
+        if not isinstance(source_type, str) or not source_type:
+            raise ReleaseEvidenceError("release evidence bundle source type is missing")
+        key = (source_type, source_id)
+        if key in source_keys:
+            raise ReleaseEvidenceError(
+                "release evidence bundle contains duplicate source evidence"
+            )
+        source_keys.add(key)
+
+    gate = bundle.get("gate")
+    if not isinstance(gate, Mapping):
+        raise ReleaseEvidenceError("release evidence bundle gate is missing")
+    expected_gate = {
+        "physical_evidence_validated": True,
+        "repository_ci_required": True,
+        "repository_ci_verified_by_this_tool": False,
+        "production_activation": False,
+    }
+    if dict(gate) != expected_gate:
+        raise ReleaseEvidenceError("release evidence bundle gate contract mismatch")
+
+    actual_ref = bundle.get("bundle_ref")
+    if not isinstance(actual_ref, str) or _BUNDLE_REF.fullmatch(actual_ref) is None:
+        raise ReleaseEvidenceError("release evidence bundle ref is malformed")
+    if actual_ref != _expected_bundle_ref(bundle):
+        raise ReleaseEvidenceError("release evidence bundle ref hash mismatch")
 
 
 def _write_json_atomic(path: Path, value: Mapping[str, Any]) -> None:

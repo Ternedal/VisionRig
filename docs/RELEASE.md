@@ -88,3 +88,21 @@ The bundle includes
 `repository_ci_verified_by_this_tool=false` by design. A valid physical bundle
 plus an independently green repository CI run are the two release facts needed
 for the v1 promotion decision.
+
+
+## Bundle integrity
+
+Each evidence entry records:
+
+- `receipt_sha256`: SHA-256 over the exact receipt file bytes;
+- `receipt_bytes`: the bounded receipt byte length.
+
+The bundle also carries a canonical `bundle_ref`:
+
+`visionrig-release-evidence:<git-sha>:<sha256>`
+
+The bundle hash excludes local file paths and generation time, so the same set
+of unchanged receipt bytes and validated metadata produces the same binding on
+another machine or directory. Changing any bound receipt digest, byte count,
+source identity, revision/version summary, or gate field invalidates the bundle
+reference.
