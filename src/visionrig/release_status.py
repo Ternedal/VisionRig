@@ -75,7 +75,16 @@ def _inspect_artifact(
     try:
         value, digest, size = _read_json_artifact(path)
         validator(value)
-    except (ReleaseStatusError, *error_types) as exc:
+    except ReleaseStatusError as exc:
+        return (
+            {
+                "path": str(path),
+                "state": "invalid",
+                "error": str(exc),
+            },
+            None,
+        )
+    except error_types as exc:
         return (
             {
                 "path": str(path),
