@@ -129,7 +129,7 @@ depth remains valid but cannot manufacture metric ordering.
 
 ## Current repository state
 
-As of VisionRig 0.89.0, `main` is the authoritative implementation branch.
+As of VisionRig 0.99.0, `main` is the authoritative implementation branch.
 Historical feature branches may remain for provenance, but they are not a source
 of newer runtime behavior unless explicitly rebased into a new pull request.
 
@@ -185,3 +185,17 @@ VisionRig now validates the semantic shape of ModelRig admission receipts at the
 ### V7 cognition-event evidence binding
 
 For fresh VisionRig world evidence, ModelRig derives the cognition event id deterministically from the canonical world-evidence reference and the fixed `world_change` cognition kind. VisionRig validates that exact derivation at the bridge boundary, so a syntactically valid but unrelated cognition id cannot be accepted as downstream proof.
+
+
+### V1 release-candidate baseline
+
+VisionRig 0.99.0 is the pre-1.0 release-candidate baseline. It includes the
+shared native Kotlin producer core, Android CameraX and Quest 3/3S Camera2
+clients, coroutine cadence/lifecycle support, capability negotiation, exact
+ModelRig cognition-proof binding, canonical physical release evidence, and
+final service-instance/build revalidation during physical qualification.
+
+Promotion to 1.0 should be based on release evidence rather than another broad
+architecture slice: clean repository CI plus physical acceptance on the target
+sensor/client hardware. Hardware acceptance remains fail-closed and external to
+the semantic version number itself.
