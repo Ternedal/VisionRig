@@ -40,3 +40,24 @@ cleartext access globally by accident.
 ## Threading
 
 `KalivQuestProducerSession.step()` is blocking producer work and must run on a worker thread/coroutine dispatcher, never the Android main/UI thread. The Quest Camera2 adapter fails closed if `open()` or `capture()` is invoked on the main thread.
+
+
+## Physical qualification
+
+Once the Quest producer is online in VisionRig as source `kaliv-quest`, qualify
+the physical passthrough path with the generic VisionRig physical gate:
+
+```powershell
+$sha = (git -C C:\path\to\VisionRig rev-parse HEAD).Trim()
+visionrig-qualify-physical --expected-sha $sha --source-id kaliv-quest
+```
+
+Create an obvious semantic scene change in the headset camera view while the
+gate is running. A PASS requires a fresh `vr` PerceptionEvent/v4 from that exact
+source, a fresh exact-bound ModelRig admission, stable VisionRig process/build
+identity through finalization, and no production/identity/memory authority
+escalation.
+
+The qualifier runs against the loopback VisionRig service. The Quest 3/3S client
+must already be online and actively delivering passthrough frames through the
+authenticated sensor gateway.
