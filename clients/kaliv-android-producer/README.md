@@ -24,6 +24,25 @@ val producer = KalivAndroidProducerSession.create(
 val result = producer.step()
 ```
 
+
+
+For continuous capture, prefer the shared coroutine runner instead of manually
+reimplementing polling/FPS cadence:
+
+```kotlin
+lifecycleScope.launch(Dispatchers.IO) {
+    producer.run(
+        config = ProducerRunConfig(
+            fps = 5.0,
+            disabledPollMillis = 2_000,
+        ),
+    )
+}
+```
+
+Cancellation closes capture through the shared runner `finally` path. The same
+session can be run again later; desired-state is re-read before capture reopens.
+
 The app remains responsible for:
 - requesting CAMERA permission before creating/running the producer;
 - choosing scheduling/lifecycle cadence for `step()`;
