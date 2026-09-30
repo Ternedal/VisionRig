@@ -16,6 +16,7 @@ from .release_promotion import (
     ReleasePromotionError,
     fetch_ci_evidence,
     validate_ci_run,
+    validate_ci_summary,
     validate_promotion_attestation,
 )
 
@@ -343,8 +344,12 @@ def validate_finalization_attestation(
     ci = attestation.get("repository_ci")
     if not isinstance(ci, Mapping):
         raise ReleaseFinalizationError("release CI binding is missing")
-    if ci.get("head_sha") != release_sha:
-        raise ReleaseFinalizationError("release CI revision mismatch")
+    try:
+        validate_ci_summary(ci, expected_sha=release_sha)
+    except ReleasePromotionError as exc:
+        raise ReleaseFinalizationError(
+            "release CI summary is invalid"
+        ) from exc
 
     expected_gate = {
         "candidate_promotion_verified": True,
