@@ -145,6 +145,65 @@ def validate_ci_run(
     }
 
 
+
+def validate_ci_summary(
+    ci: Mapping[str, Any],
+    *,
+    expected_sha: str,
+) -> None:
+    if ci.get("repository") != OFFICIAL_REPOSITORY:
+        raise ReleasePromotionError("CI summary repository mismatch")
+    if ci.get("workflow_name") != REQUIRED_WORKFLOW_NAME:
+        raise ReleasePromotionError("CI summary workflow name mismatch")
+    if ci.get("workflow_path") != REQUIRED_WORKFLOW_PATH:
+        raise ReleasePromotionError("CI summary workflow path mismatch")
+    if ci.get("event") != "push":
+        raise ReleasePromotionError("CI summary event mismatch")
+    if ci.get("branch") != "main":
+        raise ReleasePromotionError("CI summary branch mismatch")
+    if ci.get("head_sha") != expected_sha:
+        raise ReleasePromotionError("CI summary revision mismatch")
+
+    run_id = ci.get("run_id")
+    run_attempt = ci.get("run_attempt")
+    run_url = ci.get("run_url")
+    if not isinstance(run_id, int) or run_id <= 0:
+        raise ReleasePromotionError("CI summary run id is invalid")
+    if not isinstance(run_attempt, int) or run_attempt <= 0:
+        raise ReleasePromotionError("CI summary run attempt is invalid")
+    expected_url_prefix = (
+        "https://github.com/Ternedal/VisionRig/actions/runs/"
+    )
+    if (
+        not isinstance(run_url, str)
+        or not run_url.startswith(expected_url_prefix)
+        or not run_url.endswith("/" + str(run_id))
+    ):
+        raise ReleasePromotionError("CI summary run URL is invalid")
+
+    jobs = ci.get("required_jobs")
+    if not isinstance(jobs, list) or len(jobs) != len(REQUIRED_CI_JOBS):
+        raise ReleasePromotionError("CI summary required jobs are invalid")
+    names: list[str] = []
+    for item in jobs:
+        if not isinstance(item, Mapping):
+            raise ReleasePromotionError("CI summary job is invalid")
+        name = item.get("name")
+        job_id = item.get("job_id")
+        conclusion = item.get("conclusion")
+        if not isinstance(name, str):
+            raise ReleasePromotionError("CI summary job name is invalid")
+        if not isinstance(job_id, int) or job_id <= 0:
+            raise ReleasePromotionError("CI summary job id is invalid")
+        if conclusion != "success":
+            raise ReleasePromotionError(
+                "CI summary contains non-success required job"
+            )
+        names.append(name)
+    if names != list(REQUIRED_CI_JOBS):
+        raise ReleasePromotionError("CI summary job set mismatch")
+
+
 def _promotion_binding_payload(attestation: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "schema": attestation.get("schema"),
@@ -205,15 +264,10 @@ def validate_promotion_attestation(attestation: Mapping[str, Any]) -> None:
     ci = attestation.get("repository_ci")
     if not isinstance(ci, Mapping):
         raise ReleasePromotionError("repository CI binding is missing")
-    if ci.get("head_sha") != attestation.get("visionrig_git_sha"):
-        raise ReleasePromotionError("promotion CI revision mismatch")
-    names = ci.get("required_jobs")
-    if not isinstance(names, list):
-        raise ReleasePromotionError("promotion CI jobs are missing")
-    if [item.get("name") for item in names if isinstance(item, Mapping)] != list(
-        REQUIRED_CI_JOBS
-    ):
-        raise ReleasePromotionError("promotion CI job set mismatch")
+    validate_ci_summary(
+        ci,
+        expected_sha=str(attestation.get("visionrig_git_sha")),
+    )
 
     expected_gate = {
         "physical_evidence_validated": True,
