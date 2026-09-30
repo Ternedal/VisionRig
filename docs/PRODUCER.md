@@ -354,4 +354,4 @@ The first native client slice now lives in `clients/kaliv-producer-core`. It is 
 
 ## Kaliv Android CameraX adapter
 
-The native Android adapter lives under `clients/kaliv-android-producer`. It uses CameraX `ImageCapture` and the shared Kotlin producer core, so desired-state convergence, heartbeat acknowledgement and durable sequence/drop semantics stay aligned with the JVM core. Capture fails closed on missing permission, CameraX lifecycle/binding failure or VisionRig control/transport failure. Default durable state is isolated by gateway URL, source id and source type.
+A native Android adapter is implemented under `clients/kaliv-android-producer`. It uses CameraX ImageCapture and the shared Kotlin producer core, so desired-state convergence, heartbeat acknowledgement and durable sequence/drop semantics remain identical to the JVM core. The adapter is lifecycle-aware and fails closed on missing camera permission, CameraX binding errors or VisionRig control/transport errors.
