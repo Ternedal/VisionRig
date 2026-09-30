@@ -246,3 +246,45 @@ visionrig-release-status --require-finalized
 `--require-ready` succeeds only after a valid, byte-bound promotion
 attestation. `--require-finalized` succeeds only after the complete v1
 finalization chain is valid and the installed package reports 1.0.0.
+
+
+## One-command candidate gate runner
+
+For the rig-side candidate workflow on Windows, use the fail-closed wrapper:
+
+```powershell
+.\run-v1-release-gate.ps1 -StatusOnly
+```
+
+To collect Android and Quest physical receipts, bundle them, and bind the bundle
+to the exact checkout:
+
+```powershell
+.\run-v1-release-gate.ps1 -QualifyAndroid -QualifyQuest
+```
+
+To include Kinect v2:
+
+```powershell
+.\run-v1-release-gate.ps1 \
+  -QualifyAndroid \
+  -QualifyQuest \
+  -QualifyKinect \
+  -KinectModelManifest <model-manifest.json> \
+  -ModelRigWorkerUrl http://127.0.0.1:<port>
+```
+
+After the exact candidate SHA has a green `main` push workflow, add the run id
+to create the promotion attestation in the same invocation:
+
+```powershell
+.\run-v1-release-gate.ps1 \
+  -QualifyAndroid \
+  -QualifyQuest \
+  -CandidateCiRunId <github-actions-run-id>
+```
+
+The wrapper refuses dirty/non-`main` checkouts, binds
+`VISIONRIG_GIT_SHA` to the exact checkout, requires the 0.99.0 candidate
+version, never manufactures missing physical evidence, never bumps the package
+version, and never grants production authority.
