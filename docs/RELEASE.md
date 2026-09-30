@@ -158,3 +158,53 @@ Only after the promotion attestation passes should the release commit change
 the package/reported version from `0.99.0` to `1.0.0`. The attestation binds
 the exact tested candidate SHA and is retained as evidence for that promotion.
 Do not infer a v1 PASS from a version bump alone.
+
+
+## 7. Finalize the one-commit v1 release
+
+After the v1 promotion attestation passes, create **exactly one** release commit
+whose direct parent is the promoted 0.99.0 candidate.
+
+The release commit must contain the required version changes in:
+
+- `pyproject.toml`
+- `src/visionrig/__init__.py`
+- `tests/test_version.py`
+
+It may additionally update release-only documentation:
+
+- `README.md`
+- `docs/ARCHITECTURE.md`
+- `docs/RELEASE.md`
+
+No other source, workflow, dependency or runtime file may change in that commit.
+The finalizer also verifies that the three required version files differ from the
+candidate by the exact 0.99.0 -> 1.0.0 transition only.
+
+After the release commit is pushed to `main`, require the normal four-job CI
+workflow to pass for the **release commit SHA itself**, then run:
+
+```powershell
+visionrig-release-finalize `
+  --ci-run-id <release-commit-main-push-run-id> `
+  validation/visionrig-v1-release-promotion.json
+```
+
+Default output:
+
+`validation/visionrig-v1-release-finalization.json`
+
+The finalization attestation binds:
+
+- the exact promoted candidate SHA and promotion-attestation bytes;
+- the exact 1.0.0 release commit SHA;
+- the canonical changed-path set;
+- the green exact-SHA main CI run and all four required job ids.
+
+It is content-addressed as:
+
+`visionrig-release-finalization:<release-sha>:<sha256>`
+
+A PASS sets `release_finalized=true` while still keeping
+`production_activation=false`. Only after that PASS should the 1.0.0 tag or
+release be published.
