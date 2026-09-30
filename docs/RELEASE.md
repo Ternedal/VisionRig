@@ -106,3 +106,55 @@ of unchanged receipt bytes and validated metadata produces the same binding on
 another machine or directory. Changing any bound receipt digest, byte count,
 source identity, revision/version summary, or gate field invalidates the bundle
 reference.
+
+
+## 5. Create the final v1 promotion attestation
+
+After the physical evidence bundle is valid, identify the **green push run on
+`main` for the exact same candidate SHA**. The promotion tool verifies the run
+directly through the GitHub API and requires all four release jobs to be green:
+
+- `test`
+- `kotlin-producer-core`
+- `android-producer`
+- `quest-producer`
+
+Run:
+
+```powershell
+visionrig-release-promote `
+  --expected-sha $sha `
+  --candidate-version 0.99.0 `
+  --target-version 1.0.0 `
+  --ci-run-id <github-actions-run-id> `
+  validation/visionrig-release-evidence-bundle.json
+```
+
+For public GitHub API reads no token is normally required. If rate limits or
+repository policy require authentication, set `GITHUB_TOKEN`; the CLI reads it
+without persisting it.
+
+Default output:
+
+`validation/visionrig-v1-release-promotion.json`
+
+The promotion attestation is content-addressed as:
+
+`visionrig-release-promotion:<git-sha>:<sha256>`
+
+A PASS proves that one exact 0.99.0 candidate revision has both:
+
+1. revision/version-bound physical evidence; and
+2. a completed successful `tests` push workflow on `main` for the same SHA,
+   with every required Python/Kotlin/Android/Quest job green.
+
+The attestation sets `release_ready=true` but deliberately keeps
+`production_activation=false`. Release readiness is not runtime production
+authority.
+
+## 6. Promote the package version
+
+Only after the promotion attestation passes should the release commit change
+the package/reported version from `0.99.0` to `1.0.0`. The attestation binds
+the exact tested candidate SHA and is retained as evidence for that promotion.
+Do not infer a v1 PASS from a version bump alone.
