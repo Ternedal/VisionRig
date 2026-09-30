@@ -182,8 +182,3 @@ The VisionRig → ModelRig bridge validates canonical receipt references at the 
 ### V7 ModelRig admission-shape validation
 
 VisionRig now validates the semantic shape of ModelRig admission receipts at the bridge boundary. A replay must not change WorldState and must not queue cognition; a fresh admission must change WorldState and must queue exactly one cognition event. Receipts that contradict those invariants are rejected before semantic state is committed or release qualification observes them.
-
-
-### V7 cognition-event evidence binding
-
-For fresh VisionRig world evidence, ModelRig derives the cognition event id deterministically from the canonical world-evidence reference and the fixed `world_change` cognition kind. VisionRig validates that exact derivation at the bridge boundary, so a syntactically valid but unrelated cognition id cannot be accepted as downstream proof.
