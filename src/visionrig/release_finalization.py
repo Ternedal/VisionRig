@@ -55,7 +55,7 @@ def _canonical_json(value: Mapping[str, Any]) -> bytes:
     ).encode("utf-8")
 
 
-def _git(*args: str) -> str:
+def _git(*args: str, preserve_output: bool = False) -> str:
     try:
         result = subprocess.run(
             ["git", *args],
@@ -68,7 +68,7 @@ def _git(*args: str) -> str:
         raise ReleaseFinalizationError(
             "unable to inspect release checkout with git"
         ) from exc
-    return result.stdout.strip()
+    return result.stdout if preserve_output else result.stdout.strip()
 
 
 def _read_json_object(
@@ -231,7 +231,8 @@ def inspect_release_checkout(candidate_sha: str) -> dict[str, Any]:
         candidate_files[path] = _git(
             "show",
             normalized_candidate + ":" + path,
-        ) + "\n"
+            preserve_output=True,
+        )
         try:
             release_files[path] = Path(path).read_text(encoding="utf-8")
         except OSError as exc:
