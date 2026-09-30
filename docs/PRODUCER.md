@@ -352,6 +352,16 @@ silent.
 The shared native client core lives in `clients/kaliv-producer-core`. It is the Kotlin/JVM protocol and state-machine layer used by the landed Kaliv Android CameraX adapter and Meta Quest 3/3S Camera2 passthrough adapter. It implements the same fail-closed desired-state polling, authenticated heartbeat/frame transport and crash-safe sequence/drop recovery semantics as the Python reference producer. Platform capture code remains isolated in the Android and Quest modules while sharing this core contract.
 
 
+## Kaliv Android CameraX adapter
+
+The Android adapter lives in `clients/kaliv-android-producer`. It uses CameraX
+`ImageCapture` through the shared Kotlin producer core, preserving the same
+desired-state convergence, heartbeat acknowledgement, capability negotiation and
+durable sequence/drop semantics as the reference producer. Capture remains
+fail-closed on permission, lifecycle, CameraX or VisionRig control/transport
+errors, while the consuming app owns UI and coroutine lifecycle scheduling.
+
+
 ## Kaliv Quest passthrough Camera2 adapter
 
 A Quest-native adapter lives in `clients/kaliv-quest-producer`. It targets Meta Quest 3 / Quest 3S on Horizon OS v74+ and uses the official Camera2 passthrough API with Meta vendor tags for passthrough source and left/right camera position. The adapter requires both Android camera permission and `horizonos.permission.HEADSET_CAMERA`, negotiates a supported even YUV_420_888 output size, emits JPEG frames into the shared producer core, and closes capture when VisionRig desired state disables the source or a permission/camera/control/transport failure occurs. Quest 2 is intentionally not advertised as supported by this camera path because Meta does not expose passthrough RGB frames there.
