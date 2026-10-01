@@ -1,10 +1,33 @@
 # VisionRig
 
+_Documentation baseline: 2026-10-01 · 0.99.0 release-candidate / physical-qualification baseline._
+
 VisionRig is Kaliv/ModelRig's dedicated visual-perception subsystem.
 
 **Boundary:** VisionRig owns visual input -> structured perception. ModelRig owns
 semantic interpretation, durable memory, cognition and Consciousness Core
 world-state authority.
+
+## System position
+
+```mermaid
+flowchart LR
+    SRC["Sensors\nwebcam · Kinect v2 · Android · Quest · screen"]
+    GW["VisionRig ingress / gateway\nauthenticated · bounded · backpressured"]
+    PER["VisionRig perception\nPerceptionEvent/v4\nentities · relations · landmarks · depth · IR"]
+    BR["ModelRig bridge\nsemantic-change gate\nraw pixels never cross"]
+    CC["Consciousness Core\nWorldEvidence / WorldState\nnon-authoritative inferred evidence"]
+    REL["V1 physical qualification\nexact VisionRig SHA + exact ModelRig receipt"]
+
+    SRC --> GW --> PER --> BR --> CC
+    PER --> REL
+    BR --> REL
+```
+
+VisionRig owns sensing and structured perception. ModelRig owns cognition,
+durable memory and action authority. Release qualification proves the exact
+physical perception → ModelRig admission path; it does not grant identity,
+memory-write, execution or production authority.
 
 ## Current state
 

@@ -1,7 +1,29 @@
 # VisionRig v1 release evidence
 
+_Documentation baseline: 2026-10-01. VisionRig 0.99.0 remains the pre-1.0 candidate; physical evidence and exact-SHA CI are required for promotion._
+
 VisionRig's 1.0 gate is evidence-driven. Repository CI and physical sensor
 acceptance are separate facts and must stay separate.
+
+## Release evidence topology
+
+```mermaid
+flowchart LR
+    SHA["exact VisionRig 0.99.0 SHA"]
+    CI["exact-SHA repository CI"]
+    PHY["physical sensor evidence\nAndroid / Quest / Kinect"]
+    MR["exact ModelRig admission + cognition receipt"]
+    B["content-addressed evidence bundle"]
+    P["v1 promotion attestation"]
+    F["single release commit\n0.99.0 → 1.0.0"]
+    FCI["release-commit exact-SHA CI"]
+    FINAL["release finalization\nproduction_activation=false"]
+
+    SHA --> CI
+    SHA --> PHY --> MR --> B
+    CI --> P
+    B --> P --> F --> FCI --> FINAL
+```
 
 ## 1. Select the exact release candidate
 

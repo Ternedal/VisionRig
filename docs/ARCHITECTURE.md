@@ -1,48 +1,32 @@
 # VisionRig architecture
 
+_Last reviewed against `main` on 2026-10-01._
+
 ## Authority boundary
 
 VisionRig owns the technical transformation from visual inputs into typed
 observations. It is **not** authoritative about durable identity, intent,
 emotion, memory, actions or Consciousness Core state.
 
-```text
-Input adapters
- camera | Kinect v2 | screen | Kaliv VR | image/video
-                    |
-                    v
-          BoundedFrameQueue
-     fresh frames > stale latency
-                    |
-                    v
-       +--------------------------+
-       |        VisionRig         |
-       |--------------------------|
-       | detect + track           |
-       | OCR                      |
-       | pose / hands / face      |
-       | monocular/hardware depth  |
-       | visual embeddings        |
-       +------------+-------------+
-                    |
-          PerceptionEvent v4
-   entities/landmarks/depth(m)
-                    |
-          semantic change gate
-      raw frames never cross boundary
-                    |
-                    v
-       ModelRig C20 evidence adapter
-                    |
-             semantic fusion
-                    |
-                    v
-          Consciousness Core
-       world / attention / time
+```mermaid
+flowchart TB
+    IN["Input adapters\nwebcam · Kinect v2 · screen · Android · Quest · image/video"]
+    GW["Sensor ingress / authenticated gateway\nSensorPacket v1/v2 · capability negotiation"]
+    CTRL["Desired/effective sensor control\nrevisioned commands · producer acknowledgement"]
+    Q["BoundedFrameQueue\nfresh frames over stale latency"]
+    PER["VisionRig perception\ndetect/track · OCR · pose/hands/face\nmonocular + metric depth · infrared · embeddings"]
+    PE["PerceptionEvent/v4\nbounded semantic observations + provenance"]
+    CHANGE["Semantic change gate\nraw frames / vectors never cross"]
+    MR["ModelRig C20 Vision admission\nWorldEvidence · exact receipt binding"]
+    CC["Consciousness Core\nWorldState · attention · time"]
+    PROF["Encrypted .mrvision recognition\nlocal profile authority"]
+    QUAL["Physical qualification\nexact service instance + build SHA\nexact ModelRig cognition receipt"]
 
- visual embeddings
-       |
-       +--> bounded sidecar --> encrypted .mrvision recognition
+    IN --> GW --> Q --> PER --> PE --> CHANGE --> MR --> CC
+    CTRL <--> GW
+    PER --> PROF
+    PE --> QUAL
+    MR --> QUAL
 ```
 
 ## Design rules
