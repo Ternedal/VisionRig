@@ -1,6 +1,6 @@
 # ModelRig perception bridge
 
-VisionRig can optionally publish **semantic PerceptionEvent/v3 changes** to the
+VisionRig can optionally publish **semantic PerceptionEvent/v4 changes** to the
 ModelRig worker's Consciousness Core VisionRig admission endpoint.
 
 The bridge is off by default. Raw RGB, IR and depth-map data never cross it.
@@ -83,9 +83,17 @@ is no background retry thread or hidden autonomous delivery loop.
 
 ## Receipt binding
 
+The current release-candidate bridge is part of the physical V1 qualification
+chain. A fresh qualifying event must be admitted by ModelRig as bounded inferred
+WorldEvidence, must change WorldState when it is genuinely new, and must queue
+the exact typed `world_change` cognition event derived from the canonical
+evidence reference. Replay must not create a new WorldState change or cognition
+event.
+
+
 VisionRig verifies that ModelRig returns:
 
-- the SHA-256 reference of the exact serialized PerceptionEvent/v3;
+- the SHA-256 reference of the exact serialized PerceptionEvent/v4;
 - the same observed frame sequence;
 - `epistemic_status=inferred`;
 - zero model calls and no execution/scheduling/durable-memory authority.
