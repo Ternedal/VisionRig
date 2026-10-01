@@ -1,0 +1,89 @@
+name: exact-head-qualification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      head_sha:
+        description: Exact commit SHA to qualify
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visionrig-exact-head-${{ inputs.head_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  python-and-release-gate:
+    runs-on: windows-latest
+    env:
+      EXPECTED_SHA: ${{ inputs.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          persist-credentials: false
+      - name: Assert exact checkout authority
+        shell: pwsh
+        run: |
+          $actual = (& git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $actual -ne $env:EXPECTED_SHA.ToLowerInvariant()) {
+            throw "checkout mismatch: $actual != $env:EXPECTED_SHA"
+          }
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -e ".[dev]"
+      - name: Python tests
+        run: pytest -q
+      - name: V1 release gate status
+        shell: pwsh
+        run: .\run-v1-release-gate.ps1 -StatusOnly -AllowDetachedHeadForCi
+
+  producer-clients:
+    runs-on: ubuntu-latest
+    env:
+      EXPECTED_SHA: ${{ inputs.head_sha || github.sha }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - core
+          - android
+          - quest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          persist-credentials: false
+      - name: Assert exact checkout authority
+        shell: bash
+        run: |
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$EXPECTED_SHA" || { echo "checkout mismatch: $actual != $EXPECTED_SHA" >&2; exit 1; }
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        if: matrix.target != 'core'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ matrix.target == 'core' && '8.10.2' || '9.6.0' }}
+      - name: Install Android SDK
+        if: matrix.target != 'core'
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Core producer tests
+        if: matrix.target == 'core'
+        run: gradle -p clients/kaliv-producer-core test --no-daemon
+      - name: Android producer tests
+        if: matrix.target == 'android'
+        run: gradle -p clients/kaliv-android-producer :library:assembleDebug :library:testDebugUnitTest --no-daemon
+      - name: Quest producer tests
+        if: matrix.target == 'quest'
+        run: gradle -p clients/kaliv-quest-producer :library:assembleDebug :library:testDebugUnitTest --no-daemon
