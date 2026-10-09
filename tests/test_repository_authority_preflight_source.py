@@ -26,6 +26,8 @@ def test_fails_closed_if_live_protection_unavailable():
     assert "missing required check/source binding" in CODE
     assert "force pushes are allowed" in CODE
     assert "main deletion is allowed" in CODE
+    assert "$null -eq $protection.allow_force_pushes" in CODE
+    assert "$null -eq $protection.allow_deletions" in CODE
 
 
 def test_read_only_observation_cannot_claim_release():
