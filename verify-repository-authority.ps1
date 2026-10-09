@@ -88,11 +88,12 @@ if ($Errors.Count -eq 0) {
                 $protection.required_conversation_resolution.enabled -ne $true) {
                 $Errors.Add("conversation resolution is not required")
             }
-            if ($null -ne $protection.allow_force_pushes -and $protection.allow_force_pushes.enabled -eq $true) {
-                $Errors.Add("force pushes are allowed")
+            # Missing/unknown controls cannot be read as safely disabled.
+            if ($null -eq $protection.allow_force_pushes -or $protection.allow_force_pushes.enabled -ne $false) {
+                $Errors.Add("force pushes are allowed or status is unknown")
             }
-            if ($null -ne $protection.allow_deletions -and $protection.allow_deletions.enabled -eq $true) {
-                $Errors.Add("main deletion is allowed")
+            if ($null -eq $protection.allow_deletions -or $protection.allow_deletions.enabled -ne $false) {
+                $Errors.Add("main deletion is allowed or status is unknown")
             }
         } catch {
             # Do not leak gh stderr/credentials or reinterpret 403 as green.
