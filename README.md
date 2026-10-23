@@ -828,3 +828,11 @@ matching green main CI run through `visionrig-release-promote`.
 
 Do not treat the 0.99.0 version number or green repository CI alone as a physical
 hardware PASS. See `docs/RELEASE.md` for the exact evidence and finalization flow.
+
+
+## Cross-repository documentation (2026-10-23)
+
+- [Kaliv ecosystem and KalivNexus ownership map](docs/KALIV_ECOSYSTEM.md)
+- [Subsystem integration acceptance checklist](docs/INTEGRATION_ACCEPTANCE_2026-10-23.md)
+
+These documents distinguish proposed integrations from implemented, tested and released functionality. They do not supersede this repository's operational instructions or evidence gates.
