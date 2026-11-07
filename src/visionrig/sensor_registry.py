@@ -7,7 +7,7 @@ without allowing a sensor producer to grant itself authority.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 from threading import RLock
@@ -133,6 +133,11 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Heartbeat bookkeeping is persisted at most this often (plus on every
+# semantic change and on flush/close). 0 restores write-on-every-observe.
+DEFAULT_HEARTBEAT_PERSIST_INTERVAL_SECONDS = 30.0
+
+
 class SensorRegistry:
     """Thread-safe registry with optional crash-safe JSON persistence."""
 
@@ -141,10 +146,20 @@ class SensorRegistry:
         path: str | Path | None = None,
         *,
         clock: Callable[[], datetime] = _utcnow,
+        heartbeat_persist_interval_seconds: float = DEFAULT_HEARTBEAT_PERSIST_INTERVAL_SECONDS,
     ) -> None:
+        if heartbeat_persist_interval_seconds < 0:
+            raise ValueError("heartbeat_persist_interval_seconds must be >= 0")
         self._lock = RLock()
         self.path = Path(path).expanduser() if path is not None else None
         self._clock = clock
+        self._heartbeat_persist_interval = timedelta(
+            seconds=heartbeat_persist_interval_seconds
+        )
+        # Heartbeat bookkeeping (last_seen_utc, observation_count) that has
+        # changed in memory since the file last captured it.
+        self._heartbeat_dirty = False
+        self._heartbeat_persisted_at: datetime | None = None
         self._entries: dict[str, SensorMetadata] = {}
         self._discovery: dict[str, SensorDiscovery] = {}
         self._control_revisions: dict[str, int] = {}
@@ -292,6 +307,8 @@ class SensorRegistry:
                 os.fsync(handle.fileno())
             os.replace(temp_name, self.path)
             temp_name = None
+            self._heartbeat_dirty = False
+            self._heartbeat_persisted_at = self._clock().astimezone(timezone.utc)
         except OSError as exc:
             raise SensorRegistryError(
                 f"unable to persist sensor registry: {self.path}"
@@ -358,7 +375,8 @@ class SensorRegistry:
             for value in capabilities
             if value.strip()
         }))
-        now = self._clock().astimezone(timezone.utc).isoformat()
+        now_dt = self._clock().astimezone(timezone.utc)
+        now = now_dt.isoformat()
         with self._lock:
             current = self._discovery.get(source_id)
             if current is not None and current.source_type != cleaned_type:
@@ -401,18 +419,51 @@ class SensorRegistry:
             self._discovery[source_id] = updated
             if semantic_change:
                 self._state_revision += 1
-            try:
-                self._save()
-            except Exception:
-                if previous_metadata is None:
-                    self._entries.pop(source_id, None)
-                if previous_discovery is None:
-                    self._discovery.pop(source_id, None)
-                else:
-                    self._discovery[source_id] = previous_discovery
-                self._state_revision = previous_state_revision
-                raise
+            # Every heartbeat used to rewrite and fsync the whole registry
+            # (measured 1.12 ms per observe with 50 sources against 0.004 ms
+            # in memory, serialised under the API's heartbeat lock). Semantic
+            # changes still persist immediately; pure heartbeat bookkeeping is
+            # written at most once per interval and on flush()/close(), so a
+            # crash loses at most one interval of last_seen/observation_count.
+            previous_dirty = self._heartbeat_dirty
+            self._heartbeat_dirty = True
+            if semantic_change or self._heartbeat_persist_due(now_dt):
+                try:
+                    self._save()
+                except Exception:
+                    if previous_metadata is None:
+                        self._entries.pop(source_id, None)
+                    if previous_discovery is None:
+                        self._discovery.pop(source_id, None)
+                    else:
+                        self._discovery[source_id] = previous_discovery
+                    self._state_revision = previous_state_revision
+                    self._heartbeat_dirty = previous_dirty
+                    raise
             return updated
+
+    def _heartbeat_persist_due(self, now: datetime) -> bool:
+        if self.path is None:
+            return False
+        if self._heartbeat_persisted_at is None:
+            return True
+        return now - self._heartbeat_persisted_at >= self._heartbeat_persist_interval
+
+    @property
+    def heartbeat_dirty(self) -> bool:
+        """True while in-memory heartbeat bookkeeping is newer than the file."""
+        with self._lock:
+            return self._heartbeat_dirty
+
+    def flush(self) -> None:
+        """Persist pending heartbeat bookkeeping now (no-op when clean)."""
+        with self._lock:
+            if self._heartbeat_dirty:
+                self._save()
+
+    def close(self) -> None:
+        """Flush pending heartbeat bookkeeping; safe to call more than once."""
+        self.flush()
 
     def control_revision(self, source_id: str) -> int:
         with self._lock:
