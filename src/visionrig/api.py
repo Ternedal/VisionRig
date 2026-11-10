@@ -1,6 +1,7 @@
 """HTTP surface for the standalone VisionRig service."""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 import os
 import re
@@ -73,7 +74,25 @@ def create_app(
     if packet_target_flap_window_seconds <= 0:
         raise ValueError("packet_target_flap_window_seconds must be > 0")
     packet_target_flap_window_seconds = float(packet_target_flap_window_seconds)
-    app = FastAPI(title="VisionRig", version=__version__)
+    registry = sensor_registry or SensorRegistry()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        # Shutdown hooks. Starlette 1.x removed app.add_event_handler(), which
+        # the earlier publisher hook relied on: with fastapi>=0.115,<1 resolving
+        # to starlette 1.7 the app failed to build whenever a publisher was
+        # configured (never in CI, always in __main__). The lifespan is the
+        # supported form on every version in range.
+        try:
+            yield
+        finally:
+            try:
+                registry.close()  # persist pending heartbeat bookkeeping
+            finally:
+                if modelrig_publisher is not None:
+                    modelrig_publisher.close()
+
+    app = FastAPI(title="VisionRig", version=__version__, lifespan=lifespan)
     service_instance_id = "visionrig-instance:" + uuid4().hex
     raw_revision = os.environ.get("VISIONRIG_GIT_SHA", "").strip().lower()
     service_revision = raw_revision if re.fullmatch(r"[0-9a-f]{40}", raw_revision) else None
@@ -93,7 +112,6 @@ def create_app(
         runtime,
         **sensor_ingress_kwargs,
     )
-    registry = sensor_registry or SensorRegistry()
     sensor_changes = sensor_change_journal or SensorChangeJournal()
     producer_readiness_transition_state: dict[str, object] = {
         "current": None,
@@ -1787,9 +1805,6 @@ def create_app(
     @app.get("/api/v1/world", response_model=WorldSnapshot)
     def get_world() -> WorldSnapshot:
         return runtime.snapshot()
-
-    if modelrig_publisher is not None:
-        app.add_event_handler("shutdown", modelrig_publisher.close)
 
     return app
 
