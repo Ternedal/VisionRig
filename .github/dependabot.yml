@@ -1,0 +1,34 @@
+# Dependabot: weekly, grouped, small PR budget so updates arrive as a few
+# reviewable PRs instead of a stream. Every bump still runs the full CI and is
+# landed by hand -- nothing moves silently. Added 06/11-2026 across the Kaliv
+# repos; ModelRig had this since 1.58.42.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      # codeql init/analyze must move together or analysis fails
+      codeql-action:
+        patterns: ["github/codeql-action*"]
+      actions:
+        patterns: ["*"]
+        exclude-patterns: ["github/codeql-action*"]
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      # minor/patch ride together; a major gets its own PR for review
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: gradle
+    directory: /clients/kaliv-android-producer
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 2
+    groups:
+      android-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
