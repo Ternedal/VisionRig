@@ -341,3 +341,91 @@ def test_legacy_registry_without_state_revision_defaults_to_zero(tmp_path) -> No
 
     registry = SensorRegistry(path)
     assert registry.state_revision == 0
+
+
+def _observe_heartbeat(registry: SensorRegistry) -> None:
+    registry.observe("camera-a", source_type="camera", device="usb-camera", capabilities=("rgb",))
+
+
+def test_pure_heartbeats_persist_on_interval_not_per_observe(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 4, 30, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0], heartbeat_persist_interval_seconds=30.0)
+
+    _observe_heartbeat(registry)  # first sight: semantic -> persisted
+    assert not registry.heartbeat_dirty
+    on_disk_after_first = path.read_text()
+
+    for seconds in (2, 4, 6, 8):  # four pure heartbeats inside the interval
+        now[0] = now[0].replace(second=seconds)
+        _observe_heartbeat(registry)
+    assert registry.heartbeat_dirty
+    assert path.read_text() == on_disk_after_first, "pure heartbeats must not rewrite the file"
+    assert registry.get_discovery("camera-a").observation_count == 5  # memory is exact
+
+    now[0] = datetime(2026, 9, 26, 4, 30, 31, tzinfo=timezone.utc)  # interval elapsed
+    _observe_heartbeat(registry)
+    assert not registry.heartbeat_dirty
+    assert SensorRegistry(path).get_discovery("camera-a").observation_count == 6
+    assert SensorRegistry(path).get_discovery("camera-a").last_seen_utc == "2026-09-26T04:30:31+00:00"
+
+
+def test_semantic_change_persists_immediately_even_inside_interval(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 4, 30, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0], heartbeat_persist_interval_seconds=3600.0)
+    _observe_heartbeat(registry)
+    now[0] = now[0].replace(second=1)
+    _observe_heartbeat(registry)
+    assert registry.heartbeat_dirty
+    now[0] = now[0].replace(second=2)
+    registry.observe("camera-a", source_type="camera", capabilities=("rgb", "depth"))  # semantic
+    assert not registry.heartbeat_dirty
+    restored = SensorRegistry(path).get_discovery("camera-a")
+    assert restored.capabilities == ("depth", "rgb")
+    assert restored.observation_count == 3  # the pending heartbeats rode along
+
+
+def test_flush_and_close_persist_pending_heartbeats(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 4, 30, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0], heartbeat_persist_interval_seconds=3600.0)
+    _observe_heartbeat(registry)
+    now[0] = now[0].replace(second=1)
+    _observe_heartbeat(registry)
+    assert SensorRegistry(path).get_discovery("camera-a").observation_count == 1
+    registry.flush()
+    assert not registry.heartbeat_dirty
+    assert SensorRegistry(path).get_discovery("camera-a").observation_count == 2
+    before = path.read_text()
+    registry.close()  # clean: no rewrite
+    registry.close()  # idempotent
+    assert path.read_text() == before
+
+
+def test_zero_interval_restores_write_on_every_observe(tmp_path) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 4, 30, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0], heartbeat_persist_interval_seconds=0)
+    _observe_heartbeat(registry)
+    now[0] = now[0].replace(second=1)
+    _observe_heartbeat(registry)
+    assert not registry.heartbeat_dirty
+    assert SensorRegistry(path).get_discovery("camera-a").observation_count == 2
+
+
+def test_failed_heartbeat_save_restores_dirty_state(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "sensor-registry.json"
+    now = [datetime(2026, 9, 26, 4, 30, tzinfo=timezone.utc)]
+    registry = SensorRegistry(path, clock=lambda: now[0], heartbeat_persist_interval_seconds=0)
+    _observe_heartbeat(registry)
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("visionrig.sensor_registry.os.replace", boom)
+    now[0] = now[0].replace(second=1)
+    with pytest.raises(SensorRegistryError):
+        _observe_heartbeat(registry)
+    assert registry.get_discovery("camera-a").observation_count == 1  # rolled back
+    assert not registry.heartbeat_dirty  # rolled back to the pre-observe (clean) state
