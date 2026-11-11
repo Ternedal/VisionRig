@@ -18,6 +18,8 @@ Optional threshold:
 $env:VISIONRIG_RECOGNITION_THRESHOLD="0.80"
 ```
 
+Default: `0.75`.
+
 The key file may contain either exactly 32 raw bytes or base64 encoding of
 exactly 32 bytes. The key itself is never accepted as a command-line argument or
 environment value.

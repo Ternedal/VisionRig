@@ -34,6 +34,10 @@ proxy those routes. It accepts only this fixed allow-list:
 - `GET /api/v1/sensors/{source_id}/desired-state`;
 - `GET /api/v1/producer-capabilities`.
 
+In addition, an unauthenticated `GET /health` returns only the gateway's own
+status (`visionrig/sensor-gateway-health/v9`) and this route list; it does not
+proxy core health.
+
 Each route forwards only to its matching fixed loopback core endpoint. There is
 no generic path proxy.
 
@@ -53,7 +57,11 @@ $env:VISIONRIG_GATEWAY_BIND_HOST="<your Tailscale interface IP>"
 visionrig-gateway
 ```
 
-Default gateway port: `8111`.
+Default gateway port: `8111` (`VISIONRIG_GATEWAY_PORT`). Optional:
+`VISIONRIG_GATEWAY_TARGET` (default `http://127.0.0.1:8110`, must be loopback),
+`VISIONRIG_GATEWAY_MAX_SENSOR_FRAME_BYTES` (default 8 MiB, 1024..67108864),
+`VISIONRIG_GATEWAY_TIMEOUT_SECONDS` (default 30, 0.1..120).
+`VISIONRIG_GATEWAY_BIND_HOST` defaults to `127.0.0.1`.
 
 The gateway intentionally rejects wildcard binds such as `0.0.0.0` and `::`.
 Bind the exact Tailscale/LAN interface that should receive sensor traffic.
