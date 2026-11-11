@@ -92,8 +92,9 @@ implemented. A shared Kotlin/JVM Kaliv producer core is implemented under `clien
 VisionRig 0.86.0 exposes coherent sensor bootstrap snapshots, restart-detectable
 change streams, producer-readiness events, online-readiness expiry, heartbeat
 contract transitions, packet-target telemetry, and blocker-stage migration
-diagnostics. The current public operator contracts are fleet v31, bootstrap v36,
-and health v64.
+diagnostics. At 0.86.0 the public operator contracts were fleet v31, bootstrap
+v36 and health v64; current `main` exposes fleet v31, catalog v15, bootstrap v36
+and health v67.
 
 ### V7 — physical perception qualification — implemented foundation
 Physical Kinect v2 acceptance and generic physical-perception qualification bind

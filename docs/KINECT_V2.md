@@ -168,7 +168,7 @@ does not create cognition traffic.
 
 ## IR-qualified release evidence
 
-VisionRig 0.88.0 advances the physical Kinect acceptance receipt to `visionrig/kinect-physical-acceptance/v3`. A PASS now requires every accepted physical frame to produce at least one bounded `InfraredObservation` in `visionrig/perception-event/v4`, in addition to the existing raw IR signal check. The receipt records `infrared_semantic_frames`, `infrared_observations`, and `perception_schema`. Non-IR semantic perception is still required independently, so a valid IR summary by itself cannot satisfy the semantic release criterion.
+VisionRig 0.88.0 advances the physical Kinect acceptance receipt to `visionrig/kinect-physical-acceptance/v2`. A PASS now requires every accepted physical frame to produce at least one bounded `InfraredObservation` in `visionrig/perception-event/v4`, in addition to the existing raw IR signal check. The receipt records `infrared_semantic_frames`, `infrared_observations`, and `perception_schema`. Non-IR semantic perception is still required independently, so a valid IR summary by itself cannot satisfy the semantic release criterion.
 
 
 ## Fresh ModelRig admission in physical Kinect acceptance

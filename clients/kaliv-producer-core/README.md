@@ -10,6 +10,13 @@ Implemented in this slice:
 - hardware-agnostic encoded-frame capture interface reusable by Android camera and Quest passthrough adapters;
 - Kotlin/JVM CI tests.
 
+## Known limitation: redirects (issue #181)
+
+`VisionRigGatewayClient` defaults to `OkHttpClient()`, which follows HTTP
+redirects; a 307/308 from the configured gateway address would resend a frame
+POST (without `Authorization`) to another host. Until #181 is fixed, inject an
+`OkHttpClient` built with `followRedirects(false)` and `followSslRedirects(false)`.
+
 Implemented on top of this core:
 - Android CameraX binding in `clients/kaliv-android-producer`;
 - Meta Quest 3/3S passthrough Camera2 binding in `clients/kaliv-quest-producer`;
@@ -20,6 +27,21 @@ Still outside this core's scope:
 - SensorPacket/v2 depth/IR transport for native mobile/Quest clients.
 
 The platform adapters reuse this protocol/state-machine core rather than defining alternate producer contracts.
+
+
+## Build and test
+
+The build has no Gradle wrapper; use a system Gradle. The build uses the Kotlin
+JVM plugin 2.4.21 with `jvmToolchain(17)`. CI runs it with Temurin JDK 17 and
+Gradle 8.10.2 from the repository root:
+
+```bash
+gradle -p clients/kaliv-producer-core test --no-daemon
+```
+
+The Android and Quest builds include this project as a composite build
+(`includeBuild("../kaliv-producer-core")`), substituting the
+`dk.kaliv.visionrig:kaliv-producer-core` dependency.
 
 
 ## Durable state identity

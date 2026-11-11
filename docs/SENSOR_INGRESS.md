@@ -28,7 +28,7 @@ Content-Type: image/jpeg
 ```
 
 A successful response is a `visionrig/sensor-frame-receipt/v1`, and the
-resulting `PerceptionEvent/v3` is available through the existing bounded
+resulting `PerceptionEvent/v4` is available through the existing bounded
 journal.
 
 ## Backpressure policy
@@ -81,6 +81,7 @@ VISIONRIG_OCR=0|1
 VISIONRIG_LANDMARKS=0|1
 VISIONRIG_FORCE_CPU=0|1
 VISIONRIG_MAX_SENSOR_FRAME_BYTES
+VISIONRIG_SPATIAL_RELATIONS=0|1   (default 1)
 ```
 
 Model manifests retain the existing checksum/provenance rules. No models are
@@ -138,7 +139,7 @@ Frame.sensor_data.metric_depth_sampler -> normalized RGB coord -> meters
 ```
 
 The raw planes are frame-local and are not serialized into
-`PerceptionEvent/v3`. Existing stages therefore remain camera-agnostic while
+`PerceptionEvent/v4`. Existing stages therefore remain camera-agnostic while
 hardware-depth-aware stages can consume the metric sampler.
 
 The authenticated gateway exposes only the fixed

@@ -63,6 +63,9 @@ Default VisionRig origin:
 http://127.0.0.1:8110
 ~~~
 
+Override with `--visionrig-url` or `VISIONRIG_QUALIFICATION_URL`. It must be the
+core service, not the sensor gateway.
+
 The output receipt is written atomically to:
 
 ~~~text

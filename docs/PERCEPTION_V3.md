@@ -1,5 +1,7 @@
 # Perception contract v3
 
+> **Historical (2026-11-11).** Superseded by [PerceptionEvent v4](PERCEPTION_V4.md) in 0.87.0; the v3 metric-depth fields and spatial predicates remain part of v4.
+
 VisionRig perception v3 adds a narrow, explicit metric-depth surface.
 
 ## Depth observation

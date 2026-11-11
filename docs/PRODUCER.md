@@ -349,7 +349,7 @@ silent.
 
 ## Native Kaliv producer core
 
-The shared native client core lives in `clients/kaliv-producer-core`. It is the Kotlin/JVM protocol and state-machine layer used by the landed Kaliv Android CameraX adapter and Meta Quest 3/3S Camera2 passthrough adapter. It implements the same fail-closed desired-state polling, authenticated heartbeat/frame transport and crash-safe sequence/drop recovery semantics as the Python reference producer. Platform capture code remains isolated in the Android and Quest modules while sharing this core contract.
+The shared native client core lives in `clients/kaliv-producer-core`. It is the Kotlin/JVM protocol and state-machine layer used by the landed Kaliv Android CameraX adapter and Meta Quest 3/3S Camera2 passthrough adapter. It implements the same fail-closed desired-state polling, authenticated heartbeat/frame transport and crash-safe sequence/drop recovery semantics as the Python reference producer. One known difference: the Python producer's `httpx` client does not follow HTTP redirects, while the Kotlin gateway client currently does by default (issue #181, see [the core README](../clients/kaliv-producer-core/README.md#known-limitation-redirects-issue-181)). Platform capture code remains isolated in the Android and Quest modules while sharing this core contract.
 
 
 ## Kaliv Android CameraX adapter

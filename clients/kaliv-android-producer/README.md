@@ -49,7 +49,25 @@ The app remains responsible for:
 - keeping the bearer token in an appropriate secret store;
 - never exposing the VisionRig gateway directly to the public internet.
 
+`create()` currently builds its gateway client with the default `OkHttpClient()`
+(follows redirects) and does not accept an injected client; see issue #181 and
+the [core README](../kaliv-producer-core/README.md#known-limitation-redirects-issue-181).
+
 The module deliberately does not own UI, identity, cognition, memory or action authority.
+
+
+## Build and test
+
+The library uses Android Gradle Plugin 9.5.1 and Kotlin 2.4.21, with
+`compileSdk = 37`, `minSdk = 26` and Java 17 source/target compatibility. The
+shared core is pulled in as a composite build from `../kaliv-producer-core`.
+There is no Gradle wrapper; CI uses Temurin JDK 17, Gradle 9.6.0 and the Android
+SDK packages below, run from the repository root:
+
+```bash
+sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
+gradle -p clients/kaliv-android-producer :library:assembleDebug :library:testDebugUnitTest --no-daemon
+```
 
 
 ## Network transport

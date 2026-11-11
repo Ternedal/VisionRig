@@ -88,8 +88,11 @@ visionrig-release-evidence `
   --expected-sha $sha `
   --expected-version 0.99.0 `
   validation/visionrig-physical-perception-latest.json `
+  validation/visionrig-quest-physical.json `
   validation/visionrig-kinect-physical-acceptance.json
 ```
+
+Pass every receipt you produced; at least one is required.
 
 Default output:
 
@@ -282,18 +285,23 @@ To collect Android and Quest physical receipts, bundle them, and bind the bundle
 to the exact checkout:
 
 ```powershell
-.\run-v1-release-gate.ps1 -QualifyAndroid -QualifyQuest
+.\run-v1-release-gate.ps1 -QualifyAndroid -QualifyQuest -VisionRigUrl http://127.0.0.1:8110
 ```
+
+The qualifier must reach the loopback core service (`127.0.0.1:8110`), not the
+sensor gateway (`:8111`); the wrapper's current `-VisionRigUrl` default is the
+gateway port.
 
 To include Kinect v2:
 
 ```powershell
-.\run-v1-release-gate.ps1 \
-  -QualifyAndroid \
-  -QualifyQuest \
-  -QualifyKinect \
-  -KinectModelManifest <model-manifest.json> \
-  -ModelRigWorkerUrl http://127.0.0.1:<port>
+.\run-v1-release-gate.ps1 `
+  -QualifyAndroid `
+  -QualifyQuest `
+  -QualifyKinect `
+  -KinectModelManifest <model-manifest.json> `
+  -ModelRigWorkerUrl http://127.0.0.1:<port> `
+  -VisionRigUrl http://127.0.0.1:8110
 ```
 
 After the exact candidate SHA has a green `main` push workflow, the wrapper
@@ -302,17 +310,19 @@ SHA and passes its run id to the promotion validator. You can still override the
 selection explicitly with `-CandidateCiRunId` when auditing a specific run:
 
 ```powershell
-.\run-v1-release-gate.ps1 \
-  -QualifyAndroid \
-  -QualifyQuest
+.\run-v1-release-gate.ps1 `
+  -QualifyAndroid `
+  -QualifyQuest `
+  -VisionRigUrl http://127.0.0.1:8110
 ```
 
 Explicit override:
 
 ```powershell
-.\run-v1-release-gate.ps1 \
-  -QualifyAndroid \
-  -QualifyQuest \
+.\run-v1-release-gate.ps1 `
+  -QualifyAndroid `
+  -QualifyQuest `
+  -VisionRigUrl http://127.0.0.1:8110 `
   -CandidateCiRunId <github-actions-run-id>
 ```
 

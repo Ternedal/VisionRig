@@ -70,7 +70,10 @@ has been observed with a source type, reusing that id as another type is a 409
 identity conflict. Device/capability observations may refresh without gaining
 operator authority. Discovery also persists `first_seen_utc`, `last_seen_utc` and
 `observation_count`, so a restarted service can show when an offline sensor was
-first and most recently observed.
+first and most recently observed. Heartbeat-only bookkeeping (`last_seen_utc`,
+`observation_count`) is written at most every 30 seconds, immediately on any
+semantic change, and on service shutdown; a crash can lose up to one interval
+of these counters.
 
 ## Sensor lifecycle
 
@@ -153,7 +156,7 @@ The reference producer validates schema + source id through
 ## Control convergence
 
 `GET /api/v1/sensors/catalog` uses
-`visionrig/sensor-catalog/v14` and adds a bounded control summary:
+`visionrig/sensor-catalog/v15` and adds a bounded control summary:
 
 - `desired_enabled`: operator intent from the registry;
 - `desired_revision`: revision of the current enabled command;
@@ -176,7 +179,7 @@ world-state access.
 ## Fleet summary
 
 `GET /api/v1/sensors/fleet` returns
-`visionrig/sensor-fleet-summary/v23` with bounded operational aggregation:
+`visionrig/sensor-fleet-summary/v31` with bounded operational aggregation:
 
 - `state_revision`: current persisted semantic registry revision;
 - `change_consistency`: registry/journal revision comparison;
@@ -270,7 +273,7 @@ that should be investigated before treating incremental history as authoritative
 ## UI bootstrap snapshot
 
 `GET /api/v1/sensors/bootstrap` returns
-`visionrig/sensor-bootstrap-snapshot/v25` with:
+`visionrig/sensor-bootstrap-snapshot/v36` with:
 
 - `catalog`: the current sensor catalog;
 - `fleet`: the current fleet summary;
@@ -312,7 +315,7 @@ Recommended UI flow:
 
 ## Health integration
 
-`GET /health` uses `visionrig/health/v53` and advertises the desired-state
+`GET /health` uses `visionrig/health/v67` and advertises the desired-state
 schema, persistent semantic state revision and discovery counts under the
 sensor registry section.
 The same sensor fleet summary is embedded as `sensor_fleet` for dashboards
@@ -1171,7 +1174,7 @@ and refresh timestamps do not independently emit runtime changes.
 VisionRig 0.86.0 advances fleet summary to
 `visionrig/sensor-fleet-summary/v31`, bootstrap to
 `visionrig/sensor-bootstrap-snapshot/v36`, and health to
-`visionrig/health/v67`.
+`visionrig/health/v64`.
 
 Both `producer_readiness` and `online_producer_readiness` include
 `heartbeat_upgrade_stage_counts`:
