@@ -24,10 +24,23 @@ updates:
       python-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+  # Both producer builds include ../kaliv-producer-core, and all three must
+  # compile with the same Kotlin version (Kotlin metadata is only readable one
+  # minor version ahead). Listing both builds here keeps a grouped bump from
+  # moving core and the Android producer while leaving the Quest producer
+  # behind, which is what broke #188.
   - package-ecosystem: gradle
-    directory: /clients/kaliv-android-producer
+    directories:
+      - /clients/kaliv-android-producer
+      - /clients/kaliv-quest-producer
     schedule: { interval: weekly }
     open-pull-requests-limit: 2
+    ignore:
+      # androidx.core 1.19+ requires compileSdk 37. The producers, and any app
+      # that consumes their AARs, compile against 36. Lift this together with
+      # a deliberate compileSdk bump (CI installs platforms;android-36).
+      - dependency-name: "androidx.core:*"
+        versions: [">=1.19.0"]
     groups:
       android-minor-patch:
         patterns: ["*"]
