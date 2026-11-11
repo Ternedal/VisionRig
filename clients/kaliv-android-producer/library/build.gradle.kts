@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "dk.kaliv.visionrig.android"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -25,11 +25,11 @@ dependencies {
     implementation("androidx.camera:camera-core:1.6.2")
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
-    implementation("androidx.core:core-ktx:1.18.0")
+    implementation("androidx.core:core-ktx:1.19.1")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5:2.4.21")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.3")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:6.1.3")
 }
 
 tasks.withType<Test>().configureEach {

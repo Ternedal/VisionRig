@@ -83,7 +83,7 @@ jobs:
           gradle-version: ${{ matrix.target == 'core' && '8.10.2' || '9.6.0' }}
       - name: Install Android SDK
         if: matrix.target != 'core'
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
       - name: Core producer tests
         if: matrix.target == 'core'
         run: gradle -p clients/kaliv-producer-core test --no-daemon
