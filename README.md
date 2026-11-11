@@ -38,7 +38,8 @@ No 1.0.0 release or tag has been published. The V1 freeze was lifted on
 `candidate/v1-20261001` (`66ea9bf`). `main` has since received further changes
 that still report 0.99.0: Dependabot configuration (#183), dispatch-only
 exact-head qualification (#182), interval-based heartbeat persistence with
-lifespan shutdown hooks (#184), and dependency updates (#185–#198).
+lifespan shutdown hooks (#184), dependency updates (#185–#198), and a documentation review (#199;
+open decisions and code findings in #200).
 
 Repository CI on current `main` covers and gates:
 - Python tests;
