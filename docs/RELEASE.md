@@ -285,12 +285,13 @@ To collect Android and Quest physical receipts, bundle them, and bind the bundle
 to the exact checkout:
 
 ```powershell
-.\run-v1-release-gate.ps1 -QualifyAndroid -QualifyQuest -VisionRigUrl http://127.0.0.1:8110
+.\run-v1-release-gate.ps1 -QualifyAndroid -QualifyQuest
 ```
 
-The qualifier must reach the loopback core service (`127.0.0.1:8110`), not the
-sensor gateway (`:8111`); the wrapper's current `-VisionRigUrl` default is the
-gateway port.
+The qualifier talks to the loopback core service, and `-VisionRigUrl` defaults
+to it (`http://127.0.0.1:8110`). Pass `-VisionRigUrl` only when the core service
+listens somewhere else. The sensor gateway (`:8111`) is not a valid target: it
+does not serve the routes the qualifier reads.
 
 To include Kinect v2:
 
@@ -300,8 +301,7 @@ To include Kinect v2:
   -QualifyQuest `
   -QualifyKinect `
   -KinectModelManifest <model-manifest.json> `
-  -ModelRigWorkerUrl http://127.0.0.1:<port> `
-  -VisionRigUrl http://127.0.0.1:8110
+  -ModelRigWorkerUrl http://127.0.0.1:<port>
 ```
 
 After the exact candidate SHA has a green `main` push workflow, the wrapper
@@ -312,8 +312,7 @@ selection explicitly with `-CandidateCiRunId` when auditing a specific run:
 ```powershell
 .\run-v1-release-gate.ps1 `
   -QualifyAndroid `
-  -QualifyQuest `
-  -VisionRigUrl http://127.0.0.1:8110
+  -QualifyQuest
 ```
 
 Explicit override:
@@ -322,7 +321,6 @@ Explicit override:
 .\run-v1-release-gate.ps1 `
   -QualifyAndroid `
   -QualifyQuest `
-  -VisionRigUrl http://127.0.0.1:8110 `
   -CandidateCiRunId <github-actions-run-id>
 ```
 

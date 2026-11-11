@@ -12,7 +12,7 @@ param(
     [long]$CandidateCiRunId = 0,
     [string]$ExpectedVersion = "0.99.0",
     [string]$TargetVersion = "1.0.0",
-    [string]$VisionRigUrl = "http://127.0.0.1:8111",
+    [string]$VisionRigUrl = "http://127.0.0.1:8110",
     [string]$ValidationDir = "validation"
 )
 
