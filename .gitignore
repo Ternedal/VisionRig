@@ -11,3 +11,7 @@ build/
 *.mrvision.key
 
 validation/visionrig-kinect-physical-acceptance.json
+
+# Gradle/Kotlin local caches (producer builds)
+.gradle/
+.kotlin/

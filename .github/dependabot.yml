@@ -19,6 +19,13 @@ updates:
     directory: /
     schedule: { interval: weekly }
     open-pull-requests-limit: 2
+    ignore:
+      # mediapipe 1.x removed the legacy `mediapipe.solutions` API that
+      # landmarks_mediapipe.py uses (Holistic, PoseLandmark, HandLandmark).
+      # CI installs only `.[dev]`, so a widened bound would pass CI untested.
+      # Lift this when the backend moves to the MediaPipe Tasks API.
+      - dependency-name: "mediapipe"
+        versions: [">=1"]
     groups:
       # minor/patch ride together; a major gets its own PR for review
       python-minor-patch:
@@ -35,13 +42,13 @@ updates:
       - /clients/kaliv-quest-producer
     schedule: { interval: weekly }
     open-pull-requests-limit: 2
-    ignore:
-      # androidx.core 1.19+ requires compileSdk 37. The producers, and any app
-      # that consumes their AARs, compile against 36. Lift this together with
-      # a deliberate compileSdk bump (CI installs platforms;android-36).
-      - dependency-name: "androidx.core:*"
-        versions: [">=1.19.0"]
     groups:
       android-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+      # A major stays its own PR per dependency, but one PR for both builds
+      # instead of one per directory (both reach core through includeBuild,
+      # which produced the duplicate pairs #193/#195 and #194/#196).
+      producer-majors:
+        group-by: dependency-name
+        update-types: ["major"]
