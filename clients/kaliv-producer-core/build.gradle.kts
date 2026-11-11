@@ -1,6 +1,6 @@
 plugins {
-    kotlin("jvm") version "2.2.0"
-    kotlin("plugin.serialization") version "2.2.0"
+    kotlin("jvm") version "2.4.21"
+    kotlin("plugin.serialization") version "2.4.21"
 }
 
 repositories {
@@ -8,12 +8,12 @@ repositories {
 }
 
 dependencies {
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation(kotlin("test-junit5"))
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.11.4")
     testImplementation("com.squareup.okhttp3:mockwebserver:5.5.1")
