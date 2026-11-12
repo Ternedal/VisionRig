@@ -21,9 +21,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "verify-repository-authority.ps1"
-PWSH = shutil.which("pwsh")
+# PowerShell 7 everywhere, and Windows PowerShell 5.1 where it exists. The two
+# differ exactly where this script is fragile: under 5.1 a native command that
+# writes to stderr can terminate the script before its exit code is read.
+SHELLS = [name for name in ("pwsh", "powershell") if shutil.which(name)]
 
-pytestmark = pytest.mark.skipif(PWSH is None, reason="PowerShell 7 is unavailable")
+pytestmark = pytest.mark.skipif(not SHELLS, reason="PowerShell is unavailable")
 
 # A fake GitHub CLI. It answers from JSON files in FAKE_GH_DIR and fails, as
 # the real one does, for an endpoint that has no file.
@@ -33,6 +36,8 @@ from pathlib import Path
 
 root = Path(os.environ["FAKE_GH_DIR"])
 args = sys.argv[1:]
+if os.environ.get("FAKE_GH_NOISE"):
+    print("warning: a newer release of gh is available", file=sys.stderr)
 if args[:1] != ["api"] or len(args) < 2:
     sys.exit(1)
 path = args[1]
@@ -95,7 +100,9 @@ def _protection() -> dict:
 class Checkout:
     """A clean checkout on ``main`` holding the verifier."""
 
-    def __init__(self, base: Path) -> None:
+    def __init__(self, base: Path, shell: str) -> None:
+        self.shell = shutil.which(shell)
+        self.noisy_gh = False
         self.root = base / "checkout"
         self.root.mkdir()
         shutil.copy(SCRIPT, self.root)
@@ -138,9 +145,12 @@ class Checkout:
         environment = dict(os.environ)
         environment["PATH"] = str(self.tools) + os.pathsep + environment.get("PATH", "")
         environment["FAKE_GH_DIR"] = str(self.github)
+        environment.pop("FAKE_GH_NOISE", None)
+        if self.noisy_gh:
+            environment["FAKE_GH_NOISE"] = "1"
         return subprocess.run(
             [
-                PWSH, "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
+                self.shell, "-NoLogo", "-NoProfile", "-NonInteractive", "-File",
                 str(self.root / "verify-repository-authority.ps1"),
                 *extra,
             ],
@@ -162,9 +172,9 @@ class Checkout:
         return completed.returncode, json.loads(lines[0])
 
 
-@pytest.fixture()
-def checkout(tmp_path: Path) -> Checkout:
-    return Checkout(tmp_path)
+@pytest.fixture(params=SHELLS)
+def checkout(tmp_path: Path, request: pytest.FixtureRequest) -> Checkout:
+    return Checkout(tmp_path, request.param)
 
 
 def test_a_passing_verdict_is_one_json_line_bound_to_the_checkout(checkout: Checkout) -> None:
@@ -236,6 +246,21 @@ def test_missing_protection_is_a_verdict_not_a_crash(checkout: Checkout) -> None
     assert verdict["protected"] is False
     assert "main protection is unavailable" in verdict["errors"]
     assert "GitHub reports main as unprotected" in verdict["errors"]
+
+
+def test_stderr_from_gh_is_not_part_of_the_answer(checkout: Checkout) -> None:
+    # gh may warn on stderr and still answer on stdout. The warning must
+    # neither end the script (Windows PowerShell 5.1) nor be parsed as JSON.
+    checkout.noisy_gh = True
+    checkout.github_state(protection=_protection())
+    code, verdict = checkout.verdict()
+    assert code == 0, verdict
+    assert verdict["passed"] is True
+
+    checkout.github_state(protected=False, protection=None)
+    code, verdict = checkout.verdict()
+    assert code == 2
+    assert "main protection is unavailable" in verdict["errors"]
 
 
 def test_human_readable_output(checkout: Checkout) -> None:

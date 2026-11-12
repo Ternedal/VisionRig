@@ -19,11 +19,41 @@ $ExpectedChecks = @(
     @{ context = "test"; app_id = 15368 }
 )
 
+function Invoke-Native {
+    # Run a native command and return its exit code, stdout and stderr.
+    #
+    # Under Windows PowerShell 5.1, with $ErrorActionPreference = "Stop", a
+    # native command that writes to stderr raises a terminating error before
+    # $LASTEXITCODE can be read. A failing read is an answer here (missing
+    # protection is a verdict), so the preference is lowered for the call.
+    param([Parameter(Mandatory = $true)][string]$Command, [Parameter(Mandatory = $true)][string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = @(& $Command @Arguments 2>&1)
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    $stdout = New-Object System.Collections.Generic.List[string]
+    $stderr = New-Object System.Collections.Generic.List[string]
+    foreach ($item in $output) {
+        if ($item -is [System.Management.Automation.ErrorRecord]) { $stderr.Add([string]$item) }
+        else { $stdout.Add([string]$item) }
+    }
+    return [pscustomobject]@{
+        ExitCode = $code
+        Lines    = $stdout.ToArray()
+        Text     = ($stdout.ToArray() -join [Environment]::NewLine)
+        Error    = ($stderr.ToArray() -join [Environment]::NewLine)
+    }
+}
+
 function Read-GitLine {
     param([Parameter(Mandatory = $true)][string[]]$Arguments, [Parameter(Mandatory = $true)][string]$Failure)
-    $lines = @(& git -C $script:RepoRoot @Arguments 2>&1)
-    if ($LASTEXITCODE -ne 0) { throw $Failure }
-    return ,$lines
+    $result = Invoke-Native -Command "git" -Arguments (@("-C", $script:RepoRoot) + $Arguments)
+    if ($result.ExitCode -ne 0) { throw $Failure }
+    return ,$result.Lines
 }
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -52,11 +82,11 @@ if ($headLines.Count -ne 1 -or $head -notmatch '^[0-9a-f]{40}$') {
 # --- the live settings ------------------------------------------------------
 $errors = New-Object System.Collections.Generic.List[string]
 
-$raw = & gh api "repos/$Repo/branches/$Branch" 2>&1
-if ($LASTEXITCODE -ne 0) {
-    throw ("GitHub API read failed for the main branch. " + ($raw -join [Environment]::NewLine))
+$read = Invoke-Native -Command "gh" -Arguments @("api", "repos/$Repo/branches/$Branch")
+if ($read.ExitCode -ne 0) {
+    throw ("GitHub API read failed for the main branch. " + $read.Error)
 }
-$branchInfo = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
+$branchInfo = $read.Text | ConvertFrom-Json
 $liveHead = ""
 if ($null -ne $branchInfo.commit -and $null -ne $branchInfo.commit.sha) {
     $liveHead = ([string]$branchInfo.commit.sha).Trim().ToLowerInvariant()
@@ -70,11 +100,11 @@ if (-not $protected) {
 }
 
 $protection = $null
-$raw = & gh api "repos/$Repo/branches/$Branch/protection" --method GET 2>&1
-if ($LASTEXITCODE -ne 0) {
+$read = Invoke-Native -Command "gh" -Arguments @("api", "repos/$Repo/branches/$Branch/protection", "--method", "GET")
+if ($read.ExitCode -ne 0) {
     $errors.Add("main protection is unavailable")
 } else {
-    $protection = ($raw -join [Environment]::NewLine) | ConvertFrom-Json
+    $protection = $read.Text | ConvertFrom-Json
 }
 
 if ($null -ne $protection) {
