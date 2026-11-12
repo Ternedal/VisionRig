@@ -52,6 +52,24 @@ The normal repository workflow must be green for that revision:
 The local release-evidence validator deliberately does **not** claim or infer CI
 status.
 
+### Repository authority
+
+Green CI only binds if `main` is protected. `verify-repository-authority.ps1`
+reads the live GitHub settings (it needs `gh` with administrator rights) and is
+the input for the Kaliv `repository_authority` release gate:
+
+```powershell
+.\verify-repository-authority.ps1 -Json
+```
+
+- Run it from a clean checkout of `main`. GitHub's `main` must stand on exactly
+  that commit, and the verdict's `head_revision` is that commit. For a release
+  pin this means: verify while `main` is the pin.
+- Exit 0 is PASS, exit 2 is a failing verdict (still one JSON line, with
+  `errors`). Anything else is not a verdict.
+- It reads only. `configure-repository-authority.ps1 -Apply` is the script that
+  writes, and it runs this verification afterwards.
+
 ## 3. Produce physical evidence
 
 For Android or Quest sources already online through the authenticated gateway:
