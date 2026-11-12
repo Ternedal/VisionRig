@@ -94,3 +94,11 @@ jobs:
       - run: pip install -e ".[dev]"
       - shell: pwsh
         run: .\run-v1-release-gate.ps1 -StatusOnly -AllowDetachedHeadForCi
+      # The operator runs the repository-authority verifier in PowerShell on
+      # Windows. The ubuntu job runs its contract; run it here too.
+      - name: Repository-authority verifier contract on real Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          python -m pytest -q tests/test_repository_authority_verifier.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
