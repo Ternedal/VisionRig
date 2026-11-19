@@ -39,10 +39,18 @@ def test_wrapper_passes_the_url_to_every_generic_qualification():
 def test_any_source_id_runs_the_generic_qualifier_with_the_exact_sha():
     text = WRAPPER.read_text(encoding="utf-8-sig")
     assert re.search(r"\[string\[\]\]\$QualifySourceId\s*=\s*@\(\)", text), "-QualifySourceId is a list, empty by default"
-    loop = text[text.index("foreach ($sourceId in $QualifySourceId)"):text.index("if ($QualifyKinect) {")]
+    validate = text.index("foreach ($sourceId in $QualifySourceId)")
+    run = text.index("foreach ($sourceId in $QualifySourceId)", validate + 1)
+    first_qualification = text.index("Invoke-Checked \"visionrig-qualify-physical\"")
+    checks = text[validate:text.index("Invoke-Checked \"visionrig-release-status\"", validate)]
+    assert validate < first_qualification, "every id is validated before the first qualification (Android/Quest included)"
+    assert validate < text.index("Invoke-Checked \"visionrig-release-status\""), "and before -StatusOnly, so CI can run the refusals"
+    assert "is not a plain source id" in checks and "is given more than once" in checks
+    assert "already qualified by -QualifyAndroid/-QualifyQuest" in checks
+    assert "Invoke-Checked" not in checks, "validation runs nothing"
+    loop = text[run:text.index("if ($QualifyKinect) {")]
     assert '"--expected-sha", $sha, "--source-id", $sourceId' in loop
     assert "Invoke-Checked \"visionrig-qualify-physical\" @argsSource" in loop
     assert "$evidence.Add($sourceReport)" in loop
-    assert "throw" in loop.split("$sourceReport =")[0], "a malformed id is refused before anything runs"
     collect = next(line for line in text.splitlines() if line.strip().startswith("$collectPhysical ="))
     assert "$QualifySourceId.Count -gt 0" in collect

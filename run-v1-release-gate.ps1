@@ -134,6 +134,22 @@ try {
     Write-Host "Production authority: FALSE"
     Write-Host "============================================================"
 
+    # Every -QualifySourceId is checked before anything runs, -StatusOnly included,, so a bad
+    # list never leaves earlier Android/Quest reports behind and CI can prove the refusal (VisionRig #206 review).
+    $seenSourceIds = @{}
+    foreach ($sourceId in $QualifySourceId) {
+        if ($sourceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
+            throw "-QualifySourceId '$sourceId' is not a plain source id"
+        }
+        if ($seenSourceIds.ContainsKey($sourceId.ToLowerInvariant())) {
+            throw "-QualifySourceId '$sourceId' is given more than once"
+        }
+        $seenSourceIds[$sourceId.ToLowerInvariant()] = $true
+        if (($QualifyAndroid -and $sourceId -eq $AndroidSourceId) -or ($QualifyQuest -and $sourceId -eq $QuestSourceId)) {
+            throw "-QualifySourceId '$sourceId' is already qualified by -QualifyAndroid/-QualifyQuest"
+        }
+    }
+
     Invoke-Checked "visionrig-release-status" "--json"
 
     $collectPhysical = $QualifyAndroid -or $QualifyQuest -or $QualifyKinect -or ($QualifySourceId.Count -gt 0)
@@ -159,12 +175,6 @@ try {
     }
 
     foreach ($sourceId in $QualifySourceId) {
-        if ($sourceId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$') {
-            throw "-QualifySourceId '$sourceId' is not a plain source id"
-        }
-        if (@($AndroidSourceId, $QuestSourceId) -contains $sourceId -and ($QualifyAndroid -or $QualifyQuest)) {
-            throw "-QualifySourceId '$sourceId' is already qualified by -QualifyAndroid/-QualifyQuest"
-        }
         $sourceReport = Join-Path $validationPath ("visionrig-" + $sourceId + "-physical.json")
         $argsSource = @("--visionrig-url", $VisionRigUrl, "--expected-sha", $sha, "--source-id", $sourceId, "--report", $sourceReport)
         Invoke-Checked "visionrig-qualify-physical" @argsSource
