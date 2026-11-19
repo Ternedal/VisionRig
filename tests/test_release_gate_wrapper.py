@@ -30,6 +30,27 @@ def test_wrapper_default_is_not_the_sensor_gateway():
     assert urlsplit(_wrapper_default_url()).port != gateway_port
 
 
-def test_wrapper_passes_the_url_to_both_device_qualifications():
+def test_wrapper_passes_the_url_to_every_generic_qualification():
+    # Android, Quest and any -QualifySourceId source (e.g. the rig webcam)
     text = WRAPPER.read_text(encoding="utf-8-sig")
-    assert text.count('"--visionrig-url", $VisionRigUrl') == 2
+    assert text.count('"--visionrig-url", $VisionRigUrl') == 3
+
+
+def test_any_source_id_runs_the_generic_qualifier_with_the_exact_sha():
+    text = WRAPPER.read_text(encoding="utf-8-sig")
+    assert re.search(r"\[string\[\]\]\$QualifySourceId\s*=\s*@\(\)", text), "-QualifySourceId is a list, empty by default"
+    validate = text.index("foreach ($sourceId in $QualifySourceId)")
+    run = text.index("foreach ($sourceId in $QualifySourceId)", validate + 1)
+    first_qualification = text.index("Invoke-Checked \"visionrig-qualify-physical\"")
+    checks = text[validate:text.index("Invoke-Checked \"visionrig-release-status\"", validate)]
+    assert validate < first_qualification, "every id is validated before the first qualification (Android/Quest included)"
+    assert validate < text.index("Invoke-Checked \"visionrig-release-status\""), "and before -StatusOnly, so CI can run the refusals"
+    assert "is not a plain source id" in checks and "is given more than once" in checks
+    assert "already qualified by -QualifyAndroid/-QualifyQuest" in checks
+    assert "Invoke-Checked" not in checks, "validation runs nothing"
+    loop = text[run:text.index("if ($QualifyKinect) {")]
+    assert '"--expected-sha", $sha, "--source-id", $sourceId' in loop
+    assert "Invoke-Checked \"visionrig-qualify-physical\" @argsSource" in loop
+    assert "$evidence.Add($sourceReport)" in loop
+    collect = next(line for line in text.splitlines() if line.strip().startswith("$collectPhysical ="))
+    assert "$QualifySourceId.Count -gt 0" in collect
