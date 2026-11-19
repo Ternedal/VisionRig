@@ -52,6 +52,19 @@ $sha = (git rev-parse HEAD).Trim()
 visionrig-qualify-physical --expected-sha $sha --source-id kaliv-quest
 ~~~
 
+A webcam on the rig works the same way: start the reference producer
+(`visionrig-producer --camera 0 --source-id windows-webcam`, see
+[PRODUCER.md](PRODUCER.md)), then qualify that source. In the V1 wrapper:
+
+~~~powershell
+.\run-v1-release-gate.ps1 -QualifySourceId windows-webcam
+~~~
+
+`-QualifySourceId` takes one or more source ids and runs the same generic
+qualifier as `-QualifyAndroid`/`-QualifyQuest`, each into
+`validation\visionrig-<id>-physical.json`. The release bundle accepts only
+`camera` and `vr` sources.
+
 For Android the source type is `camera`; for Quest it is `vr`. In both cases
 the qualifier still runs locally against the loopback VisionRig service. The
 remote device is evidence only after VisionRig has accepted fresh frames from

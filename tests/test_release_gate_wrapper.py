@@ -30,6 +30,19 @@ def test_wrapper_default_is_not_the_sensor_gateway():
     assert urlsplit(_wrapper_default_url()).port != gateway_port
 
 
-def test_wrapper_passes_the_url_to_both_device_qualifications():
+def test_wrapper_passes_the_url_to_every_generic_qualification():
+    # Android, Quest and any -QualifySourceId source (e.g. the rig webcam)
     text = WRAPPER.read_text(encoding="utf-8-sig")
-    assert text.count('"--visionrig-url", $VisionRigUrl') == 2
+    assert text.count('"--visionrig-url", $VisionRigUrl') == 3
+
+
+def test_any_source_id_runs_the_generic_qualifier_with_the_exact_sha():
+    text = WRAPPER.read_text(encoding="utf-8-sig")
+    assert re.search(r"\[string\[\]\]\$QualifySourceId\s*=\s*@\(\)", text), "-QualifySourceId is a list, empty by default"
+    loop = text[text.index("foreach ($sourceId in $QualifySourceId)"):text.index("if ($QualifyKinect) {")]
+    assert '"--expected-sha", $sha, "--source-id", $sourceId' in loop
+    assert "Invoke-Checked \"visionrig-qualify-physical\" @argsSource" in loop
+    assert "$evidence.Add($sourceReport)" in loop
+    assert "throw" in loop.split("$sourceReport =")[0], "a malformed id is refused before anything runs"
+    collect = next(line for line in text.splitlines() if line.strip().startswith("$collectPhysical ="))
+    assert "$QualifySourceId.Count -gt 0" in collect
