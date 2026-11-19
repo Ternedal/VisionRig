@@ -94,6 +94,28 @@ jobs:
       - run: pip install -e ".[dev]"
       - shell: pwsh
         run: .\run-v1-release-gate.ps1 -StatusOnly -AllowDetachedHeadForCi
+      # -QualifySourceId is validated before anything runs (#206 review): a
+      # malformed id and a repeated id are refused under Windows PowerShell 5.1,
+      # with their own message, and no physical report is written.
+      - name: Release-gate wrapper refuses bad -QualifySourceId lists
+        shell: powershell
+        run: |
+          $cases = @(
+            @{ Ids = @('bad id!'); Message = 'is not a plain source id' },
+            @{ Ids = @('windows-webcam', 'Windows-Webcam'); Message = 'is given more than once' }
+          )
+          foreach ($case in $cases) {
+            $refused = $null
+            try {
+              $out = & .\run-v1-release-gate.ps1 -StatusOnly -AllowDetachedHeadForCi -QualifySourceId $case.Ids *>&1 | Out-String
+            } catch {
+              $refused = $_.Exception.Message
+            }
+            if (-not $refused) { throw "accepted: $($case.Ids -join ',') -> $out" }
+            if ($refused -notmatch [regex]::Escape($case.Message)) { throw "wrong refusal for $($case.Ids -join ','): $refused" }
+          }
+          if (Get-ChildItem -Path validation -Filter 'visionrig-*-physical.json' -ErrorAction SilentlyContinue) { throw "a physical report was written" }
+          Write-Host "both refusals PASS"
       # The operator runs the repository-authority verifier in PowerShell on
       # Windows. The ubuntu job runs its contract; run it here too.
       - name: Repository-authority verifier contract on real Windows
