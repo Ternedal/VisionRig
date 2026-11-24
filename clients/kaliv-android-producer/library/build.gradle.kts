@@ -22,9 +22,9 @@ android {
 dependencies {
     api("dk.kaliv.visionrig:kaliv-producer-core:0.1.0")
 
-    implementation("androidx.camera:camera-core:1.6.2")
-    implementation("androidx.camera:camera-camera2:1.6.2")
-    implementation("androidx.camera:camera-lifecycle:1.6.2")
+    implementation("androidx.camera:camera-core:1.7.0")
+    implementation("androidx.camera:camera-camera2:1.7.0")
+    implementation("androidx.camera:camera-lifecycle:1.7.0")
     implementation("androidx.core:core-ktx:1.19.1")
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5:2.4.21")
